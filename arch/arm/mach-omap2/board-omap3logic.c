@@ -113,14 +113,14 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 
 static void __init board_mmc_init(void)
 {
-	if (machine_is_omap3530_lv_som()) {
-		/* OMAP3530 LV SOM board */
+	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
+		/* OMAP35x/DM37x LV SOM board */
 		board_mmc_info[0].gpio_cd = OMAP3530_LV_SOM_MMC_GPIO_CD;
 		board_mmc_info[0].gpio_wp = OMAP3530_LV_SOM_MMC_GPIO_WP;
 		omap_mux_init_signal("gpio_110", OMAP_PIN_OUTPUT);
 		omap_mux_init_signal("gpio_126", OMAP_PIN_OUTPUT);
-	} else if (machine_is_omap3_torpedo()) {
-		/* OMAP3 Torpedo board */
+	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
+		/* OMAP35x/DM37x Torpedo board */
 		board_mmc_info[0].gpio_cd = OMAP3_TORPEDO_MMC_GPIO_CD;
 		omap_mux_init_signal("gpio_127", OMAP_PIN_OUTPUT);
 	} else {
@@ -148,7 +148,7 @@ static void omap3torpedo_fix_pbias_voltage(void)
 	u16 control_pbias_offset = OMAP343X_CONTROL_PBIAS_LITE;
 	u32 reg;
 
-	if (machine_is_omap3_torpedo())
+	if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo())
 	{
 		/* Set the bias for the pin */
 		reg = omap_ctrl_readl(control_pbias_offset);
@@ -167,12 +167,12 @@ static void omap3torpedo_fix_pbias_voltage(void)
 
 static inline void __init board_smsc911x_init(void)
 {
-	if (machine_is_omap3530_lv_som()) {
+	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		/* OMAP3530 LV SOM board */
 		board_smsc911x_data.gpio_irq =
 					OMAP3530_LV_SOM_SMSC911X_GPIO_IRQ;
 		omap_mux_init_signal("gpio_152", OMAP_PIN_INPUT);
-	} else if (machine_is_omap3_torpedo()) {
+	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
 		/* OMAP3 Torpedo board */
 		board_smsc911x_data.gpio_irq = OMAP3_TORPEDO_SMSC911X_GPIO_IRQ;
 		omap_mux_init_signal("gpio_129", OMAP_PIN_INPUT);
@@ -211,7 +211,7 @@ static void __init omap3logic_init(void)
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 }
 
-MACHINE_START(OMAP3_TORPEDO, "Logic OMAP3 Torpedo board")
+MACHINE_START(OMAP3_TORPEDO, "Logic OMAP35x Torpedo board")
 	.boot_params	= 0x80000100,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
@@ -220,7 +220,25 @@ MACHINE_START(OMAP3_TORPEDO, "Logic OMAP3 Torpedo board")
 	.timer		= &omap_timer,
 MACHINE_END
 
-MACHINE_START(OMAP3530_LV_SOM, "OMAP Logic 3530 LV SOM board")
+MACHINE_START(OMAP3530_LV_SOM, "Logic OMAP35x SOM LV board")
+	.boot_params	= 0x80000100,
+	.map_io		= omap3_map_io,
+	.init_early	= omap3logic_init_early,
+	.init_irq	= omap_init_irq,
+	.init_machine	= omap3logic_init,
+	.timer		= &omap_timer,
+MACHINE_END
+
+MACHINE_START(DM3730_SOM_LV, "Logic DM37x SOM LV board")
+	.boot_params	= 0x80000100,
+	.map_io		= omap3_map_io,
+	.init_early	= omap3logic_init_early,
+	.init_irq	= omap_init_irq,
+	.init_machine	= omap3logic_init,
+	.timer		= &omap_timer,
+MACHINE_END
+
+MACHINE_START(DM3730_TORPEDO, "Logic DM37x Torpedo board")
 	.boot_params	= 0x80000100,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
