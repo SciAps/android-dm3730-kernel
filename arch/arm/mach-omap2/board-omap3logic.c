@@ -48,6 +48,8 @@
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
 
+#include "board-omap3logic.h"
+
 #define OMAP3LOGIC_SMSC911X_CS			1
 
 #define OMAP3530_LV_SOM_MMC_GPIO_CD		110
@@ -180,6 +182,20 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 	{}      /* Terminator */
 };
 
+static void __init board_wl12xx_init(void)
+{
+	// Setup the mux for mmc3
+	omap_mux_init_signal("mcspi1_cs1.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS1/ADPLLV2D_DITHERING_EN2/MMC3_CMD/GPIO_175 */
+	omap_mux_init_signal("mcspi1_cs2.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS2/MMC3_CLK/GPIO_176 */
+	omap_mux_init_signal("sdmmc2_dat4.sdmmc3_dat0", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT4/MMC2_DIR_DAT0/MMC3_DAT0/GPIO_136 */
+	omap_mux_init_signal("sdmmc2_dat5.sdmmc3_dat1", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT5/MMC2_DIR_DAT1/CAM_GLOBAL_RESET/MMC3_DAT1/HSUSB3_TLL_STP/MM3_RXDP/GPIO_137 */
+	omap_mux_init_signal("sdmmc2_dat6.sdmmc3_dat2", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT6/MMC2_DIR_CMD/CAM_SHUTTER/MMC3_DAT2/HSUSB3_TLL_DIR/GPIO_138 */
+	omap_mux_init_signal("sdmmc2_dat7.sdmmc3_dat3", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT7/MMC2_CLKIN/MMC3_DAT3/HSUSB3_TLL_NXT/MM3_RXDM/GPIO_139 */
+
+	omap_mux_init_gpio(OMAP3LOGIC_WLAN_PMENA_GPIO, OMAP_PIN_OUTPUT);
+	omap_mux_init_gpio(OMAP3LOGIC_WLAN_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
+}
+
 static void __init board_mmc_init(void)
 {
 	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
@@ -187,7 +203,7 @@ static void __init board_mmc_init(void)
 		board_mmc_info[0].gpio_cd = OMAP3530_LV_SOM_MMC_GPIO_CD;
 		board_mmc_info[0].gpio_wp = OMAP3530_LV_SOM_MMC_GPIO_WP;
 		omap_mux_init_signal("gpio_110", OMAP_PIN_OUTPUT);
-		omap_mux_init_signal("gpio_126", OMAP_PIN_OUTPUT);
+		omap_mux_init_signal("cam_strobe.gpio_126", OMAP_PIN_OUTPUT);
 	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
 		/* OMAP35x/DM37x Torpedo board */
 		board_mmc_info[0].gpio_cd = OMAP3_TORPEDO_MMC_GPIO_CD;
@@ -274,10 +290,20 @@ static struct omap_board_mux board_mux[] __initdata = {
 
 static void __init omap3logic_init(void)
 {
-	omap3_mux_init(board_mux, OMAP_PACKAGE_CBB);
+	/* hang on start if "hang" is on command line */
+	while (omap3logic_hang)
+		;
+
+	/* Pick the right MUX table based on the machine */
+	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo())
+		omap3_mux_init(board_mux, OMAP_PACKAGE_CBP);
+	else if (machine_is_omap3530_lv_som() || machine_is_omap3_torpedo())
+		omap3_mux_init(board_mux, OMAP_PACKAGE_CBB);
+		
 	omap3torpedo_fix_pbias_voltage();
 	omap3logic_i2c_init();
 	omap_serial_init();
+	board_wl12xx_init();
 	board_mmc_init();
 	board_smsc911x_init();
 

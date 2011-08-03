@@ -35,6 +35,7 @@ fw-shipped-$(CONFIG_WL12XX) += ti-connectivity/wl1271-fw-2.bin
 fw-shipped-$(CONFIG_WL12XX) += ti-connectivity/wl1271-fw-ap.bin
 fw-shipped-$(CONFIG_WL12XX) += ti-connectivity/wl128x-fw.bin
 fw-shipped-$(CONFIG_WL12XX) += ti-connectivity/wl128x-fw-ap.bin
+fw-shipped-$(CONFIG_WL12XX) += ti-connectivity/wl1271-nvs.bin
 fw-shipped-$(CONFIG_ATM_AMBASSADOR) += atmsar11.fw
 fw-shipped-$(CONFIG_BNX2X) += bnx2x/bnx2x-e1-6.2.9.0.fw \
 			      bnx2x/bnx2x-e1h-6.2.9.0.fw \
