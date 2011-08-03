@@ -24,8 +24,10 @@
 #include <linux/gpio.h>
 
 #include <linux/regulator/machine.h>
+#include <linux/regulator/fixed.h>
 
 #include <linux/i2c/twl.h>
+#include <linux/wl12xx.h>
 #include <linux/mmc/host.h>
 
 #include <mach/hardware.h>
@@ -75,6 +77,64 @@ static struct regulator_init_data omap3logic_vmmc1 = {
 	.consumer_supplies      = &omap3logic_vmmc1_supply,
 };
 
+static struct regulator_consumer_supply omap3logic_vaux3_supplies[] = {
+	REGULATOR_SUPPLY("vmmc_aux", "omap_hsmmc.2"),
+};
+
+static struct regulator_init_data omap3logic_vaux3 = {
+	.constraints = {
+		.min_uV			= 2800000,
+		.max_uV			= 2800000,
+		.apply_uV		= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies		= ARRAY_SIZE(omap3logic_vaux3_supplies),
+	.consumer_supplies		= omap3logic_vaux3_supplies,
+};
+
+static struct regulator_consumer_supply omap3logic_vmmc3_supply = {
+	.supply			= "vmmc",
+	.dev_name		= "omap_hsmmc.2",
+};
+
+static struct regulator_init_data omap3logic_vmmc3 = {
+	.constraints = {
+		.valid_ops_mask	= REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies = &omap3logic_vmmc3_supply,
+};
+
+#define OMAP3LOGIC_WLAN_PMENA_GPIO 3
+#define OMAP3LOGIC_WLAN_IRQ_GPIO 2
+
+static struct fixed_voltage_config omap3logic_vwlan = {
+	.supply_name		= "vwl1271",
+	.microvolts		= 1800000, /* 1.8V */
+	.gpio			= OMAP3LOGIC_WLAN_PMENA_GPIO,
+	.startup_delay		= 70000, /* 70msec */
+	.enable_high		= 1,
+	.enabled_at_boot	= 0,
+	.init_data		= &omap3logic_vmmc3,
+};
+
+static struct platform_device omap3logic_vwlan_device = {
+	.name		= "reg-fixed-voltage",
+	.id		= 1,
+	.dev = {
+		.platform_data	= &omap3logic_vwlan,
+	},
+};
+
+static struct wl12xx_platform_data omap3logic_wlan_data __initdata = {
+	.irq = OMAP_GPIO_IRQ(OMAP3LOGIC_WLAN_IRQ_GPIO),
+	/* ZOOM ref clock is 26 MHz */
+	.board_ref_clock = 1,
+};
+
 static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 	.gpio_base	= OMAP_MAX_GPIO_LINES,
 	.irq_base	= TWL4030_GPIO_IRQ_BASE,
@@ -92,6 +152,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	/* platform_data for children goes here */
 	.gpio		= &omap3logic_gpio_data,
 	.vmmc1		= &omap3logic_vmmc1,
+	.vaux3		= &omap3logic_vaux3,
 };
 
 static int __init omap3logic_i2c_init(void)
@@ -107,6 +168,14 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 		.caps		= MMC_CAP_4_BIT_DATA,
 		.gpio_cd	= -EINVAL,
 		.gpio_wp	= -EINVAL,
+	},
+	{
+		.name		= "wl1271",
+		.mmc		= 3,
+		.caps		= MMC_CAP_4_BIT_DATA | MMC_CAP_POWER_OFF_CARD,
+		.gpio_cd	= -EINVAL,
+		.gpio_wp	= -EINVAL,
+		.nonremovable	= true,
 	},
 	{}      /* Terminator */
 };
@@ -130,6 +199,12 @@ static void __init board_mmc_init(void)
 	}
 
 	omap2_hsmmc_init(board_mmc_info);
+#ifdef CONFIG_WL12XX_PLATFORM_DATA
+	/* WL12xx WLAN Init */
+	if (wl12xx_set_platform_data(&omap3logic_wlan_data))
+		pr_err("error setting wl12xx data\n");
+	platform_device_register(&omap3logic_vwlan_device);
+#endif
 	/* link regulators to MMC adapters */
 	omap3logic_vmmc1_supply.dev = board_mmc_info[0].dev;
 }
