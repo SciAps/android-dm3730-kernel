@@ -327,5 +327,12 @@ struct _mmc_csd {
 #define MMC_SWITCH_MODE_CLEAR_BITS	0x02	/* Clear bits which are 1 in value */
 #define MMC_SWITCH_MODE_WRITE_BYTE	0x03	/* Set target to value */
 
+#ifdef MMC_DEBUG_CONTROLLER_BITMASK
+extern int mmc_debug_controller_bitmask;
+#define MMC_DEBUG_CONTROLLER(idx) (mmc_debug_controller_bitmast & (1<<(idx)))
+#else
+#define MMC_DEBUG_CONTROLLER(idx) (0)
+#endif
+
 #endif  /* MMC_MMC_PROTOCOL_H */
 
