@@ -35,9 +35,16 @@
 #include "conf.h"
 #include "ini.h"
 
+#define WL12XX_USE_NEW_PREFIX
+
+#ifdef WL12XX_USE_NEW_PREFIX
+#define DRIVER_NAME "wl12xx"
+extern char *wl12xx_prefix;
+#define DRIVER_PREFIX "wl12xx: "
+#else
 #define DRIVER_NAME "wl1271"
 #define DRIVER_PREFIX DRIVER_NAME ": "
-
+#endif
 /*
  * FW versions support BA 11n
  * versions marks x.x.x.50-60.x
@@ -73,6 +80,25 @@ extern u32 wl12xx_debug_level;
 
 #define DEBUG_DUMP_LIMIT 1024
 
+#ifdef WL12XX_USE_NEW_PREFIX
+#define wl1271_error(fmt, arg...) \
+	pr_err("%s: ERROR " fmt "\n", wl12xx_prefix, ##arg)
+
+#define wl1271_warning(fmt, arg...) \
+	pr_warning("%s: WARNING " fmt "\n", wl12xx_prefix, ##arg)
+
+#define wl1271_notice(fmt, arg...) \
+	pr_info("%s: " fmt "\n", wl12xx_prefix, ##arg)
+
+#define wl1271_info(fmt, arg...) \
+	pr_info("%s: " fmt "\n", wl12xx_prefix, ##arg)
+
+#define wl1271_debug(level, fmt, arg...) \
+	do { \
+		if (level & wl12xx_debug_level) \
+			pr_debug("%s: " fmt "\n", wl12xx_prefix, ##arg); \
+	} while (0)
+#else
 #define wl1271_error(fmt, arg...) \
 	pr_err(DRIVER_PREFIX "ERROR " fmt "\n", ##arg)
 
@@ -90,6 +116,7 @@ extern u32 wl12xx_debug_level;
 		if (level & wl12xx_debug_level) \
 			pr_debug(DRIVER_PREFIX fmt "\n", ##arg); \
 	} while (0)
+#endif
 
 /* TODO: use pr_debug_hex_dump when it will be available */
 #define wl1271_dump(level, prefix, buf, len)	\

@@ -880,6 +880,8 @@ out:
 }
 EXPORT_SYMBOL_GPL(wl1271_irq);
 
+char *wl12xx_prefix = "wl12xx";
+
 static int wl1271_fetch_firmware(struct wl1271 *wl)
 {
 	const struct firmware *fw;
@@ -905,6 +907,11 @@ static int wl1271_fetch_firmware(struct wl1271 *wl)
 			     wl->bss_type);
 		return -EINVAL;
 	}
+
+	if (wl->chip.id == CHIP_ID_1283_PG20)
+		wl12xx_prefix = "wl1283";
+	else
+		wl12xx_prefix = "wl1271";
 
 	wl1271_debug(DEBUG_BOOT, "booting firmware %s", fw_name);
 

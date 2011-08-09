@@ -217,6 +217,102 @@ DEBUGFS_READONLY_FILE(retry_count, "%u", wl->stats.retry_count);
 DEBUGFS_READONLY_FILE(excessive_retries, "%u",
 		      wl->stats.excessive_retries);
 
+static ssize_t wl12xx_debug_level_write(struct file *file,
+					const char __user *user_buf,
+					size_t count, loff_t *ppos)
+{
+	char buf[32];
+	unsigned long val;
+	int buf_size, ret;
+
+	if (count > 32)
+		return -EINVAL;
+
+	memset(buf, 0, sizeof(buf));
+	buf_size = min(count, sizeof(buf) - 1);
+
+	if (copy_from_user(buf, user_buf, buf_size))
+		return -EFAULT;
+
+	ret = kstrtoul(buf, NULL, &val);
+	if (ret < 0) {
+		/* Illegal value, perhaps its a name? */
+		return -EINVAL;
+	}
+
+	wl12xx_debug_level = val;
+
+	*ppos += count;
+	return count;
+}
+
+struct wl12xx_debug_names {
+	int bits;
+	char *name;
+};
+
+struct wl12xx_debug_names wl12xx_debug_names[] = {
+	{ DEBUG_ALL, "all" },
+	{ DEBUG_IRQ, "irq" },
+	{ DEBUG_SPI, "spi" },
+	{ DEBUG_BOOT, "boot" },
+	{ DEBUG_MAILBOX, "mailbox" },
+	{ DEBUG_TESTMODE, "testmode" },
+	{ DEBUG_EVENT, "event" },
+	{ DEBUG_TX, "tx" },
+	{ DEBUG_RX, "rx" },
+	{ DEBUG_SCAN, "scan" },
+	{ DEBUG_CRYPT, "crypt" },
+	{ DEBUG_PSM, "psm" },
+	{ DEBUG_MAC80211, "mac80211" },
+	{ DEBUG_CMD, "cmd" },
+	{ DEBUG_ACX, "acx" },
+	{ DEBUG_SDIO, "sdio" },
+	{ DEBUG_FILTERS, "filters" },
+	{ DEBUG_MASTER, "master" },
+	{ DEBUG_ADHOC, "adhoc" },
+	{ DEBUG_AP, "ap" },
+};
+	
+
+static int wl12xx_debug_level_show(struct seq_file *s, void *unused)
+{
+	unsigned long val;
+	int i, first=1;
+
+	seq_printf(s, "%#x: ", wl12xx_debug_level);
+	val = wl12xx_debug_level;
+	for (i=0; val && (i<ARRAY_SIZE(wl12xx_debug_names)); ++i) {
+		if ((val & wl12xx_debug_names[i].bits) == wl12xx_debug_names[i].bits) {
+			if (!first)
+				seq_printf(s, "|");
+			first = 0;
+			seq_printf(s, "%s", wl12xx_debug_names[i].name);
+			val &= ~wl12xx_debug_names[i].bits;
+		}
+	}
+	if (val) {
+		if (!first)
+			seq_printf(s, "|");
+		seq_printf(s, "%#x", val);
+	}
+	seq_printf(s, "\n");
+	return 0;
+}
+
+static int wl12xx_debug_level_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, wl12xx_debug_level_show, inode->i_private);
+}
+
+static const struct file_operations wl12xx_debug_level_fops = {
+	.open		= wl12xx_debug_level_open,
+	.read		= seq_read,
+	.write		= wl12xx_debug_level_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static ssize_t tx_queue_len_read(struct file *file, char __user *userbuf,
 				 size_t count, loff_t *ppos)
 {
@@ -639,6 +735,10 @@ static int wl1271_debugfs_add_files(struct wl1271 *wl,
 	DEBUGFS_ADD(driver_state, rootdir);
 	DEBUGFS_ADD(dtim_interval, rootdir);
 	DEBUGFS_ADD(beacon_interval, rootdir);
+
+	entry = debugfs_create_file("debug-level", S_IWUSR, rootdir, NULL, &wl12xx_debug_level_fops);
+	if (!entry || IS_ERR(entry))
+		goto err;
 
 	return 0;
 
