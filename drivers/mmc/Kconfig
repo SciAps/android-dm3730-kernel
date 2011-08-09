@@ -19,6 +19,15 @@ config MMC_DEBUG
 	  This is an option for use by developers; most people should
 	  say N here.  This enables MMC core and driver debugging.
 
+config MMC_DEBUG_CONTROLLER_BITMASK
+       int "MMC debugging controller bitmask"
+       depends on MMC_DEBUG != n
+       default 0
+       help
+         This option is a bitmask that defines which conrollers to debug
+	 using the index of the device; first MMC controller would be 1<<0,
+ 	 third controller is 1<<2, etc.
+
 if MMC
 
 source "drivers/mmc/core/Kconfig"

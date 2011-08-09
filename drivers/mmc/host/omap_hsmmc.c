@@ -267,6 +267,8 @@ static int omap_hsmmc_235_set_power(struct device *dev, int slot, int power_on,
 		platform_get_drvdata(to_platform_device(dev));
 	int ret = 0;
 
+	printk("%s: power_on %d\n", __FUNCTION__, power_on);
+
 	/*
 	 * If we don't see a Vcc regulator, assume it's a fixed
 	 * voltage always-on regulator.
@@ -605,8 +607,9 @@ static int omap_hsmmc_context_restore(struct omap_hsmmc_host *host)
 			return 1;
 	}
 
-	dev_dbg(mmc_dev(host->mmc), "context was %slost\n",
-		context_loss == host->context_loss ? "not " : "");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "context was %slost\n",
+			context_loss == host->context_loss ? "not " : "");
 	if (host->context_loss == context_loss)
 		return 1;
 
@@ -709,7 +712,8 @@ static int omap_hsmmc_context_restore(struct omap_hsmmc_host *host)
 out:
 	host->context_loss = context_loss;
 
-	dev_dbg(mmc_dev(host->mmc), "context is restored\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "context is restored\n");
 	return 0;
 }
 
@@ -818,8 +822,9 @@ omap_hsmmc_start_command(struct omap_hsmmc_host *host, struct mmc_command *cmd,
 {
 	int cmdreg = 0, resptype = 0, cmdtype = 0;
 
-	dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
-		mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "%s: CMD%d, argument 0x%08x\n",
+			mmc_hostname(host->mmc), cmd->opcode, cmd->arg);
 	host->cmd = cmd;
 
 	omap_hsmmc_enable_irq(host, cmd);
@@ -995,7 +1000,8 @@ static void omap_hsmmc_report_irq(struct omap_hsmmc_host *host, u32 status)
 			buf += len;
 		}
 
-	dev_dbg(mmc_dev(host->mmc), "%s\n", res);
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "%s\n", res);
 }
 #endif  /* CONFIG_MMC_DEBUG */
 
@@ -1052,7 +1058,8 @@ static void omap_hsmmc_do_irq(struct omap_hsmmc_host *host, int status)
 	}
 
 	data = host->data;
-	dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
 
 	if (status & ERR) {
 #ifdef CONFIG_MMC_DEBUG
@@ -1094,8 +1101,9 @@ static void omap_hsmmc_do_irq(struct omap_hsmmc_host *host, int status)
 			}
 		}
 		if (status & CARD_ERR) {
-			dev_dbg(mmc_dev(host->mmc),
-				"Ignoring card err CMD%d\n", host->cmd->opcode);
+			if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+				dev_dbg(mmc_dev(host->mmc),
+					"Ignoring card err CMD%d\n", host->cmd->opcode);
 			if (host->cmd)
 				end_cmd = 1;
 			if (host->data)
@@ -1204,7 +1212,8 @@ static int omap_hsmmc_switch_opcond(struct omap_hsmmc_host *host, int vdd)
 
 	return 0;
 err:
-	dev_dbg(mmc_dev(host->mmc), "Unable to switch operating voltage\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "Unable to switch operating voltage\n");
 	return ret;
 }
 
@@ -1473,7 +1482,8 @@ omap_hsmmc_prepare_data(struct omap_hsmmc_host *host, struct mmc_request *req)
 	if (host->use_dma) {
 		ret = omap_hsmmc_start_dma_transfer(host, req);
 		if (ret != 0) {
-			dev_dbg(mmc_dev(host->mmc), "MMC start dma failure\n");
+			if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+				dev_dbg(mmc_dev(host->mmc), "MMC start dma failure\n");
 			return ret;
 		}
 	}
@@ -1587,7 +1597,8 @@ static void omap_hsmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				 * vdd 1.8v.
 				 */
 			if (omap_hsmmc_switch_opcond(host, ios->vdd) != 0)
-				dev_dbg(mmc_dev(host->mmc),
+				if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+					dev_dbg(mmc_dev(host->mmc),
 						"Switch operation failed\n");
 		}
 	}
@@ -1713,7 +1724,8 @@ static int omap_hsmmc_enabled_to_disabled(struct omap_hsmmc_host *host)
 	clk_disable(host->fclk);
 	host->dpm_state = DISABLED;
 
-	dev_dbg(mmc_dev(host->mmc), "ENABLED -> DISABLED\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "ENABLED -> DISABLED\n");
 
 	if (host->power_mode == MMC_POWER_OFF)
 		return 0;
@@ -1751,8 +1763,9 @@ static int omap_hsmmc_disabled_to_sleep(struct omap_hsmmc_host *host)
 
 	mmc_release_host(host->mmc);
 
-	dev_dbg(mmc_dev(host->mmc), "DISABLED -> %s\n",
-		host->dpm_state == CARDSLEEP ? "CARDSLEEP" : "REGSLEEP");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "DISABLED -> %s\n",
+			host->dpm_state == CARDSLEEP ? "CARDSLEEP" : "REGSLEEP");
 
 	if (mmc_slot(host).no_off)
 		return 0;
@@ -1787,8 +1800,9 @@ static int omap_hsmmc_sleep_to_off(struct omap_hsmmc_host *host)
 	host->vdd = 0;
 	host->power_mode = MMC_POWER_OFF;
 
-	dev_dbg(mmc_dev(host->mmc), "%s -> OFF\n",
-		host->dpm_state == CARDSLEEP ? "CARDSLEEP" : "REGSLEEP");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "%s -> OFF\n",
+			host->dpm_state == CARDSLEEP ? "CARDSLEEP" : "REGSLEEP");
 
 	host->dpm_state = OFF;
 
@@ -1809,7 +1823,8 @@ static int omap_hsmmc_disabled_to_enabled(struct omap_hsmmc_host *host)
 	omap_hsmmc_context_restore(host);
 	host->dpm_state = ENABLED;
 
-	dev_dbg(mmc_dev(host->mmc), "DISABLED -> ENABLED\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "DISABLED -> ENABLED\n");
 
 	return 0;
 }
@@ -1910,7 +1925,8 @@ static int omap_hsmmc_enable_fclk(struct mmc_host *mmc)
 	err = clk_enable(host->fclk);
 	if (err)
 		return err;
-	dev_dbg(mmc_dev(host->mmc), "mmc_fclk: enabled\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "mmc_fclk: enabled\n");
 	omap_hsmmc_context_restore(host);
 	return 0;
 }
@@ -1921,7 +1937,8 @@ static int omap_hsmmc_disable_fclk(struct mmc_host *mmc, int lazy)
 
 	omap_hsmmc_context_save(host);
 	clk_disable(host->fclk);
-	dev_dbg(mmc_dev(host->mmc), "mmc_fclk: disabled\n");
+	if (MMC_DEBUG_CONTROLLER(host->mmc->index))
+		dev_dbg(mmc_dev(host->mmc), "mmc_fclk: disabled\n");
 	return 0;
 }
 

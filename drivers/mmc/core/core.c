@@ -101,8 +101,9 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 	}
 
 	if (err && cmd->retries) {
-		pr_debug("%s: req failed (CMD%u): %d, retrying...\n",
-			mmc_hostname(host), cmd->opcode, err);
+		if (MMC_DEBUG_CONTROLLER(host->index))
+			pr_debug("%s: req failed (CMD%u): %d, retrying...\n",
+				mmc_hostname(host), cmd->opcode, err);
 
 		cmd->retries--;
 		cmd->error = 0;
@@ -110,23 +111,26 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 	} else {
 		led_trigger_event(host->led, LED_OFF);
 
-		pr_debug("%s: req done (CMD%u): %d: %08x %08x %08x %08x\n",
-			mmc_hostname(host), cmd->opcode, err,
-			cmd->resp[0], cmd->resp[1],
-			cmd->resp[2], cmd->resp[3]);
+		if (MMC_DEBUG_CONTROLLER(host->index))
+			pr_debug("%s: req done (CMD%u): %d: %08x %08x %08x %08x\n",
+				mmc_hostname(host), cmd->opcode, err,
+				cmd->resp[0], cmd->resp[1],
+				cmd->resp[2], cmd->resp[3]);
 
 		if (mrq->data) {
-			pr_debug("%s:     %d bytes transferred: %d\n",
-				mmc_hostname(host),
-				mrq->data->bytes_xfered, mrq->data->error);
+			if (MMC_DEBUG_CONTROLLER(host->index))
+				pr_debug("%s:     %d bytes transferred: %d\n",
+					mmc_hostname(host),
+					mrq->data->bytes_xfered, mrq->data->error);
 		}
 
 		if (mrq->stop) {
-			pr_debug("%s:     (CMD%u): %d: %08x %08x %08x %08x\n",
-				mmc_hostname(host), mrq->stop->opcode,
-				mrq->stop->error,
-				mrq->stop->resp[0], mrq->stop->resp[1],
-				mrq->stop->resp[2], mrq->stop->resp[3]);
+			if (MMC_DEBUG_CONTROLLER(host->index))
+				pr_debug("%s:     (CMD%u): %d: %08x %08x %08x %08x\n",
+					mmc_hostname(host), mrq->stop->opcode,
+					mrq->stop->error,
+					mrq->stop->resp[0], mrq->stop->resp[1],
+					mrq->stop->resp[2], mrq->stop->resp[3]);
 		}
 
 		if (mrq->done)
@@ -146,23 +150,26 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 	struct scatterlist *sg;
 #endif
 
-	pr_debug("%s: starting CMD%u arg %08x flags %08x\n",
-		 mmc_hostname(host), mrq->cmd->opcode,
-		 mrq->cmd->arg, mrq->cmd->flags);
+	if (MMC_DEBUG_CONTROLLER(host->index))
+		pr_debug("%s: starting CMD%u arg %08x flags %08x\n",
+			mmc_hostname(host), mrq->cmd->opcode,
+			mrq->cmd->arg, mrq->cmd->flags);
 
 	if (mrq->data) {
-		pr_debug("%s:     blksz %d blocks %d flags %08x "
-			"tsac %d ms nsac %d\n",
-			mmc_hostname(host), mrq->data->blksz,
-			mrq->data->blocks, mrq->data->flags,
-			mrq->data->timeout_ns / 1000000,
-			mrq->data->timeout_clks);
+		if (MMC_DEBUG_CONTROLLER(host->index))
+			pr_debug("%s:     blksz %d blocks %d flags %08x "
+				"tsac %d ms nsac %d\n",
+				mmc_hostname(host), mrq->data->blksz,
+				mrq->data->blocks, mrq->data->flags,
+				mrq->data->timeout_ns / 1000000,
+				mrq->data->timeout_clks);
 	}
 
 	if (mrq->stop) {
-		pr_debug("%s:     CMD%u arg %08x flags %08x\n",
-			 mmc_hostname(host), mrq->stop->opcode,
-			 mrq->stop->arg, mrq->stop->flags);
+		if (MMC_DEBUG_CONTROLLER(host->index))
+			pr_debug("%s:     CMD%u arg %08x flags %08x\n",
+				mmc_hostname(host), mrq->stop->opcode,
+				mrq->stop->arg, mrq->stop->flags);
 	}
 
 	WARN_ON(!host->claimed);
@@ -618,11 +625,12 @@ static inline void mmc_set_ios(struct mmc_host *host)
 {
 	struct mmc_ios *ios = &host->ios;
 
-	pr_debug("%s: clock %uHz busmode %u powermode %u cs %u Vdd %u "
-		"width %u timing %u\n",
-		 mmc_hostname(host), ios->clock, ios->bus_mode,
-		 ios->power_mode, ios->chip_select, ios->vdd,
-		 ios->bus_width, ios->timing);
+	if (MMC_DEBUG_CONTROLLER(host->index))
+		pr_debug("%s: clock %uHz busmode %u powermode %u cs %u Vdd %u "
+			"width %u timing %u\n",
+			mmc_hostname(host), ios->clock, ios->bus_mode,
+			ios->power_mode, ios->chip_select, ios->vdd,
+			ios->bus_width, ios->timing);
 
 	if (ios->clock > 0)
 		mmc_set_ungated(host);
@@ -1535,8 +1543,9 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 	host->f_init = freq;
 
 #ifdef CONFIG_MMC_DEBUG
-	pr_info("%s: %s: trying to init card at %u Hz\n",
-		mmc_hostname(host), __func__, host->f_init);
+	if (MMC_DEBUG_CONTROLLER(host->index))
+		pr_info("%s: %s: trying to init card at %u Hz\n",
+			mmc_hostname(host), __func__, host->f_init);
 #endif
 	mmc_power_up(host);
 
@@ -1875,9 +1884,17 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 }
 #endif
 
+#ifdef CONFIG_MMC_DEBUG_CONTROLLER_BITMASK
+int mmc_debug_controller_bitmask = CONFIG_MMC_DEBUG_CONTROLLER_BITMASK;
+#endif
+
 static int __init mmc_init(void)
 {
 	int ret;
+
+#ifdef CONFIG_MMC_DEBUG_CONTROLLER_BITMASK
+	printk("%s: mmc_dbg_controller_bitmask = %#x\n", __FUNCTION__, mmc_debug_controller_bitmask);
+#endif
 
 	workqueue = alloc_ordered_workqueue("kmmcd", 0);
 	if (!workqueue)
