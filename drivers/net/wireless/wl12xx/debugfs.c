@@ -244,7 +244,6 @@ static struct wl12xx_debug_names wl12xx_debug_names[] = {
 	{ DEBUG_MASTER, "master" },
 	{ DEBUG_ADHOC, "adhoc" },
 	{ DEBUG_AP, "ap" },
-	{ DEBUG_PARAMS, "params" },
 };
 
 #define WL12XX_MAX_NAME_LENGTH 40
