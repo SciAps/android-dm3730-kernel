@@ -25,6 +25,7 @@
 
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/ctype.h>
 
 #include "wl12xx.h"
 #include "acx.h"
@@ -217,41 +218,12 @@ DEBUGFS_READONLY_FILE(retry_count, "%u", wl->stats.retry_count);
 DEBUGFS_READONLY_FILE(excessive_retries, "%u",
 		      wl->stats.excessive_retries);
 
-static ssize_t wl12xx_debug_level_write(struct file *file,
-					const char __user *user_buf,
-					size_t count, loff_t *ppos)
-{
-	char buf[32];
-	unsigned long val;
-	int buf_size, ret;
-
-	if (count > 32)
-		return -EINVAL;
-
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) - 1);
-
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-
-	ret = kstrtoul(buf, NULL, &val);
-	if (ret < 0) {
-		/* Illegal value, perhaps its a name? */
-		return -EINVAL;
-	}
-
-	wl12xx_debug_level = val;
-
-	*ppos += count;
-	return count;
-}
-
 struct wl12xx_debug_names {
 	int bits;
 	char *name;
 };
 
-struct wl12xx_debug_names wl12xx_debug_names[] = {
+static struct wl12xx_debug_names wl12xx_debug_names[] = {
 	{ DEBUG_ALL, "all" },
 	{ DEBUG_IRQ, "irq" },
 	{ DEBUG_SPI, "spi" },
@@ -272,7 +244,107 @@ struct wl12xx_debug_names wl12xx_debug_names[] = {
 	{ DEBUG_MASTER, "master" },
 	{ DEBUG_ADHOC, "adhoc" },
 	{ DEBUG_AP, "ap" },
+	{ DEBUG_PARAMS, "params" },
 };
+
+#define WL12XX_MAX_NAME_LENGTH 40
+static ssize_t wl12xx_debug_level_write(struct file *file,
+					const char __user *user_buf,
+					size_t count, loff_t *ppos)
+{
+	char buf[WL12XX_MAX_NAME_LENGTH], substring[WL12XX_MAX_NAME_LENGTH+1];
+	int buf_size;
+	int done = 0;
+	int add, len = 0;
+	int pos = 0;
+	const char *x;
+	char *end;
+	char *mask_name;
+	int i;
+	unsigned long rg, mask_bitfield;
+
+	if (count > 32)
+		return -EINVAL;
+
+	memset(buf, 0, sizeof(buf));
+	buf_size = min(count, sizeof(buf) - 1);
+
+	if (copy_from_user(buf, user_buf, buf_size))
+		return -EFAULT;
+
+	rg = wl12xx_debug_level;
+
+	while (!done && (pos < buf_size)) {
+
+		done = 1;
+		while ((pos < buf_size) && isspace(buf[pos]))
+			pos++;
+
+		switch (buf[pos]) {
+		case '+':
+		case '-':
+		case '=':
+			add = buf[pos];
+			pos++;
+			break;
+
+		default:
+			add = ' ';
+			break;
+		}
+		mask_name = NULL;
+		mask_bitfield = simple_strtoul(buf + pos, &end, 0);
+		if (end > buf + pos) {
+			mask_name = "numeral";
+			len = end - (buf + pos);
+			pos += len;
+			done = 0;
+		} else {
+			for (x = buf + pos, i = 0;
+			     (*x == '_' || (*x >= 'a' && *x <= 'z')) &&
+				     i < WL12XX_MAX_NAME_LENGTH; x++, i++, pos++)
+				substring[i] = *x;
+			substring[i] = '\0';
+			for (i=0; i<ARRAY_SIZE(wl12xx_debug_names); ++i) {
+				if (strcmp(substring, wl12xx_debug_names[i].name) == 0) {
+					mask_name = wl12xx_debug_names[i].name;
+					mask_bitfield = wl12xx_debug_names[i].bits;
+					done = 0;
+					break;
+				}
+			}
+		}
+		if (mask_name != NULL) {
+			done = 0;
+			switch(add) {
+			case '-':
+				rg &= ~mask_bitfield;
+				break;
+			case '+':
+				rg |= mask_bitfield;
+				break;
+			case '=':
+				rg = mask_bitfield;
+				break;
+			default:
+				rg |= mask_bitfield;
+				break;
+			}
+		}
+	}				
+
+	wl12xx_debug_level = rg;
+
+	for (i=0; i<ARRAY_SIZE(wl12xx_debug_names); ++i) {
+		char flag;
+		flag = ((rg & wl12xx_debug_names[i].bits) == wl12xx_debug_names[i].bits) ? '+' : '-';
+		printk(KERN_DEBUG "%c%s\n", flag, wl12xx_debug_names[i].name);
+	}
+
+	*ppos += count;
+	return count;
+}
+
 	
 
 static int wl12xx_debug_level_show(struct seq_file *s, void *unused)
@@ -294,7 +366,7 @@ static int wl12xx_debug_level_show(struct seq_file *s, void *unused)
 	if (val) {
 		if (!first)
 			seq_printf(s, "|");
-		seq_printf(s, "%#x", val);
+		seq_printf(s, "%#lx", val);
 	}
 	seq_printf(s, "\n");
 	return 0;

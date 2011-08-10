@@ -121,7 +121,7 @@ extern u32 wl12xx_debug_level;
 /* TODO: use pr_debug_hex_dump when it will be available */
 #define wl1271_dump(level, prefix, buf, len)	\
 	do { \
-		if (level & wl12xx_debug_level) \
+		if ((level) & wl12xx_debug_level)			\
 			print_hex_dump(KERN_DEBUG, DRIVER_PREFIX prefix, \
 				       DUMP_PREFIX_OFFSET, 16, 1,	\
 				       buf,				\
