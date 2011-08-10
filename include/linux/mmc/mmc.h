@@ -329,7 +329,7 @@ struct _mmc_csd {
 
 #ifdef CONFIG_MMC_DEBUG_CONTROLLER_BITMASK
 extern int mmc_debug_controller_bitmask;
-#define MMC_DEBUG_CONTROLLER(idx) (mmc_debug_controller_bitmast & (1<<(idx)))
+#define MMC_DEBUG_CONTROLLER(idx) (mmc_debug_controller_bitmask & (1<<(idx)))
 #else
 #define MMC_DEBUG_CONTROLLER(idx) (0)
 #endif
