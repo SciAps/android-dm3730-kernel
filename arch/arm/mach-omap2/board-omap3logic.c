@@ -231,28 +231,62 @@ static struct omap_smsc911x_platform_data __initdata board_smsc911x_data = {
 	.gpio_reset     = -EINVAL,
 };
 
-/* TODO/FIXME (comment by Peter Barada, LogicPD):
- * Fix the PBIAS voltage for Torpedo MMC1 pins that
- * are used for other needs (IRQs, etc).            */
+/* Fix the PBIAS voltage for Torpedo MMC1 pins that
+ * are used for other needs (IRQs, etc). */
 static void omap3torpedo_fix_pbias_voltage(void)
 {
 	u16 control_pbias_offset = OMAP343X_CONTROL_PBIAS_LITE;
+	static int pbias_fixed = 0;
+	unsigned long timeout;
 	u32 reg;
 
-	if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo())
-	{
+	if (!pbias_fixed) {
 		/* Set the bias for the pin */
 		reg = omap_ctrl_readl(control_pbias_offset);
+
+		printk("%s:%d reg %08x\n", __FUNCTION__, __LINE__, reg);
 
 		reg &= ~OMAP343X_PBIASLITEPWRDNZ1;
 		omap_ctrl_writel(reg, control_pbias_offset);
 
+		printk("%s:%d reg %08x\n", __FUNCTION__, __LINE__, reg);
+
 		/* 100ms delay required for PBIAS configuration */
 		msleep(100);
 
-		reg |= OMAP343X_PBIASLITEVMODE1;
+		/* Set PBIASLITEVMODE1 appropriately */
+		if (reg & OMAP343X_PBIASLITESUPPLY_HIGH1)
+			reg |= OMAP343X_PBIASLITEVMODE1;
+		else
+			reg &= ~OMAP343X_PBIASLITEVMODE1;
+
 		reg |= OMAP343X_PBIASLITEPWRDNZ1;
-		omap_ctrl_writel(reg | 0x300, control_pbias_offset);
+
+		omap_ctrl_writel(reg, control_pbias_offset);
+
+		printk("%s:%d reg %08x\n", __FUNCTION__, __LINE__, reg);
+
+		/* Wait for pbias to match up */
+		timeout = jiffies + msecs_to_jiffies(5);
+		do {
+			reg = omap_ctrl_readl(control_pbias_offset);
+			if (!(reg & OMAP343X_PBIASLITEVMODEERROR1))
+				break;
+		} while (!time_after(jiffies, timeout));
+		printk("%s:%d reg %08x\n", __FUNCTION__, __LINE__, reg);
+		if (reg & OMAP343X_PBIASLITEVMODEERROR1)
+			printk("%s: Error - VMODE1 doesn't matchup to supply!\n", __FUNCTION__);
+
+		/* For DM3730, turn on GPIO_IO_PWRDNZ to connect input pads*/
+		if (cpu_is_omap3630()) {
+			reg = omap_ctrl_readl(OMAP36XX_CONTROL_WKUP_CTRL);
+			printk("%s:%d reg %08x\n", __FUNCTION__, __LINE__, reg);
+			reg |= OMAP36XX_GPIO_IO_PWRDNZ;
+			omap_ctrl_writel(reg, OMAP36XX_CONTROL_WKUP_CTRL);
+			printk("%s:%d PKUP_CTRL %#x\n", __FUNCTION__, __LINE__, omap_ctrl_readl(OMAP36XX_CONTROL_WKUP_CTRL));
+		}
+
+		pbias_fixed = 1;
 	}
 }
 
