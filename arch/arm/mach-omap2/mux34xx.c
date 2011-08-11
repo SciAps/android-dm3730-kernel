@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <plat/hardware.h>
 
 #include "mux.h"
 
@@ -525,6 +526,7 @@ static struct omap_mux __initdata omap3_muxmodes[] = {
 	_OMAP3_MUXENTRY(SDMMC1_DAT3, 125,
 		"sdmmc1_dat3", NULL, NULL, NULL,
 		"gpio_125", NULL, NULL, "safe_mode"),
+#if 0
 	_OMAP3_MUXENTRY(SDMMC1_DAT4, 126,
 		"sdmmc1_dat4", NULL, "sim_io", NULL,
 		"gpio_126", NULL, NULL, "safe_mode"),
@@ -537,6 +539,7 @@ static struct omap_mux __initdata omap3_muxmodes[] = {
 	_OMAP3_MUXENTRY(SDMMC1_DAT7, 129,
 		"sdmmc1_dat7", NULL, "sim_rst", NULL,
 		"gpio_129", NULL, NULL, "safe_mode"),
+#endif
 	_OMAP3_MUXENTRY(SDMMC2_CLK, 130,
 		"sdmmc2_clk", "mcspi3_clk", NULL, NULL,
 		"gpio_130", NULL, NULL, "safe_mode"),
@@ -696,6 +699,14 @@ static struct omap_mux __initdata omap3_muxmodes[] = {
 	_OMAP3_MUXENTRY(SAD2D_MCAD36, 0,
 		NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL),
+
+	/* Extra entries to hold either OMAP36x or OMAP34x specific pins */
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+
+	/* Terminator */
 	{ .reg_offset = OMAP_MUX_TERMINATOR },
 };
 
@@ -1767,6 +1778,7 @@ static struct omap_mux __initdata omap36xx_cbp_subset[] = {
 	_OMAP3_MUXENTRY(SDRC_CKE1, 0,
 		"sdrc_cke1", NULL, NULL, NULL,
 		NULL, NULL, NULL, "safe_mode_out1"),
+#if 0
 	_OMAP3_MUXENTRY(SIM_IO, 126,
 		"sim_io", "sim_io_low_impedance", NULL, NULL,
 		"gpio_126", NULL, NULL, "safe_mode"),
@@ -1779,6 +1791,7 @@ static struct omap_mux __initdata omap36xx_cbp_subset[] = {
 	_OMAP3_MUXENTRY(SIM_RST, 129,
 		"sim_rst", NULL, NULL, NULL,
 		"gpio_129", NULL, NULL, "safe_mode"),
+#endif
 	_OMAP3_MUXENTRY(SYS_BOOT0, 2,
 		"sys_boot0", NULL, NULL, "dss_data18",
 		"gpio_2", NULL, NULL, "safe_mode"),
@@ -1991,10 +2004,12 @@ static struct omap_ball __initdata omap36xx_cbp_ball[] = {
 	_OMAP3_BALLENTRY(SDMMC2_DAT7, "ae3", NULL),
 	_OMAP3_BALLENTRY(SDRC_CKE0, "h16", "j22"),
 	_OMAP3_BALLENTRY(SDRC_CKE1, "h17", "j23"),
+#if 0
 	_OMAP3_BALLENTRY(SIM_CLK, "p26", NULL),
 	_OMAP3_BALLENTRY(SIM_IO, "p27", NULL),
 	_OMAP3_BALLENTRY(SIM_PWRCTRL, "r27", NULL),
 	_OMAP3_BALLENTRY(SIM_RST, "r25", NULL),
+#endif
 	_OMAP3_BALLENTRY(SYS_BOOT0, "ah26", NULL),
 	_OMAP3_BALLENTRY(SYS_BOOT1, "ag26", NULL),
 	_OMAP3_BALLENTRY(SYS_BOOT2, "ae14", NULL),
@@ -2026,6 +2041,61 @@ static struct omap_ball __initdata omap36xx_cbp_ball[] = {
 #define omap36xx_cbp_ball	 NULL
 #endif
 
+static struct omap_mux __initdata omap36xx_muxmodes[] = {
+	_OMAP3_MUXENTRY(36XX_GPIO_126, 126,
+		"reserved-gpio_126", NULL, NULL, NULL,
+		"gpio_126", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(36XX_GPIO_127, 127,
+		"reserved-gpio_127", NULL, NULL, NULL,
+		"gpio_127", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(36XX_GPIO_128, 128,
+		"reserved-gpio_128", NULL, NULL, NULL,
+		"gpio_128", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(36XX_GPIO_129, 129,
+		"reserved-gpio_129", NULL, NULL, NULL,
+		"gpio_129", NULL, NULL, "safe_mode"),
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+};
+
+static struct omap_mux __initdata omap34xx_muxmodes[] = {
+	_OMAP3_MUXENTRY(SDMMC1_DAT4, 126,
+		"sdmmc1_dat4", NULL, "sim_io", NULL,
+		"gpio_126", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(SDMMC1_DAT5, 127,
+		"sdmmc1_dat5", NULL, "sim_clk", NULL,
+		"gpio_127", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(SDMMC1_DAT6, 128,
+		"sdmmc1_dat6", NULL, "sim_pwrctrl", NULL,
+		"gpio_128", NULL, NULL, "safe_mode"),
+	_OMAP3_MUXENTRY(SDMMC1_DAT7, 129,
+		"sdmmc1_dat7", NULL, "sim_rst", NULL,
+		"gpio_129", NULL, NULL, "safe_mode"),
+	{ .reg_offset = OMAP_MUX_TERMINATOR },
+};
+
+static void __init omap34xx_muxmodes_add(struct omap_mux *superset, u32 superset_size,
+				struct omap_mux *add_pins, u32 add_pins_size)
+{
+	int i,j;
+
+	/* See if enough room in superset */
+	for (i=0; i<superset_size; ++i)
+		if (superset[i].reg_offset == OMAP_MUX_TERMINATOR)
+			break;
+	if (i + (add_pins_size - 1) > superset_size) {
+		printk(KERN_ERR "%s: Not enough room in superset to add %d pins!\n", __FUNCTION__, add_pins_size - 1);
+		return;
+	}
+
+	/* Now add in the new pins */
+	for (j=0; j<add_pins_size; ++i, ++j) {
+		if (add_pins[j].reg_offset == OMAP_MUX_TERMINATOR)
+			break;
+		superset[i] = add_pins[j];
+	}
+	BUG_ON(superset[i].reg_offset != OMAP_MUX_TERMINATOR);
+}
+
 int __init omap3_mux_init(struct omap_board_mux *board_subset, int flags)
 {
 	struct omap_mux *package_subset;
@@ -2052,6 +2122,17 @@ int __init omap3_mux_init(struct omap_board_mux *board_subset, int flags)
 		pr_err("%s Unknown omap package, mux disabled\n", __func__);
 		return -EINVAL;
 	}
+
+	/* DM37x removed SDMMC1_DAT4-DAT7 pinmux registers and added
+	 * new pinmux registers for GPIO_126-129.  To support this
+	 * remove the differing pinmux entries from omap3_muxmodes (as well
+	 * as cbp muxmodes) and then add them in seperately */
+	if (cpu_is_omap3630())
+		omap34xx_muxmodes_add(omap3_muxmodes, ARRAY_SIZE(omap3_muxmodes),
+				omap36xx_muxmodes, ARRAY_SIZE(omap36xx_muxmodes));
+	else
+		omap34xx_muxmodes_add(omap3_muxmodes, ARRAY_SIZE(omap3_muxmodes),
+				omap34xx_muxmodes, ARRAY_SIZE(omap34xx_muxmodes));
 
 	return omap_mux_init("core", 0,
 			     OMAP3_CONTROL_PADCONF_MUX_PBASE,

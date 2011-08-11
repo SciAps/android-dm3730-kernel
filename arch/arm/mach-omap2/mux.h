@@ -131,6 +131,7 @@ struct omap_mux_partition {
 struct omap_mux {
 	u16	reg_offset;
 	u16	gpio;
+	u32	cpu_class;
 #ifdef CONFIG_OMAP_MUX
 	char	*muxnames[OMAP_MUX_NR_MODES];
 #ifdef CONFIG_DEBUG_FS
@@ -339,4 +340,3 @@ int omap_mux_init(const char *name, u32 flags,
 		  struct omap_mux *package_subset,
 		  struct omap_board_mux *board_mux,
 		  struct omap_ball *package_balls);
-

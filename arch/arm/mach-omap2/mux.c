@@ -782,8 +782,10 @@ static void __init omap_mux_package_init_balls(struct omap_ball *b,
 			s++;
 		}
 		if (!found)
-			pr_err("%s: Unknown ball offset 0x%x\n", __func__,
-			       b->reg_offset);
+			pr_err("%s: Unknown ball (%s:%s) offset 0x%x\n", __func__,
+				b->balls[0]?b->balls[0]:"-",
+				b->balls[1]?b->balls[1]:"-",
+				b->reg_offset);
 		b++;
 	}
 }
