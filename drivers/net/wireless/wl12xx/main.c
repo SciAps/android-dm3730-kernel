@@ -881,6 +881,7 @@ out:
 EXPORT_SYMBOL_GPL(wl1271_irq);
 
 char *wl12xx_prefix = "wl12xx";
+EXPORT_SYMBOL_GPL(wl12xx_prefix);
 
 static int wl1271_fetch_firmware(struct wl1271 *wl)
 {
