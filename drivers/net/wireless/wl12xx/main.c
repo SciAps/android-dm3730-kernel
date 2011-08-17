@@ -954,11 +954,18 @@ static int wl1271_fetch_nvs(struct wl1271 *wl)
 {
 	const struct firmware *fw;
 	int ret;
+	const char *nvs_fname;
 
-	ret = request_firmware(&fw, WL12XX_NVS_NAME, wl1271_wl_to_dev(wl));
+
+	if (wl->chip.id != CHIP_ID_1283_PG20)
+		nvs_fname = WL12XX_NVS_NAME;
+	else
+		nvs_fname = WL128X_NVS_NAME;
+
+	ret = request_firmware(&fw, nvs_fname, wl1271_wl_to_dev(wl));
 
 	if (ret < 0) {
-		wl1271_error("could not get nvs file: %d", ret);
+		wl1271_error("could not get nvs file %s: %d", nvs_fname, ret);
 		return ret;
 	}
 
@@ -3796,21 +3803,13 @@ int wl1271_register_hw(struct wl1271 *wl)
 	if (wl->mac80211_registered)
 		return 0;
 
-	ret = wl1271_fetch_nvs(wl);
-	if (ret == 0) {
-		/* NOTE: The wl->nvs->nvs element must be first, in
-		 * order to simplify the casting, we assume it is at
-		 * the beginning of the wl->nvs structure.
-		 */
-		u8 *nvs_ptr = (u8 *)wl->nvs;
-
-		wl->mac_addr[0] = nvs_ptr[11];
-		wl->mac_addr[1] = nvs_ptr[10];
-		wl->mac_addr[2] = nvs_ptr[6];
-		wl->mac_addr[3] = nvs_ptr[5];
-		wl->mac_addr[4] = nvs_ptr[4];
-		wl->mac_addr[5] = nvs_ptr[3];
-	}
+	/* Supply default MAC addr; should come from platform data */
+	wl->mac_addr[0] = 0xde;
+	wl->mac_addr[1] = 0xed;
+	wl->mac_addr[2] = 0xbe;
+	wl->mac_addr[3] = 0xef;
+	wl->mac_addr[4] = 0x00;
+	wl->mac_addr[5] = 0x00;
 
 	SET_IEEE80211_PERM_ADDR(wl->hw, wl->mac_addr);
 

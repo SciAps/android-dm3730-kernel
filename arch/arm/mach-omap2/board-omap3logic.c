@@ -113,7 +113,7 @@ static struct regulator_init_data omap3logic_vmmc3 = {
 #define OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO 3
 #define OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO 2
 #define OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO 157
-#define OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO 2
+#define OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO 152
 
 static struct fixed_voltage_config omap3logic_vwlan = {
 	.supply_name		= "vwl1271",
@@ -135,11 +135,8 @@ static struct platform_device omap3logic_vwlan_device = {
 
 static struct wl12xx_platform_data omap3logic_wlan_data __initdata = {
 	.irq = -EINVAL,
-	/* wl1271 ref clock is 26 MHz */
-	.board_ref_clock = 1,
-#if 0
-	.board_tcxo_clock = 1,
-#endif
+	.board_ref_clock = -EINVAL,
+	.board_tcxo_clock = -EINVAL,
 };
 
 static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
@@ -190,8 +187,15 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 static int __init board_wl12xx_init(void)
 {
 	// Setup the mux for mmc3
-	omap_mux_init_signal("mcspi1_cs1.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS1/ADPLLV2D_DITHERING_EN2/MMC3_CMD/GPIO_175 */
-	omap_mux_init_signal("mcspi1_cs2.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS2/MMC3_CLK/GPIO_176 */
+	if (machine_is_dm3730_som_lv()) {
+		omap_mux_init_signal("mcspi1_cs1.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS1/ADPLLV2D_DITHERING_EN2/MMC3_CMD/GPIO_175 */
+		omap_mux_init_signal("mcspi1_cs2.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS2/MMC3_CLK/GPIO_176 */
+	} else if (machine_is_dm3730_torpedo()) {
+		omap_mux_init_signal("etk_ctl.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* ETK_CTL/MMC3_CMD/HSUSB1_CLK/HSUSB1_TLL_CLK/GPIO_13 */
+		omap_mux_init_signal("etk_clk.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* ETK_CTL/McBSP5_CLKX/MMC3_CLK/HSUSB1_STP/MM1_RXDP/HSUSB1_TLL_STP/GPIO_12 */
+	} else
+		BUG();
+
 	omap_mux_init_signal("sdmmc2_dat4.sdmmc3_dat0", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT4/MMC2_DIR_DAT0/MMC3_DAT0/GPIO_136 */
 	omap_mux_init_signal("sdmmc2_dat5.sdmmc3_dat1", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT5/MMC2_DIR_DAT1/CAM_GLOBAL_RESET/MMC3_DAT1/HSUSB3_TLL_STP/MM3_RXDP/GPIO_137 */
 	omap_mux_init_signal("sdmmc2_dat6.sdmmc3_dat2", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT6/MMC2_DIR_CMD/CAM_SHUTTER/MMC3_DAT2/HSUSB3_TLL_DIR/GPIO_138 */
@@ -200,17 +204,31 @@ static int __init board_wl12xx_init(void)
 	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO, OMAP_PIN_OUTPUT);
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
-		omap3logic_wlan_data.irq = OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO;
+		if (gpio_request_one(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
+			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO);
+			return -ENODEV;
+		}
+
+		omap3logic_wlan_data.irq = OMAP_GPIO_IRQ(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO);
 		omap3logic_vwlan.gpio = OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO;
+		/* wl1271 ref clock is 26 MHz */
+		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
 	} else if (machine_is_dm3730_torpedo()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO, OMAP_PIN_OUTPUT);
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
-		omap3logic_wlan_data.irq = OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO;
+		if (gpio_request_one(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
+			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO);
+			return -ENODEV;
+		}
+		omap3logic_wlan_data.irq = OMAP_GPIO_IRQ(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO);
 		omap3logic_vwlan.gpio = OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO;
 
 		/* Pull BT_EN low */
 		omap_mux_init_gpio(162, OMAP_PIN_OUTPUT);
 		gpio_request_one(162, GPIOF_OUT_INIT_LOW, "bt_en");
+		/* wl128x ref clock is 26 MHz; torpedo TXCO clock is 26Mhz */
+		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
+		omap3logic_wlan_data.board_tcxo_clock = WL12XX_TCXOCLOCK_26;
 	} else
 		return -ENODEV;
 
