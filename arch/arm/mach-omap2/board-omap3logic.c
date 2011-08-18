@@ -381,6 +381,10 @@ static void __init omap3logic_init(void)
 	board_mmc_init();
 	board_smsc911x_init();
 
+	/* Assume NOR is only on CS2 (if its there) */
+	omap3logic_nor_init(1<<2, SZ_8M);
+	omap3logic_nand_init();
+
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);

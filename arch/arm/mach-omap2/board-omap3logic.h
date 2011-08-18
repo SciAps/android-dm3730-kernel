@@ -11,3 +11,5 @@
  */
 
 extern volatile int omap3logic_hang;
+extern void omap3logic_nor_init(u32 nor_cs_mask, unsigned long nor_size);
+extern void omap3logic_nand_init(void);

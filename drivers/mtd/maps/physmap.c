@@ -286,7 +286,14 @@ static void __exit physmap_exit(void)
 	platform_driver_unregister(&physmap_flash_driver);
 }
 
+#if defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO) \
+	|| defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO)
+/* For these platforms want (optional) NOR flash to
+ * show up after NAND in MTD device table */
+late_initcall(physmap_init);
+#else
 module_init(physmap_init);
+#endif
 module_exit(physmap_exit);
 
 MODULE_LICENSE("GPL");
