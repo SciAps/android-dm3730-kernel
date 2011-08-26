@@ -139,6 +139,103 @@ static struct wl12xx_platform_data omap3logic_wlan_data __initdata = {
 	.board_tcxo_clock = -EINVAL,
 };
 
+static int omap3logic_twl_gpio_base;	/* base GPIO of TWL4030 GPIO.0 */
+
+#if defined(CONFIG_NEW_LEDS) || defined(CONFIG_NEW_LEDS_MODULE)
+static struct gpio_led omap3logic_leds[] = {
+	{
+		.name			= "led1",	/* D1 on baseboard */
+		.default_trigger	= "heartbeat",
+		.gpio			= -EINVAL,	/* gets replaced */
+		.active_low		= false,
+	},
+	{
+		.name			= "led2",	/* D2 on baseboard */
+		.default_trigger	= "none",
+		.gpio			= -EINVAL,	/* gets replaced */
+		.active_low		= false,
+	},
+	{
+		.name			= "led3",	/* D1 on Torpedo module */
+		.default_trigger	= "none",
+		.gpio			= -EINVAL,	/* gets replaced */
+		.active_low		= true,
+	},
+};
+ 
+static struct gpio_led_platform_data omap3logic_led_data = {
+	.leds		= omap3logic_leds,
+	.num_leds	= 0,	/* Initialized in omap3logic_led_init() */
+ };
+ 
+static struct platform_device omap3logic_led_device = {
+	.name	= "leds-gpio",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &omap3logic_led_data,
+	},
+};
+
+#define GPIO_LED1_SOM_LV	133
+#define GPIO_LED2_SOM_LV	11
+
+#define GPIO_LED1_TORPEDO	180
+#define GPIO_LED2_TORPEDO	179
+
+static void omap3logic_led_init(void)
+{
+	int gpio_led1 = -EINVAL;
+	int gpio_led2 = -EINVAL;
+
+	if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
+		if (!omap3logic_twl_gpio_base) {
+			printk(KERN_ERR "Huh?!? twl4030_gpio_base not set!\n");
+			return;
+		}
+		/* baseboard LEDs are MCSPIO2_SOMI, MCSPOI2_SIMO */
+		gpio_led1 = GPIO_LED1_TORPEDO;
+		gpio_led2 = GPIO_LED2_TORPEDO;
+
+		/* twl4030 ledA is the LED on the module */
+		omap3logic_leds[2].gpio = omap3logic_twl_gpio_base + TWL4030_GPIO_MAX + 0;
+		omap3logic_led_data.num_leds = 3;
+	} else if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
+		gpio_led1 = GPIO_LED1_SOM_LV;
+		omap3logic_leds[0].active_low = true;
+		gpio_led2 = GPIO_LED2_SOM_LV;
+		omap3logic_leds[1].active_low = true;
+
+		/* SOM has only two LEDs */
+		omap3logic_led_data.num_leds = 2;
+	}
+
+	if (gpio_led1 < omap3logic_twl_gpio_base)
+		omap_mux_init_gpio(gpio_led1, OMAP_PIN_OUTPUT);
+	omap3logic_leds[0].gpio = gpio_led1;
+
+	if (gpio_led2 < omap3logic_twl_gpio_base)
+		omap_mux_init_gpio(gpio_led2, OMAP_PIN_OUTPUT);
+	omap3logic_leds[1].gpio = gpio_led2;
+
+	if (platform_device_register(&omap3logic_led_device) < 0)
+		printk(KERN_ERR "Unable to register LED device\n");
+}
+#else
+static void omap3logic_led_init(void)
+{
+}
+#endif
+
+static int omap3logic_twl_gpio_setup(struct device *dev,
+		unsigned gpio, unsigned ngpio)
+{
+	omap3logic_twl_gpio_base = gpio;
+
+	omap3logic_led_init();
+
+	return 0;
+}
+
 static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 	.gpio_base	= OMAP_MAX_GPIO_LINES,
 	.irq_base	= TWL4030_GPIO_IRQ_BASE,
@@ -147,6 +244,7 @@ static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 	.pullups	= BIT(1),
 	.pulldowns	= BIT(2)  | BIT(6)  | BIT(7)  | BIT(8)
 			| BIT(13) | BIT(15) | BIT(16) | BIT(17),
+	.setup		= omap3logic_twl_gpio_setup,
 };
 
 static struct twl4030_platform_data omap3logic_twldata = {
