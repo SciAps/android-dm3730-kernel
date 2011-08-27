@@ -43,6 +43,7 @@
 
 #include <plat/mux.h>
 #include <plat/board.h>
+#include <plat/usb.h>
 #include <plat/common.h>
 #include <plat/gpmc-smsc911x.h>
 #include <plat/gpmc.h>
@@ -449,6 +450,31 @@ static inline void __init board_smsc911x_init(void)
 	gpmc_smsc911x_init(&board_smsc911x_data);
 }
 
+#if defined(CONFIG_USB_MUSB_OMAP2PLUS)
+static void omap3logic_musb_init(void)
+{
+	/* Set up the mux for musb */
+	omap_mux_init_signal("hsusb0_clk", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_stp", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_dir", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_nxt", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data0", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data1", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data2", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data3", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data4", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data5", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data6", OMAP_PIN_INPUT);
+	omap_mux_init_signal("hsusb0_data7", OMAP_PIN_INPUT);
+
+	usb_musb_init(NULL);
+}
+#else
+static void omap3logic_musb_init(void)
+{
+}
+#endif
+
 static void __init omap3logic_init_early(void)
 {
 	omap2_init_common_infrastructure();
@@ -482,6 +508,9 @@ static void __init omap3logic_init(void)
 	/* Assume NOR is only on CS2 (if its there) */
 	omap3logic_nor_init(1<<2, SZ_8M);
 	omap3logic_nand_init();
+
+	/* Initialise OTG MUSB port */
+	omap3logic_musb_init();
 
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
