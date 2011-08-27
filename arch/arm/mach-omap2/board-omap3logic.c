@@ -487,6 +487,32 @@ static struct omap_board_mux board_mux[] __initdata = {
 };
 #endif
 
+static const struct usbhs_omap_board_data usbhs_bdata __initconst = {
+
+	.port_mode[0] = OMAP_EHCI_PORT_MODE_PHY,
+	.port_mode[1] = OMAP_EHCI_PORT_MODE_PHY,
+	.port_mode[2] = OMAP_USBHS_PORT_MODE_UNUSED,
+
+	.phy_reset  = true,
+	.reset_gpio_port[0]  = -EINVAL,
+	.reset_gpio_port[1]  = 4,
+	.reset_gpio_port[2]  = -EINVAL
+};
+
+static void omap3logic_init_ehci(void)
+{
+	omap_mux_init_gpio(usbhs_bdata.reset_gpio_port[1], OMAP_PIN_OUTPUT);
+	usbhs_init(&usbhs_bdata);
+}
+
+static void omap3logic_usb_init(void)
+{
+	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv())
+		omap3logic_init_ehci();
+	else
+		printk(KERN_INFO "%s: Need ISP1763 for Torpedo HOST USB\n", __FUNCTION__);
+}
+
 static void __init omap3logic_init(void)
 {
 	/* hang on start if "hang" is on command line */
@@ -508,6 +534,9 @@ static void __init omap3logic_init(void)
 	/* Assume NOR is only on CS2 (if its there) */
 	omap3logic_nor_init(1<<2, SZ_8M);
 	omap3logic_nand_init();
+
+	/* Initialixe EHCI port */
+	omap3logic_usb_init();
 
 	/* Initialise OTG MUSB port */
 	omap3logic_musb_init();
