@@ -27,6 +27,7 @@
 #include <linux/regulator/fixed.h>
 
 #include <linux/i2c/twl.h>
+#include <linux/i2c/tsc2004.h>
 #include <linux/wl12xx.h>
 #include <linux/mmc/host.h>
 
@@ -79,6 +80,29 @@ static struct regulator_init_data omap3logic_vmmc1 = {
 	.num_consumer_supplies  = 1,
 	.consumer_supplies      = &omap3logic_vmmc1_supply,
 };
+
+#ifdef CONFIG_TOUCHSCREEN_TSC2004
+static struct regulator_consumer_supply omap3logic_vaux1_supply = {
+	.supply			= "vaux1",
+};
+
+/* VAUX1 for touch/product ID chip */
+static struct regulator_init_data omap3logic_vaux1 = {
+	.constraints = {
+		.min_uV		= 3000000,
+		.max_uV		= 3000000,
+		.apply_uV	= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+#if 1
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+#endif
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies	= &omap3logic_vaux1_supply,
+};
+#endif
 
 static struct regulator_consumer_supply omap3logic_vaux3_supplies[] = {
 	REGULATOR_SUPPLY("vmmc_aux", "omap_hsmmc.2"),
@@ -255,12 +279,106 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	/* platform_data for children goes here */
 	.gpio		= &omap3logic_gpio_data,
 	.vmmc1		= &omap3logic_vmmc1,
+#ifdef CONFIG_TOUCHSCREEN_TSC2004
+	.vaux1		= &omap3logic_vaux1,
+#endif
 	.vaux3		= &omap3logic_vaux3,
+};
+
+#ifdef CONFIG_TOUCHSCREEN_TSC2004
+
+#define	GPIO_TSC2004_IRQ	153
+
+static int tsc2004_pre_init(struct tsc2004_platform_data *pdata)
+{
+	int err;
+
+	pdata->regulator_name = "vaux1";
+	pdata->regulator = regulator_get(NULL, "vaux1");
+	if (IS_ERR(pdata->regulator)) {
+		pr_err("%s: unable to get %s regulator\n", __FUNCTION__, pdata->regulator_name);
+		return -1;
+	}
+
+	err = regulator_enable(pdata->regulator);
+	if (err) {
+		pr_err("%s: unable to enable %s regulator\n", __FUNCTION__, pdata->regulator_name);
+		regulator_put(pdata->regulator);
+		pdata->regulator = NULL;
+		return err;
+	}
+	return 0;
+}
+
+static int tsc2004_init_irq(void)
+{
+	int ret = 0;
+
+	omap_mux_init_gpio(GPIO_TSC2004_IRQ, OMAP_PIN_INPUT | OMAP_PIN_OFF_WAKEUPENABLE);
+	ret = gpio_request(GPIO_TSC2004_IRQ, "tsc2004-irq");
+	if (ret < 0) {
+		printk(KERN_WARNING "failed to request GPIO#%d: %d\n",
+				GPIO_TSC2004_IRQ, ret);
+		return ret;
+	}
+
+	if (gpio_direction_input(GPIO_TSC2004_IRQ)) {
+		printk(KERN_WARNING "GPIO#%d cannot be configured as "
+				"input\n", GPIO_TSC2004_IRQ);
+		return -ENXIO;
+	}
+
+	gpio_set_debounce(GPIO_TSC2004_IRQ, 0xa);
+	return ret;
+}
+
+static void tsc2004_exit_irq(void)
+{
+	gpio_free(GPIO_TSC2004_IRQ);
+}
+
+static void tsc2004_post_exit(struct tsc2004_platform_data *pdata)
+{
+	if (pdata->regulator && regulator_is_enabled(pdata->regulator)) {
+		regulator_disable(pdata->regulator);
+	}
+}
+
+static int tsc2004_get_irq_level(void)
+{
+	return gpio_get_value(GPIO_TSC2004_IRQ) ? 0 : 1;
+}
+
+struct tsc2004_platform_data omap3logic_tsc2004data = {
+	.model = 2004,
+	.x_plate_ohms = 180,
+	.get_pendown_state = tsc2004_get_irq_level,
+	.pre_init_platform_hw = tsc2004_pre_init,
+	.init_platform_hw = tsc2004_init_irq,
+	.exit_platform_hw = tsc2004_exit_irq,
+	.post_exit_platform_hw = tsc2004_post_exit,
+	.regulator_name = "vaux1",
+};
+
+#endif
+
+static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
+#ifdef CONFIG_TOUCHSCREEN_TSC2004
+	{
+		I2C_BOARD_INFO("tsc2004", 0x48),
+		.type		= "tsc2004",
+		.platform_data = &omap3logic_tsc2004data,
+		.irq = OMAP_GPIO_IRQ(GPIO_TSC2004_IRQ),
+	},
+#endif
 };
 
 static int __init omap3logic_i2c_init(void)
 {
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
+	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
+			ARRAY_SIZE(omap3logic_i2c3_boardinfo));
+
 	return 0;
 }
 
