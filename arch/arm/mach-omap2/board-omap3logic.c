@@ -272,11 +272,17 @@ static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 	.setup		= omap3logic_twl_gpio_setup,
 };
 
+static struct twl4030_usb_data omap3logic_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+
 static struct twl4030_platform_data omap3logic_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
 
 	/* platform_data for children goes here */
+	.usb		= &omap3logic_usb_data,
 	.gpio		= &omap3logic_gpio_data,
 	.vmmc1		= &omap3logic_vmmc1,
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
