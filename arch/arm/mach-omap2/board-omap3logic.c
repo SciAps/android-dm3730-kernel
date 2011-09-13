@@ -410,14 +410,14 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 static int __init board_wl12xx_init(void)
 {
 	// Setup the mux for mmc3
-	if (machine_is_dm3730_som_lv()) {
+	if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()) {
 		omap_mux_init_signal("mcspi1_cs1.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS1/ADPLLV2D_DITHERING_EN2/MMC3_CMD/GPIO_175 */
 		omap_mux_init_signal("mcspi1_cs2.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS2/MMC3_CLK/GPIO_176 */
 	} else if (machine_is_dm3730_torpedo()) {
 		omap_mux_init_signal("etk_ctl.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* ETK_CTL/MMC3_CMD/HSUSB1_CLK/HSUSB1_TLL_CLK/GPIO_13 */
 		omap_mux_init_signal("etk_clk.sdmmc3_clk", OMAP_PIN_INPUT_PULLUP); /* ETK_CTL/McBSP5_CLKX/MMC3_CLK/HSUSB1_STP/MM1_RXDP/HSUSB1_TLL_STP/GPIO_12 */
 	} else
-		BUG();
+		return -ENODEV;
 
 	omap_mux_init_signal("sdmmc2_dat4.sdmmc3_dat0", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT4/MMC2_DIR_DAT0/MMC3_DAT0/GPIO_136 */
 	omap_mux_init_signal("sdmmc2_dat5.sdmmc3_dat1", OMAP_PIN_INPUT_PULLUP); /* MMC2_DAT5/MMC2_DIR_DAT1/CAM_GLOBAL_RESET/MMC3_DAT1/HSUSB3_TLL_STP/MM3_RXDP/GPIO_137 */
