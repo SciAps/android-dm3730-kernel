@@ -108,7 +108,7 @@ static struct mtd_partition omap3logic_nand_partitions[] = {
 	},
 };
 
-
+#ifdef CONIFG_MTD_NAND_OMAP2
 static int __init _nand_init(u32 id, u32 nand_cs)
 {
 	struct platform_device *pdev;
@@ -193,3 +193,9 @@ int __init omap3logic_nand_init(void)
 	}
 	return 0;
 }
+#else
+int __init omap3logic_nand_init(void)
+{
+}
+#endif
+
