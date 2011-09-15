@@ -406,7 +406,7 @@ static int isp1763_run(struct usb_hcd *hcd)
 
 	hcd->uses_new_polling = 1;
 
-	hcd->poll_rh = 0;
+	clear_bit(HCD_FLAG_POLL_RH, &hcd->flags);
 
 	hcd->state = HC_STATE_RUNNING;
 
@@ -1963,8 +1963,8 @@ static void isp1763_hub_descriptor(struct isp1763_hcd *priv,
 	desc->bDescLength = 7 + 2 * temp;
 
 	/* two bitmaps:  ports removable, and usb 1.0 legacy PortPwrCtrlMask */
-	memset(&desc->bitmap[0], 0, temp);
-	memset(&desc->bitmap[temp], 0xff, temp);
+	memset(&desc->u.hs.DeviceRemoveable[0], 0, temp);
+	memset(&desc->u.hs.DeviceRemoveable[temp], 0xff, temp);
 
 	/* per-port overcurrent reporting; no power switching */
 	temp = 0x0008;
