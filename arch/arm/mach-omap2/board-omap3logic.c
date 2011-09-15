@@ -30,6 +30,7 @@
 #include <linux/i2c/tsc2004.h>
 #include <linux/wl12xx.h>
 #include <linux/mmc/host.h>
+#include <linux/usb/isp1763.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -574,6 +575,87 @@ static inline void __init board_smsc911x_init(void)
 	gpmc_smsc911x_init(&board_smsc911x_data);
 }
 
+#if defined(CONFIG_USB_ISP1763)
+/* ISP1763 USB interrupt */
+#define OMAP3TORPEDO_ISP1763_IRQ_GPIO          128
+
+static struct isp1763_platform_data omap3logic_isp1763_pdata = {
+       .bus_width_8            = 0,
+       .port1_otg              = 0,
+       .dack_polarity_high     = 0,
+       .dreq_polarity_high     = 0,
+       .intr_polarity_high     = 0,
+       .intr_edge_trigger      = 0,
+};
+
+static struct resource omap3logic_isp1763_resources[] = {
+       [0] = {
+               .flags = IORESOURCE_MEM,
+       },
+       [1] = {
+               .start = -EINVAL,
+               .flags = IORESOURCE_IRQ | IORESOURCE_IRQ_LOWLEVEL,
+       },
+};
+
+static struct platform_device omap3logic_isp1763 = {
+       .name           = "isp1763",
+       .id             = -1,
+       .dev            = {
+               .platform_data  = &omap3logic_isp1763_pdata,
+       },
+       .num_resources = ARRAY_SIZE(omap3logic_isp1763_resources),
+       .resource = omap3logic_isp1763_resources,
+};
+
+
+static int omap3logic_init_isp1763(void)
+{
+       unsigned long cs_mem_base;
+       unsigned int irq_gpio;
+
+       /* ISP1763 IRQ is an MMC1 data pin - need to update PBIAS
+        * to get voltage to the device so the IRQ works correctly rather
+        * than float below logic 1 and cause IRQ storm... */
+       if (machine_is_dm3730_torpedo() || machine_is_omap3_torpedo())
+               omap3torpedo_fix_pbias_voltage();
+       else
+               return -ENODEV;
+
+       if (gpmc_cs_request(6, SZ_16M, &cs_mem_base) < 0) {
+               printk(KERN_ERR "Failed to request GPMC mem for ISP1763\n");
+               return -ENOMEM;
+       }
+       
+       omap3logic_isp1763_resources[0].start = cs_mem_base;
+       omap3logic_isp1763_resources[0].end = cs_mem_base + 0xffff;
+
+       irq_gpio = OMAP3TORPEDO_ISP1763_IRQ_GPIO;
+       omap_mux_init_gpio(irq_gpio, OMAP_PIN_INPUT_PULLUP | OMAP_PIN_OFF_WAKEUPENABLE);
+       /* Setup ISP1763 IRQ pin as input */
+       if (gpio_request(irq_gpio, "isp1763_irq") < 0) {
+               printk(KERN_ERR "Failed to request GPIO%d for isp1763 IRQ\n",
+               irq_gpio);
+               return -EINVAL;
+       }
+       gpio_direction_input(irq_gpio);
+       omap3logic_isp1763_resources[1].start = OMAP_GPIO_IRQ(irq_gpio);
+       if (platform_device_register(&omap3logic_isp1763) < 0) {
+               printk(KERN_ERR "Unable to register isp1763 device\n");
+               gpio_free(irq_gpio);
+               return -EINVAL;
+       } else {
+               pr_info("registered isp1763 platform_device\n");
+       }
+       return 0;
+}
+#else
+static int omap3logic_init_isp1763(void)
+{
+	return -ENODEV;
+}
+#endif
+
 #if defined(CONFIG_USB_MUSB_OMAP2PLUS)
 static void omap3logic_musb_init(void)
 {
@@ -634,7 +716,7 @@ static void omap3logic_usb_init(void)
 	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv())
 		omap3logic_init_ehci();
 	else
-		printk(KERN_INFO "%s: Need ISP1763 for Torpedo HOST USB\n", __FUNCTION__);
+		omap3logic_init_isp1763();
 }
 
 static void __init omap3logic_init(void)
