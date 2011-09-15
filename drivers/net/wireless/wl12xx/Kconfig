@@ -20,6 +20,26 @@ config WL12XX
 	  If you choose to build a module, it will be called wl12xx. Say N if
 	  unsure.
 
+config WL128X_FIRMWARE_SOURCE
+        tristate "TI WL128x firmware source"
+	depends on WL12XX
+	default n
+	help
+	  This selects the source of the WL128x firmware files:
+	  'n' means don't include any files in the kernel
+	  'y' means build the firmware files into the kernel
+	  'm' means build the firmware files and install in rootfs
+
+config WL127X_FIRMWARE_SOURCE
+        tristate "TI WL127x firmware source"
+	depends on WL12XX
+	default n
+	help
+	  This selects the source of the WL128x firmware files:
+	  'n' means don't include any files in the kernel
+	  'y' means build the firmware files into the kernel
+	  'm' means build the firmware files and install in rootfs
+
 config WL12XX_HT
         bool "TI wl12xx 802.11 HT support (EXPERIMENTAL)"
         depends on WL12XX && EXPERIMENTAL
