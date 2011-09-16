@@ -52,12 +52,19 @@
 #define OMAP4_SRAM_PUB_PA	(OMAP4_SRAM_PA + 0x4000)
 #define OMAP4_SRAM_PUB_VA	(OMAP4_SRAM_VA + 0x4000)
 
+#if defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO) \
+	|| defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO)
+/* The product ID information is passed from u-boot to the kernel in the
+ * first 1K of SRAM
+ */
+#define SRAM_BOOTLOADER_SZ	(1<<10)
+#else
 #if defined(CONFIG_ARCH_OMAP2PLUS)
 #define SRAM_BOOTLOADER_SZ	0x00
 #else
 #define SRAM_BOOTLOADER_SZ	0x80
 #endif
-
+#endif
 #define OMAP24XX_VA_REQINFOPERM0	OMAP2_L3_IO_ADDRESS(0x68005048)
 #define OMAP24XX_VA_READPERM0		OMAP2_L3_IO_ADDRESS(0x68005050)
 #define OMAP24XX_VA_WRITEPERM0		OMAP2_L3_IO_ADDRESS(0x68005058)
@@ -194,6 +201,14 @@ static struct map_desc omap_sram_io_desc[] __initdata = {
 };
 
 /*
+ * Return the base address of SRAM as a virtual address
+ */
+void *sram_get_base_va(void)
+{
+	return (void *)omap_sram_io_desc[0].virtual;
+}
+
+/*
  * Note that we cannot use ioremap for SRAM, as clock init needs SRAM early.
  */
 static void __init omap_map_sram(void)
@@ -233,6 +248,7 @@ static void __init omap_map_sram(void)
 	 */
 	local_flush_tlb_all();
 	flush_cache_all();
+
 
 	/*
 	 * Looks like we need to preserve some bootloader code at the

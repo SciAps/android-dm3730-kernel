@@ -25,6 +25,7 @@ extern void *omap_sram_push_address(unsigned long size);
 	_res;							\
 })
 
+extern void *sram_get_base_va(void);
 extern void omap_sram_reprogram_clock(u32 dpllctl, u32 ckctl);
 
 extern void omap2_sram_ddr_init(u32 *slow_dll_ctrl, u32 fast_dll_ctrl,

@@ -51,6 +51,7 @@
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
 
+#include <plat/omap3logic-productid.h>
 #include "board-omap3logic.h"
 
 #define OMAP3LOGIC_SMSC911X_CS			1
@@ -82,7 +83,6 @@ static struct regulator_init_data omap3logic_vmmc1 = {
 	.consumer_supplies      = &omap3logic_vmmc1_supply,
 };
 
-#ifdef CONFIG_TOUCHSCREEN_TSC2004
 static struct regulator_consumer_supply omap3logic_vaux1_supply = {
 	.supply			= "vaux1",
 };
@@ -94,7 +94,7 @@ static struct regulator_init_data omap3logic_vaux1 = {
 		.max_uV		= 3000000,
 		.apply_uV	= true,
 		.valid_modes_mask	= REGULATOR_MODE_NORMAL
-#if 1
+#if 0
 					| REGULATOR_MODE_STANDBY,
 		.valid_ops_mask		= REGULATOR_CHANGE_MODE
 					| REGULATOR_CHANGE_STATUS,
@@ -103,7 +103,6 @@ static struct regulator_init_data omap3logic_vaux1 = {
 	.num_consumer_supplies	= 1,
 	.consumer_supplies	= &omap3logic_vaux1_supply,
 };
-#endif
 
 static struct regulator_consumer_supply omap3logic_vaux3_supplies[] = {
 	REGULATOR_SUPPLY("vmmc_aux", "omap_hsmmc.2"),
@@ -286,9 +285,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.usb		= &omap3logic_usb_data,
 	.gpio		= &omap3logic_gpio_data,
 	.vmmc1		= &omap3logic_vmmc1,
-#ifdef CONFIG_TOUCHSCREEN_TSC2004
 	.vaux1		= &omap3logic_vaux1,
-#endif
 	.vaux3		= &omap3logic_vaux3,
 };
 
@@ -478,6 +475,9 @@ static void __init board_mmc_init(void)
 		printk(KERN_ERR "%s(): unknown machine type\n", __func__);
 		return;
 	}
+
+	/* Check the SRAM for valid product_id data(put there by u-boot). */
+	omap3logic_fetch_sram_product_id_data();
 
 	ret = board_wl12xx_init();
 	if (ret) {
@@ -717,6 +717,14 @@ static void omap3logic_usb_init(void)
 		omap3logic_init_ehci();
 	else
 		omap3logic_init_isp1763();
+}
+
+/* Code that is invoked only after
+ * the product ID data has been found; used for finer-grain
+ * board configuration
+ */
+void omap3logic_init_productid_specifics(void)
+{
 }
 
 static void __init omap3logic_init(void)

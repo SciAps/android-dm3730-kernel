@@ -188,18 +188,22 @@ obj-$(CONFIG_MACH_OMAP_LDP)		+= board-ldp.o \
 obj-$(CONFIG_MACH_OMAP3530_LV_SOM)      += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
+					   board-omap3logic-productid.o \
 					   hsmmc.o
 obj-$(CONFIG_MACH_OMAP3_TORPEDO)        += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
+					   board-omap3logic-productid.o \
 					   hsmmc.o
 obj-$(CONFIG_MACH_DM3730_SOM_LV)        += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
+					   board-omap3logic-productid.o \
 					   hsmmc.o
 obj-$(CONFIG_MACH_DM3730_TORPEDO)       += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
+					   board-omap3logic-productid.o \
 					   hsmmc.o
 obj-$(CONFIG_MACH_OVERO)		+= board-overo.o \
 					   hsmmc.o
