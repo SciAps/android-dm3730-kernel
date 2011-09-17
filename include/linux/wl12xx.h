@@ -54,6 +54,7 @@ struct wl12xx_platform_data {
 	int board_ref_clock;
 	int board_tcxo_clock;
 	unsigned long platform_quirks;
+	unsigned char mac_addr[6];
 };
 
 /* Platform does not support level trigger interrupts */

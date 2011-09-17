@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/gpio.h>
 
 #include <plat/hardware.h>
 
@@ -410,6 +411,8 @@ static int product_id_data_valid;
 
 static inline int omap3logic_is_product_data_valid(void)
 {
+	WARN_ON (!product_id_data_valid);
+
 	return product_id_data_valid;
 }
 
@@ -627,6 +630,8 @@ int omap3logic_extract_wifi_ethaddr(u8 *ethaddr)
 	return !ret;
 }
 EXPORT_SYMBOL(omap3logic_extract_wifi_ethaddr);
+
+extern int omap3logic_has_murata_wifi_module(void);
 
 /* Data is valid, extract/print it.  Validate ethaddrs for LAN/WiFi */
 void valid_data_extract_dump(struct product_id_data *p)
@@ -1047,6 +1052,75 @@ int omap3logic_external_mute_gpio(void)
 	return -EINVAL;
 }
 
+#define OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO 3
+#define OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO 157
+
+/*
+ * Return !0 if SOM has a WiLink module on it.  Currently we assume that
+ * all -11 variants have it, have to fix in the future */
+int omap3logic_has_murata_wifi_module(void)
+{
+	static int wilink_probed = 0;
+	static int wilink_found = 0;
+	int i;
+
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
+	/* No valid data, then no WiLink */
+	if (!omap3logic_is_product_data_valid()) {
+		printk("%s:%d no productID data!\n", __FUNCTION__, __LINE__);
+		return 0;
+	}
+
+	/* Not a SOM, no WiLink */
+	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som())) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		return 0;
+	}
+
+	/* If earlier than rev3, then can't have a WiLink */
+	if (header_version < LOGIC_HEADER_VERSION_3) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		return 0;
+	}
+
+	if (!wilink_probed) {
+		int val;
+		int gpio;
+
+		wilink_probed = 1;
+		/* Figure out if a WiLink is on the board.  Use
+		   the pullup on WIFI_EN to determine such */
+		if (machine_is_dm3730_torpedo())
+			gpio = OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO;
+		else
+			gpio = OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO;
+
+		omap_mux_init_gpio(gpio, OMAP_PIN_INPUT);
+		if (gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "wifi probe") < 0)
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
+
+		/* Give it a chance to pull the pin the pin down */
+		/* Let it soak for a while */
+		for (i=0; i<0x100; ++i)
+			asm("nop");
+
+		if (gpio_direction_input(gpio) < 0)
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
+
+		/* Let it soak for a while */
+		for (i=0; i<0x100; ++i)
+			asm("nop");
+
+		val = gpio_get_value(gpio);
+
+		wilink_found = !val;
+		gpio_free(gpio);
+	}
+
+	printk("%s:%d wilink_found %d\n", __FUNCTION__, __LINE__, wilink_found);
+	return(wilink_found);
+}
+
 /* Return positive non-zero if productID indicates there's
  * the first NOR flash on the device - return size of flash
  * as log2 in bytes, or negative for none(or size unknown) */
@@ -1097,15 +1171,6 @@ int omap3logic_NAND0_size(void)
 		return 0;
 
 	return nand0_size;
-}
-
-/*
- * Return !0 if SOM has a Murata module on it.  Currently we assume that
- * all -11 variants have it, have to fix in the future */
-int omap3logic_has_murata_wifi_module(void)
-{
-	//ZOLL always has the WiFi module
-	return(1);
 }
 
 /*

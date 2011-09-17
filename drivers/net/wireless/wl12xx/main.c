@@ -3803,13 +3803,20 @@ int wl1271_register_hw(struct wl1271 *wl)
 	if (wl->mac80211_registered)
 		return 0;
 
-	/* Supply default MAC addr; should come from platform data */
-	wl->mac_addr[0] = 0xde;
-	wl->mac_addr[1] = 0xed;
-	wl->mac_addr[2] = 0xbe;
-	wl->mac_addr[3] = 0xef;
-	wl->mac_addr[4] = 0x00;
-	wl->mac_addr[5] = 0x00;
+	if (!wl->mac_addr[0] && !wl->mac_addr[1] && !wl->mac_addr[2]
+		|| wl->mac_addr[3] && !wl->mac_addr[4] && wl->mac_addr[5]) {
+
+		/* platform data MAC invalid; supply a default */
+		wl->mac_addr[0] = 0xde;
+		wl->mac_addr[1] = 0xad;
+		wl->mac_addr[2] = 0xbe;
+		wl->mac_addr[3] = 0xef;
+		wl->mac_addr[4] = 0x00;
+		wl->mac_addr[5] = 0x00;
+		printk(KERN_INFO "wl12xx: MAC address invalid; using %02x:%02x:%02x:%02x:%02x:%02x\n",
+			wl->mac_addr[0], wl->mac_addr[1], wl->mac_addr[2],
+			wl->mac_addr[3], wl->mac_addr[4], wl->mac_addr[5]);
+	}
 
 	SET_IEEE80211_PERM_ADDR(wl->hw, wl->mac_addr);
 

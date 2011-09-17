@@ -154,6 +154,5 @@ extern void omap3logic_set_product_id_data(struct product_id_data *p);
 extern int omap3logic_NOR0_size(void);
 extern int omap3logic_NAND0_size(void);
 
-extern int omap3logic_has_murata_wifi_module(void);
 extern int omap3logic_has_isp1760(void);
 #endif

@@ -407,6 +407,8 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 
 static int __init board_wl12xx_init(void)
 {
+	unsigned char mac_addr[6];
+
 	// Setup the mux for mmc3
 	if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()) {
 		omap_mux_init_signal("mcspi1_cs1.sdmmc3_cmd", OMAP_PIN_INPUT_PULLUP); /* McSPI1_CS1/ADPLLV2D_DITHERING_EN2/MMC3_CMD/GPIO_175 */
@@ -453,6 +455,17 @@ static int __init board_wl12xx_init(void)
 	} else
 		return -ENODEV;
 
+	/* Extract the MAC addr from the productID data */
+	if (omap3logic_extract_wifi_ethaddr(mac_addr))
+		memcpy(omap3logic_wlan_data.mac_addr, mac_addr, sizeof(mac_addr));
+
+#ifdef CONFIG_WL12XX_PLATFORM_DATA
+	/* WL12xx WLAN Init */
+	if (wl12xx_set_platform_data(&omap3logic_wlan_data))
+		pr_err("error setting wl12xx data\n");
+	platform_device_register(&omap3logic_vwlan_device);
+#endif
+
 	return 0;
 }
 
@@ -480,20 +493,14 @@ static void __init board_mmc_init(void)
 	omap3logic_fetch_sram_product_id_data();
 
 	ret = board_wl12xx_init();
+	printk("%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
 	if (ret) {
 		/* No wifi configuration for this board */
 		board_mmc_info[2].mmc = 0;
 	}
 
 	omap2_hsmmc_init(board_mmc_info);
-#ifdef CONFIG_WL12XX_PLATFORM_DATA
-	if (!ret) {
-		/* WL12xx WLAN Init */
-		if (wl12xx_set_platform_data(&omap3logic_wlan_data))
-			pr_err("error setting wl12xx data\n");
-		platform_device_register(&omap3logic_vwlan_device);
-	}
-#endif
+
 	/* link regulators to MMC adapters */
 	omap3logic_vmmc1_supply.dev = board_mmc_info[0].dev;
 }

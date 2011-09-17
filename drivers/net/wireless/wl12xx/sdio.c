@@ -264,6 +264,7 @@ static int __devinit wl1271_probe(struct sdio_func *func,
 	wl->ref_clock = wlan_data->board_ref_clock;
 	wl->tcxo_clock = wlan_data->board_tcxo_clock;
 	wl->platform_quirks = wlan_data->platform_quirks;
+	memcpy(wl->mac_addr, wlan_data->mac_addr, sizeof(wlan_data->mac_addr));
 
 	if (wl->platform_quirks & WL12XX_PLATFORM_QUIRK_EDGE_IRQ)
 		irqflags = IRQF_TRIGGER_RISING;
