@@ -557,12 +557,16 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 
 	size = (cmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT;
 	if (cmd & IOC_IN) {
-		if (!access_ok(VERIFY_READ, argp, size))
+		if (!access_ok(VERIFY_READ, argp, size)) {
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
 			return -EFAULT;
+		}
 	}
 	if (cmd & IOC_OUT) {
-		if (!access_ok(VERIFY_WRITE, argp, size))
+		if (!access_ok(VERIFY_WRITE, argp, size)) {
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
 			return -EFAULT;
+		}
 	}
 
 	switch (cmd) {
@@ -887,17 +891,23 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 	{
 		struct nand_ecclayout_user *usrlay;
 
-		if (!mtd->ecclayout)
+		if (!mtd->ecclayout) {
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
 			return -EOPNOTSUPP;
+		}
 
 		usrlay = kmalloc(sizeof(*usrlay), GFP_KERNEL);
-		if (!usrlay)
+		if (!usrlay) {
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
 			return -ENOMEM;
+		}
 
 		shrink_ecclayout(mtd->ecclayout, usrlay);
 
-		if (copy_to_user(argp, usrlay, sizeof(*usrlay)))
+		if (copy_to_user(argp, usrlay, sizeof(*usrlay))) {
+			printk("%s:%d\n", __FUNCTION__, __LINE__);
 			ret = -EFAULT;
+		}
 		kfree(usrlay);
 		break;
 	}

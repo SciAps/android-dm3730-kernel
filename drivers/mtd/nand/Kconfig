@@ -46,6 +46,13 @@ config MTD_NAND_ECC_BCH
 	  ECC codes. They are used with NAND devices requiring more than 1 bit
 	  of error correction.
 
+config MTD_NAND_ONCHIP_ECC
+	bool "Support Micron 4-bit on-chip ECC"
+	default n
+	help
+	  This enables support for Micron NAND devices that support 4-bit
+	  on-chip ECC error correction.
+
 config MTD_SM_COMMON
 	tristate
 	default n

@@ -140,6 +140,7 @@ typedef enum {
 	NAND_ECC_HW,
 	NAND_ECC_HW_SYNDROME,
 	NAND_ECC_HW_OOB_FIRST,
+	NAND_ECC_HW_CHIP,	/* ECC hardware on NAND chip */
 	NAND_ECC_SOFT_BCH,
 } nand_ecc_modes_t;
 
@@ -161,6 +162,8 @@ typedef enum {
  * Option constants for bizarre disfunctionality and real
  * features.
  */
+/* Buswidth is 8 bit */
+#define NAND_BUSWIDTH_8		0x00000000
 /* Chip can not auto increment pages */
 #define NAND_NO_AUTOINCR	0x00000001
 /* Buswitdh is 16 bit */
@@ -339,6 +342,7 @@ struct nand_hw_control {
  * @total:	total number of ecc bytes per page
  * @prepad:	padding information for syndrome based ecc generators
  * @postpad:	padding information for syndrome based ecc generators
+ * @status:	status of an on chip ECC
  * @layout:	ECC layout control struct pointer
  * @priv:	pointer to private ecc control data
  * @hwctl:	function to control hardware ecc generator. Must only
@@ -363,6 +367,7 @@ struct nand_ecc_ctrl {
 	int total;
 	int prepad;
 	int postpad;
+	int status;
 	struct nand_ecclayout	*layout;
 	void *priv;
 	void (*hwctl)(struct mtd_info *mtd, int mode);

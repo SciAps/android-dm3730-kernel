@@ -102,13 +102,20 @@ static struct nand_ecclayout omap_oobinfo;
  * while scanning a device for factory marked good / bad blocks
  */
 static uint8_t scan_ff_pattern[] = { 0xff };
-static struct nand_bbt_descr bb_descrip_flashbased = {
+static struct nand_bbt_descr bb_descrip_x8_flashbased = {
 	.options = NAND_BBT_SCANEMPTY | NAND_BBT_SCANALLPAGES,
 	.offs = 0,
 	.len = 1,
 	.pattern = scan_ff_pattern,
 };
 
+static uint8_t scan_ffff_pattern[] = { 0xff, 0xff };
+static struct nand_bbt_descr bb_descrip_x16_flashbased = {
+	.options = NAND_BBT_SCANEMPTY | NAND_BBT_SCANALLPAGES,
+	.offs = 0,
+	.len = 2,
+	.pattern = scan_ffff_pattern,
+};
 
 struct omap_nand_info {
 	struct nand_hw_control		controller;
@@ -441,7 +448,7 @@ out_copy:
  */
 static void omap_read_buf_dma_pref(struct mtd_info *mtd, u_char *buf, int len)
 {
-	if (len <= mtd->oobsize)
+	if ((len <= mtd->oobsize) || (!IS_ALIGNED((unsigned long)buf, 4)))
 		omap_read_buf_pref(mtd, buf, len);
 	else
 		/* start transfer in DMA mode */
@@ -457,7 +464,7 @@ static void omap_read_buf_dma_pref(struct mtd_info *mtd, u_char *buf, int len)
 static void omap_write_buf_dma_pref(struct mtd_info *mtd,
 					const u_char *buf, int len)
 {
-	if (len <= mtd->oobsize)
+	if ((len <= mtd->oobsize) || (!IS_ALIGNED((unsigned long)buf, 4)))
 		omap_write_buf_pref(mtd, buf, len);
 	else
 		/* start transfer in DMA mode */
@@ -1080,11 +1087,14 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	/* rom code layout */
 	if (pdata->ecc_opt == OMAP_ECC_HAMMING_CODE_HW_ROMCODE) {
 
-		if (info->nand.options & NAND_BUSWIDTH_16)
+		if (info->nand.options & NAND_BUSWIDTH_16) {
 			offset = 2;
-		else {
+			info->nand.badblock_pattern =
+				&bb_descrip_x16_flashbased;
+		} else {
 			offset = 1;
-			info->nand.badblock_pattern = &bb_descrip_flashbased;
+			info->nand.badblock_pattern =
+				&bb_descrip_x8_flashbased;
 		}
 		omap_oobinfo.eccbytes = 3 * (info->mtd.oobsize/16);
 		for (i = 0; i < omap_oobinfo.eccbytes; i++)

@@ -754,7 +754,9 @@ static void __init omap3logic_init(void)
 
 	/* Assume NOR is only on CS2 (if its there) */
 	omap3logic_nor_init(1<<2, SZ_8M);
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
 	omap3logic_nand_init();
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
 
 	/* Initialixe EHCI port */
 	omap3logic_usb_init();

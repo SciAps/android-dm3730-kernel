@@ -43,6 +43,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/nand_ecc.h>
 #include <linux/mtd/nand_bch.h>
+#include <linux/mtd/nand_onchip_ecc.h>
 #include <linux/interrupt.h>
 #include <linux/bitops.h>
 #include <linux/leds.h>
@@ -77,6 +78,27 @@ static struct nand_ecclayout nand_oob_64 = {
 	.oobfree = {
 		{.offset = 2,
 		 .length = 38} }
+};
+
+/* Micron MT29F4G16ABBDA internal-to-NAND ECC layout */
+static struct nand_ecclayout hw_micron_oob_64 = {
+	.eccbytes = 32,
+	.eccpos = {
+		    8, 9, 10, 11, 12, 13, 14, 15,
+		    24, 25, 26, 27, 28, 19, 30, 31,
+		    40, 41, 42, 43, 44, 45, 46, 47,
+		    56, 57, 58, 59, 60, 61, 62, 63
+		  },
+	.oobfree = {
+			{.offset = 4,
+			 .length = 4 },
+			{.offset = 20,
+			 .length = 4 },
+			{.offset = 36,
+			 .length = 4 },
+			{.offset = 52,
+			 .length = 4 },
+		   },
 };
 
 static struct nand_ecclayout nand_oob_128 = {
@@ -614,6 +636,8 @@ static void nand_command(struct mtd_info *mtd, unsigned int command,
 				;
 		return;
 
+		dmb();
+
 		/* This applies to read commands */
 	default:
 		/*
@@ -743,7 +767,7 @@ static void nand_command_lp(struct mtd_info *mtd, unsigned int command,
 		 */
 		if (!chip->dev_ready) {
 			udelay(chip->chip_delay);
-			return;
+			goto ready_exit;
 		}
 	}
 
@@ -752,6 +776,39 @@ static void nand_command_lp(struct mtd_info *mtd, unsigned int command,
 	ndelay(100);
 
 	nand_wait_ready(mtd);
+
+ready_exit:
+	/* If the chip has internal ECC, then we need to read the status to
+	 * determine if there's an ECC error - capture it for handling by
+	 * nand_onchip_correct_ecc() later.
+	 */
+	if (command == NAND_CMD_READ0) {
+		if (chip->ecc.mode == NAND_ECC_HW_CHIP) {
+			/* Send the status command */
+			chip->cmd_ctrl(mtd, NAND_CMD_STATUS,
+				NAND_NCE | NAND_CLE | NAND_CTRL_CHANGE);
+			/* Switch to data access */
+			chip->cmd_ctrl(mtd, NAND_CMD_NONE,
+				NAND_NCE | NAND_CTRL_CHANGE);
+			chip->ecc.status = chip->read_byte(mtd);
+			if (chip->ecc.status & (0x8|0x1))
+				printk("%s: %s, page %d, column %d, "
+					"status %02x, %s\n",
+					__func__,
+					mtd->name,
+					page_addr, column,
+					chip->ecc.status,
+					(chip->ecc.status & 0x8)
+						? "correctable"
+						: "UNCORRECTABLE");
+			/* Send the read prefix */
+			chip->cmd_ctrl(mtd, NAND_CMD_READ0,
+				NAND_NCE | NAND_CLE | NAND_CTRL_CHANGE);
+			/* Switch to data access */
+			chip->cmd_ctrl(mtd, NAND_CMD_NONE,
+				NAND_NCE | NAND_CTRL_CHANGE);
+		}
+	}
 }
 
 /**
@@ -2920,9 +2977,16 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	/* Send the command for reading device ID */
 	chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
 
+	DEBUG(MTD_DEBUG_LEVEL1, "ID: ");
+	for (i = 0; i < 8; i++) {
+		id_data[i] = chip->read_byte(mtd);
+		DEBUG(MTD_DEBUG_LEVEL1, "%d:%02x ", i, id_data[i]);
+	}
+	DEBUG(MTD_DEBUG_LEVEL1, "\n");
+
 	/* Read manufacturer and device IDs */
-	*maf_id = chip->read_byte(mtd);
-	*dev_id = chip->read_byte(mtd);
+	*maf_id = id_data[0];
+	*dev_id = id_data[1];
 
 	/* Try again to make sure, as some systems the bus-hold or other
 	 * interface concerns can cause random data which looks like a
@@ -3146,6 +3210,10 @@ ident_done:
 		chip->erase_cmd = multi_erase_cmd;
 	else
 		chip->erase_cmd = single_erase_cmd;
+
+	/* Check for Micron chips with on chip hardware ECC */
+	if ((*maf_id == NAND_MFR_MICRON) && id_data[4] & 0x03)
+		chip->ecc.mode = NAND_ECC_HW_CHIP;
 
 	/* Do not replace user supplied command function ! */
 	if (mtd->writesize > 512 && chip->cmdfunc == nand_command)
@@ -3377,6 +3445,26 @@ int nand_scan_tail(struct mtd_info *mtd)
 			printk(KERN_WARNING "BCH ECC initialization failed!\n");
 			BUG();
 		}
+		break;
+
+	case NAND_ECC_HW_CHIP:
+		chip->ecc.bytes = 0;
+		chip->ecc.size = 2048;
+		chip->ecc.layout = &hw_micron_oob_64;
+
+		chip->ecc.calculate = nand_onchip_calculate_ecc;
+		chip->ecc.correct = nand_onchip_correct_ecc;
+		chip->ecc.hwctl = nand_onchip_hwctl;
+		chip->ecc.read_page = nand_read_page_hwecc;
+		chip->ecc.write_page = nand_write_page_hwecc;
+		chip->ecc.read_page_raw = nand_read_page_raw;
+		chip->ecc.write_page_raw = nand_write_page_raw;
+		chip->ecc.read_oob = nand_onchip_read_oob_ecc;
+		chip->ecc.write_oob = nand_write_oob_std;
+
+		chip->chip_delay = 75;
+
+		nand_onchip_enable_ecc(mtd, 1);
 		break;
 
 	case NAND_ECC_NONE:

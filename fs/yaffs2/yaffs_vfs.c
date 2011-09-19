@@ -2605,6 +2605,7 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 	struct yaffs_dev *dev = 0;
 	char devname_buf[BDEVNAME_SIZE + 1];
 	struct mtd_info *mtd;
+	struct nand_ecclayout *ecc;
 	int err;
 	char *data_str = (char *)data;
 	struct yaffs_linux_context *context = NULL;
@@ -2839,6 +2840,13 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 
 	if (options.tags_ecc_overridden)
 		param->no_tags_ecc = !options.tags_ecc_on;
+
+	ecc = mtd->ecclayout;
+	if (ecc && (ecc->oobavail <= 16)) {
+		printk(KERN_INFO
+			"yaffs: oobavail <= 16; forcing \"tags-ecc-off\"\n");
+		param->no_tags_ecc = 1;
+	}
 
 	param->empty_lost_n_found = 1;
 	param->refresh_period = 500;
