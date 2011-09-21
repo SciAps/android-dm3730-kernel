@@ -426,6 +426,7 @@ static int __init board_wl12xx_init(void)
 
 	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO, OMAP_PIN_OUTPUT);
+		gpio_export(OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO, 0);
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
 		if (gpio_request_one(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
 			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO);
@@ -438,6 +439,7 @@ static int __init board_wl12xx_init(void)
 		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
 	} else if (machine_is_dm3730_torpedo()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO, OMAP_PIN_OUTPUT);
+		gpio_export( OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO, 0 );
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
 		if (gpio_request_one(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
 			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO);
@@ -449,6 +451,7 @@ static int __init board_wl12xx_init(void)
 		/* Pull BT_EN low */
 		omap_mux_init_gpio(162, OMAP_PIN_OUTPUT);
 		gpio_request_one(162, GPIOF_OUT_INIT_LOW, "bt_en");
+		gpio_export(162, 0);
 		/* wl128x ref clock is 26 MHz; torpedo TXCO clock is 26Mhz */
 		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
 		omap3logic_wlan_data.board_tcxo_clock = WL12XX_TCXOCLOCK_26;
@@ -736,6 +739,8 @@ void omap3logic_init_productid_specifics(void)
 
 static void __init omap3logic_init(void)
 {
+	struct omap_board_data bdata;
+
 	/* hang on start if "hang" is on command line */
 	while (omap3logic_hang)
 		;
@@ -748,7 +753,52 @@ static void __init omap3logic_init(void)
 		
 	omap3torpedo_fix_pbias_voltage();
 	omap3logic_i2c_init();
-	omap_serial_init();
+
+#ifdef CONFIG_OMAP3LOGIC_UART_A
+	printk(KERN_INFO "Setup pinmux and enable UART A\n");
+	omap_mux_init_signal("uart1_tx.uart1_tx", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart1_rts.uart1_rts", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart1_cts.uart1_cts", OMAP_PIN_INPUT);
+	omap_mux_init_signal("uart1_rx.uart1_rx", OMAP_PIN_INPUT);
+
+	// Taken from serial.c:omap_serial_init()
+	bdata.id = 0;
+	bdata.flags = 0;
+	bdata.pads = NULL;
+	bdata.pads_cnt = 0;
+	omap_serial_init_port(&bdata);
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_UART_B
+	printk(KERN_INFO "Setup pinmux and enable UART B\n");
+	omap_mux_init_signal("uart2_tx.uart2_tx", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart2_rts.uart2_rts", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart2_cts.uart2_cts", OMAP_PIN_INPUT);
+	omap_mux_init_signal("uart2_rx.uart2_rx", OMAP_PIN_INPUT);
+
+	// Taken from serial.c:omap_serial_init()
+	bdata.id = 1;
+	bdata.flags = 0;
+	bdata.pads = NULL;
+	bdata.pads_cnt = 0;
+	omap_serial_init_port(&bdata);
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_UART_C
+	printk(KERN_INFO "Setup pinmux and enable UART C\n");
+	omap_mux_init_signal("uart3_tx_irtx.uart3_tx_irtx", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart3_rts_sd.uart3_rts_sd", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("uart3_cts_rctx.uart3_cts_rctx", OMAP_PIN_INPUT);
+	omap_mux_init_signal("uart3_rx_irrx.uart3_rx_irrx", OMAP_PIN_INPUT);
+
+	// Taken from serial.c:omap_serial_init()
+	bdata.id = 2;
+	bdata.flags = 0;
+	bdata.pads = NULL;
+	bdata.pads_cnt = 0;
+	omap_serial_init_port(&bdata);
+#endif
+
 	board_mmc_init();
 	board_smsc911x_init();
 

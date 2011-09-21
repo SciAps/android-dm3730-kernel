@@ -193,6 +193,32 @@ config MACH_DM3730_TORPEDO
 	 for full description please see the products webpage at
 	 http://www.logicpd.com/products/development-kits/dm3730-torpedo-devkit
 
+menu "OMAP3LOGIC serial ports"
+     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
+
+config OMAP3LOGIC_UART_A
+     bool "OMAP3 Logic UART A"
+     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
+     default y
+     help
+       Mux/Enable UART A (ttyO0, OMAP UART1) on omap3logic platform
+
+config OMAP3LOGIC_UART_B
+     bool "OMAP3 Logic UART B"
+     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
+     default n
+     help
+       Mux/Enable UART B (ttyO1, OMAP UART2) on omap3logic platform
+
+config OMAP3LOGIC_UART_C
+     bool "OMAP3 Logic UART C"
+     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
+     default n
+     help
+       Mux/Enable UART C (ttyO2, OMAP UART3) on omap3logic platform
+
+endmenu
+
 config MACH_OVERO
 	bool "Gumstix Overo board"
 	depends on ARCH_OMAP3
