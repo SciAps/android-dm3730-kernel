@@ -472,48 +472,6 @@ static int __init board_wl12xx_init(void)
 	return 0;
 }
 
-static void __init board_mmc_init(void)
-{
-	int ret;
-
-	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
-		/* OMAP35x/DM37x LV SOM board */
-		board_mmc_info[0].gpio_cd = OMAP3530_LV_SOM_MMC_GPIO_CD;
-		board_mmc_info[0].gpio_wp = OMAP3530_LV_SOM_MMC_GPIO_WP;
-		omap_mux_init_signal("gpio_110", OMAP_PIN_OUTPUT);
-		omap_mux_init_signal("cam_strobe.gpio_126", OMAP_PIN_OUTPUT);
-	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
-		/* OMAP35x/DM37x Torpedo board */
-		board_mmc_info[0].gpio_cd = OMAP3_TORPEDO_MMC_GPIO_CD;
-		omap_mux_init_signal("gpio_127", OMAP_PIN_OUTPUT);
-	} else {
-		/* unsupported board */
-		printk(KERN_ERR "%s(): unknown machine type\n", __func__);
-		return;
-	}
-
-	/* Check the SRAM for valid product_id data(put there by u-boot). */
-	omap3logic_fetch_sram_product_id_data();
-
-	ret = board_wl12xx_init();
-	printk("%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
-	if (ret) {
-		/* No wifi configuration for this board */
-		board_mmc_info[2].mmc = 0;
-	}
-
-	omap2_hsmmc_init(board_mmc_info);
-
-	/* link regulators to MMC adapters */
-	omap3logic_vmmc1_supply.dev = board_mmc_info[0].dev;
-}
-
-static struct omap_smsc911x_platform_data __initdata board_smsc911x_data = {
-	.cs             = OMAP3LOGIC_SMSC911X_CS,
-	.gpio_irq       = -EINVAL,
-	.gpio_reset     = -EINVAL,
-};
-
 /* Fix the PBIAS voltage for Torpedo MMC1 pins that
  * are used for other needs (IRQs, etc). */
 static void omap3torpedo_fix_pbias_voltage(void)
@@ -564,6 +522,50 @@ static void omap3torpedo_fix_pbias_voltage(void)
 		pbias_fixed = 1;
 	}
 }
+
+static void __init board_mmc_init(void)
+{
+	int ret;
+
+	omap3torpedo_fix_pbias_voltage();
+
+	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
+		/* OMAP35x/DM37x LV SOM board */
+		board_mmc_info[0].gpio_cd = OMAP3530_LV_SOM_MMC_GPIO_CD;
+		board_mmc_info[0].gpio_wp = OMAP3530_LV_SOM_MMC_GPIO_WP;
+		/* gpio_cd for MMC wired to CAM_STROBE; cam_strobe and
+		 * another pin share GPIO_126. Mux CAM_STROBE as GPIO. */
+		omap_mux_init_signal("cam_strobe.gpio_126", OMAP_MUX_MODE4 | OMAP_PIN_INPUT_PULLUP);
+	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
+		/* OMAP35x/DM37x Torpedo board */
+		board_mmc_info[0].gpio_cd = OMAP3_TORPEDO_MMC_GPIO_CD;
+	} else {
+		/* unsupported board */
+		printk(KERN_ERR "%s(): unknown machine type\n", __func__);
+		return;
+	}
+
+	/* Check the SRAM for valid product_id data(put there by u-boot). */
+	omap3logic_fetch_sram_product_id_data();
+
+	ret = board_wl12xx_init();
+	if (ret) {
+		/* No wifi configuration for this board */
+		board_mmc_info[2].mmc = 0;
+	}
+
+	omap2_hsmmc_init(board_mmc_info);
+
+	/* link regulators to MMC adapters */
+	omap3logic_vmmc1_supply.dev = board_mmc_info[0].dev;
+}
+
+static struct omap_smsc911x_platform_data __initdata board_smsc911x_data = {
+	.cs             = OMAP3LOGIC_SMSC911X_CS,
+	.gpio_irq       = -EINVAL,
+	.gpio_reset     = -EINVAL,
+};
+
 
 static inline void __init board_smsc911x_init(void)
 {
