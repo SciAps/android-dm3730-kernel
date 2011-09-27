@@ -47,12 +47,15 @@
 #include <plat/board.h>
 #include <plat/usb.h>
 #include <plat/common.h>
+#include <video/omapdss.h>
 #include <plat/gpmc-smsc911x.h>
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
 
+#include <plat/board-omap3logic.h>
+#include <plat/board-omap3logic-display.h>
 #include <plat/omap3logic-productid.h>
-#include "board-omap3logic.h"
+// #include "board-omap3logic.h"
 
 #define OMAP3LOGIC_SMSC911X_CS			1
 
@@ -94,7 +97,7 @@ static struct regulator_init_data omap3logic_vaux1 = {
 		.max_uV		= 3000000,
 		.apply_uV	= true,
 		.valid_modes_mask	= REGULATOR_MODE_NORMAL
-#if 0
+#if 1
 					| REGULATOR_MODE_STANDBY,
 		.valid_ops_mask		= REGULATOR_CHANGE_MODE
 					| REGULATOR_CHANGE_STATUS,
@@ -272,6 +275,74 @@ static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 	.setup		= omap3logic_twl_gpio_setup,
 };
 
+#if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
+#if 1
+static struct regulator_consumer_supply omap3logic_vdda_dac_supplies[] = {
+	REGULATOR_SUPPLY("vdda_dac", "omapdss_venc"),
+};
+#else
+static struct regulator_consumer_supply omap3logic_vdda_dac_supply = {
+	.supply		= "vdda_dac",
+	.dev		= &omap3logic_dss_device.dev,
+};
+#endif
+
+/* VDAC for DSS driving S-Video */
+static struct regulator_init_data omap3logic_vdac = {
+	.constraints = {
+		.min_uV			= 1800000,
+		.max_uV			= 1800000,
+		.apply_uV		= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+#if 1
+	.consumer_supplies	= omap3logic_vdda_dac_supplies,
+	.num_consumer_supplies	= ARRAY_SIZE(omap3logic_vdda_dac_supplies),
+#else
+	.consumer_supplies	= &omap3logic_vdda_dac_supply,
+	.num_consumer_supplies	= 1,
+#endif
+};
+
+/* VPLL2 for digital video outputs */
+#if 1
+static struct regulator_consumer_supply omap3logic_vpll2_supplies[] = {
+	REGULATOR_SUPPLY("vdds_dsi", "omapdss"),
+	REGULATOR_SUPPLY("vdds_dsi", "omapdss_dsi1"),
+	REGULATOR_SUPPLY("panel-power", NULL),
+};
+#else
+static struct regulator_consumer_supply omap3logic_vpll2_supplies[] = {
+	{
+		.supply	= "vdvi",
+		.dev	= &omap3logic_lcd_device.dev,
+	},
+	{
+		.supply	= "vdds_dsi",
+		.dev	= &omap3logic_dss_device.dev,
+	},
+};
+#endif
+
+static struct regulator_init_data omap3logic_vpll2 = {
+	.constraints = {
+		.name			= "VDVI",
+		.min_uV			= 1800000,
+		.max_uV			= 1800000,
+		.apply_uV		= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= ARRAY_SIZE(omap3logic_vpll2_supplies),
+	.consumer_supplies	= omap3logic_vpll2_supplies,
+};
+#endif
+
 static struct twl4030_usb_data omap3logic_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
@@ -287,6 +358,10 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vmmc1		= &omap3logic_vmmc1,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
+#if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
+	.vdac           = &omap3logic_vdac,
+	.vpll2          = &omap3logic_vpll2,
+#endif
 };
 
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -755,6 +830,7 @@ static void __init omap3logic_init(void)
 		
 	omap3torpedo_fix_pbias_voltage();
 	omap3logic_i2c_init();
+	omap3logic_lcd_init();
 
 #ifdef CONFIG_OMAP3LOGIC_UART_A
 	printk(KERN_INFO "Setup pinmux and enable UART A\n");
@@ -823,6 +899,7 @@ static void __init omap3logic_init(void)
 
 MACHINE_START(OMAP3_TORPEDO, "Logic OMAP35x Torpedo board")
 	.boot_params	= 0x80000100,
+	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
 	.init_irq	= omap_init_irq,
@@ -832,6 +909,7 @@ MACHINE_END
 
 MACHINE_START(OMAP3530_LV_SOM, "Logic OMAP35x SOM LV board")
 	.boot_params	= 0x80000100,
+	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
 	.init_irq	= omap_init_irq,
@@ -841,6 +919,7 @@ MACHINE_END
 
 MACHINE_START(DM3730_SOM_LV, "Logic DM37x SOM LV board")
 	.boot_params	= 0x80000100,
+	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
 	.init_irq	= omap_init_irq,
@@ -850,6 +929,7 @@ MACHINE_END
 
 MACHINE_START(DM3730_TORPEDO, "Logic DM37x Torpedo board")
 	.boot_params	= 0x80000100,
+	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
 	.init_early	= omap3logic_init_early,
 	.init_irq	= omap_init_irq,

@@ -48,4 +48,12 @@ config PANEL_ACX565AKM
 	select BACKLIGHT_CLASS_DEVICE
 	help
 	  This is the LCD panel used on Nokia N900
+
+config PANEL_OMAP3LOGIC
+	tristate "OMAP3 Logic reference board panel(s)/displays"
+	depends on OMAP2_DSS
+	help
+	  OMAP35x/DM37x Logic reference board panel/display driver.
+	  Used for LCD/DVI output for OMAP35x/DM37x Logic boards.
+
 endmenu

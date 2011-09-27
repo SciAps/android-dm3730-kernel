@@ -21,6 +21,8 @@
 #include <plat/gpmc.h>
 #include <plat/nand.h>
 
+#include <plat/board-omap3logic.h>
+
 static struct mtd_partition omap3logic_nor_partitions[] = {
 	{
 		.name	= "nor-flash",

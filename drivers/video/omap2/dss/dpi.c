@@ -214,6 +214,14 @@ int omapdss_dpi_display_enable(struct omap_dss_device *dssdev)
 
 	mdelay(2);
 
+	/* Some panels (LQ043T1DG01) require that the power is brought
+	 * up before the clocks are enabled */
+	if (dssdev->driver->pre_enable) {
+		r = dssdev->driver->pre_enable(dssdev);
+		if (r)
+			goto err4;
+	}
+
 	dssdev->manager->enable(dssdev->manager);
 
 	return 0;

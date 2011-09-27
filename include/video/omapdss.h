@@ -508,6 +508,7 @@ struct omap_dss_device {
 	enum omap_dss_display_state state;
 
 	/* platform specific  */
+	int (*platform_pre_enable)(struct omap_dss_device *dssdev);
 	int (*platform_enable)(struct omap_dss_device *dssdev);
 	void (*platform_disable)(struct omap_dss_device *dssdev);
 	int (*set_backlight)(struct omap_dss_device *dssdev, int level);
@@ -520,9 +521,14 @@ struct omap_dss_driver {
 	int (*probe)(struct omap_dss_device *);
 	void (*remove)(struct omap_dss_device *);
 
+	/* Pre-enable is called (if set) before clocks are turned on */
+	int (*pre_enable)(struct omap_dss_device *display);
+	/* Enable is called (if set) after clocks are turned on */
 	int (*enable)(struct omap_dss_device *display);
 	void (*disable)(struct omap_dss_device *display);
 	int (*suspend)(struct omap_dss_device *display);
+	/* Pre-resume is called (if set) before clocks are turned on */
+	int (*pre_resume)(struct omap_dss_device *display);
 	int (*resume)(struct omap_dss_device *display);
 	int (*run_test)(struct omap_dss_device *display, int test);
 

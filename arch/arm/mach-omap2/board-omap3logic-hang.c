@@ -11,7 +11,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include "board-omap3logic.h"
+#include <plat/board-omap3logic.h>
 
 volatile int omap3logic_hang;
 
