@@ -299,6 +299,7 @@ static struct regulator_init_data omap3logic_vdac = {
 static struct regulator_consumer_supply omap3logic_vpll2_supplies[] = {
 	REGULATOR_SUPPLY("vdds_dsi", "omapdss"),
 	REGULATOR_SUPPLY("vdds_dsi", "omapdss_dsi1"),
+	REGULATOR_SUPPLY("vpll2", NULL),
 };
 
 static struct regulator_init_data omap3logic_vpll2 = {

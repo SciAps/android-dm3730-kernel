@@ -222,6 +222,7 @@ static void omap3logic_disable_backlight(void)
 	mutex_unlock(&omap3logic_bl_data.lock);
 }
 
+#define PANEL_REGULATOR "vpll2"
 static int omap3logic_panel_power_enable(struct omap_dss_device *dssdev, int enable)
 {
 	int ret;
@@ -229,13 +230,9 @@ static int omap3logic_panel_power_enable(struct omap_dss_device *dssdev, int ena
 
 	LCDPRINTK("%s: enable %d\n", __FUNCTION__, enable);
 
-	/* An omap_dss_device.device is the display device; is a child of
-	 * the omapdss device; hence the assert if dssdev->parent is NULL */
-	BUG_ON(!dssdev || !dssdev->dev.parent);
-
-	vpll2_reg = regulator_get(dssdev->dev.parent, "vdss_dsi");
+	vpll2_reg = regulator_get(NULL, PANEL_REGULATOR);
 	if (IS_ERR(vpll2_reg)) {
-		pr_err("Unable to get vdss_dsi regulator\n");
+		pr_err("Unable to get " PANEL_REGULATOR " regulator\n");
 		return PTR_ERR(vpll2_reg);
 	}
 
