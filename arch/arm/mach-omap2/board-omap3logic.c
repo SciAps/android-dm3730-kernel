@@ -276,16 +276,9 @@ static struct twl4030_gpio_platform_data omap3logic_gpio_data = {
 };
 
 #if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
-#if 1
 static struct regulator_consumer_supply omap3logic_vdda_dac_supplies[] = {
 	REGULATOR_SUPPLY("vdda_dac", "omapdss_venc"),
 };
-#else
-static struct regulator_consumer_supply omap3logic_vdda_dac_supply = {
-	.supply		= "vdda_dac",
-	.dev		= &omap3logic_dss_device.dev,
-};
-#endif
 
 /* VDAC for DSS driving S-Video */
 static struct regulator_init_data omap3logic_vdac = {
@@ -298,34 +291,15 @@ static struct regulator_init_data omap3logic_vdac = {
 		.valid_ops_mask		= REGULATOR_CHANGE_MODE
 					| REGULATOR_CHANGE_STATUS,
 	},
-#if 1
 	.consumer_supplies	= omap3logic_vdda_dac_supplies,
 	.num_consumer_supplies	= ARRAY_SIZE(omap3logic_vdda_dac_supplies),
-#else
-	.consumer_supplies	= &omap3logic_vdda_dac_supply,
-	.num_consumer_supplies	= 1,
-#endif
 };
 
 /* VPLL2 for digital video outputs */
-#if 1
 static struct regulator_consumer_supply omap3logic_vpll2_supplies[] = {
 	REGULATOR_SUPPLY("vdds_dsi", "omapdss"),
 	REGULATOR_SUPPLY("vdds_dsi", "omapdss_dsi1"),
-	REGULATOR_SUPPLY("panel-power", NULL),
 };
-#else
-static struct regulator_consumer_supply omap3logic_vpll2_supplies[] = {
-	{
-		.supply	= "vdvi",
-		.dev	= &omap3logic_lcd_device.dev,
-	},
-	{
-		.supply	= "vdds_dsi",
-		.dev	= &omap3logic_dss_device.dev,
-	},
-};
-#endif
 
 static struct regulator_init_data omap3logic_vpll2 = {
 	.constraints = {

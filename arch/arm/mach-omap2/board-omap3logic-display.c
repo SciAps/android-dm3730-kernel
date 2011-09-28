@@ -222,18 +222,20 @@ static void omap3logic_disable_backlight(void)
 	mutex_unlock(&omap3logic_bl_data.lock);
 }
 
-#define PANEL_REGULATOR "panel-power"
-
-static int omap3logic_panel_power_enable(int enable)
+static int omap3logic_panel_power_enable(struct omap_dss_device *dssdev, int enable)
 {
 	int ret;
 	struct regulator *vpll2_reg;
 
 	LCDPRINTK("%s: enable %d\n", __FUNCTION__, enable);
 
-	vpll2_reg = regulator_get(NULL, PANEL_REGULATOR);
+	/* An omap_dss_device.device is the display device; is a child of
+	 * the omapdss device; hence the assert if dssdev->parent is NULL */
+	BUG_ON(!dssdev || !dssdev->dev.parent);
+
+	vpll2_reg = regulator_get(dssdev->dev.parent, "vdss_dsi");
 	if (IS_ERR(vpll2_reg)) {
-		pr_err("Unable to get " PANEL_REGULATOR " regulator\n");
+		pr_err("Unable to get vdss_dsi regulator\n");
 		return PTR_ERR(vpll2_reg);
 	}
 
@@ -345,7 +347,7 @@ static int omap3logic_panel_pre_enable_lcd(struct omap_dss_device *dssdev)
 		pdata->syncs_as_gpio = 0;
 	}
 
-	ret = omap3logic_panel_power_enable(1);
+	ret = omap3logic_panel_power_enable(dssdev, 1);
 	if (ret < 0)
 		return ret;
 
@@ -404,14 +406,13 @@ static void omap3logic_panel_disable_lcd(struct omap_dss_device *dssdev)
 	/* prevent backlight updates from adjusting backlight */
 	omap3logic_disable_backlight();
 
-	ret = omap3logic_panel_power_enable(0);
+	ret = omap3logic_panel_power_enable(dssdev, 0);
 	if (ret < 0)
 		BUG();
 	
 	/* By now the panel enable code must have been called */
 	if (!pdata->gpio_flag)
 		BUG();
-
 
 	gpio_set_value(pdata->lcd_gpio_enable, 0);
 
