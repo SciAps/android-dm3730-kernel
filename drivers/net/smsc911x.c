@@ -107,6 +107,7 @@ struct smsc911x_data {
 	unsigned int using_extphy;
 	int last_duplex;
 	int last_carrier;
+	int last_link;
 
 	u32 msg_enable;
 	unsigned int gpio_setting;
@@ -841,6 +842,17 @@ static void smsc911x_phy_adjust_link(struct net_device *dev)
 	unsigned long flags;
 	int carrier;
 
+	if (phy_dev->link != pdata->last_link) {
+		if (phy_dev->link)
+			printk(KERN_INFO "%s: link up, %dMbps, %s-duplex\n",
+			       dev->name, phy_dev->speed,
+			       phy_dev->duplex ? "full" : "half");
+		else if (pdata->last_link != -1)
+			printk(KERN_INFO "%s: link down\n", dev->name);
+
+		pdata->last_link = phy_dev->link;
+	}
+
 	if (phy_dev->duplex != pdata->last_duplex) {
 		unsigned int mac_cr;
 		SMSC_TRACE(pdata, hw, "duplex state has changed");
@@ -936,6 +948,7 @@ static int smsc911x_mii_probe(struct net_device *dev)
 	pdata->phy_dev = phydev;
 	pdata->last_duplex = -1;
 	pdata->last_carrier = -1;
+	pdata->last_link = -1;
 
 #ifdef USE_PHY_WORK_AROUND
 	if (smsc911x_phy_loopbacktest(dev) < 0) {
