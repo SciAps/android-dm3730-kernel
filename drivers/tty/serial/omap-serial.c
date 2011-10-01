@@ -433,7 +433,13 @@ static void serial_omap_set_mctrl(struct uart_port *port, unsigned int mctrl)
 	if (mctrl & TIOCM_LOOP)
 		mcr |= UART_MCR_LOOP;
 
+#if 1
+	/* Need to mask off UART_MCR_LOOP or it can never get cleared
+	 * after being set! */
+	mcr |= (up->mcr & ~UART_MCR_LOOP);
+#else
 	mcr |= up->mcr;
+#endif
 	serial_out(up, UART_MCR, mcr);
 }
 
