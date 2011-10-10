@@ -1,3 +1,4 @@
+
 /*
  * linux/arch/arm/mach-omap2/board-omap3logic.c
  *
@@ -322,6 +323,12 @@ static struct twl4030_usb_data omap3logic_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
+static struct twl4030_codec_audio_data omap3logic_audio_data;
+
+static struct twl4030_codec_data omap3logic_codec_data = {
+	.audio_mclk = 26000000,
+	.audio = &omap3logic_audio_data,
+};
 
 static struct twl4030_platform_data omap3logic_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
@@ -330,6 +337,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	/* platform_data for children goes here */
 	.usb		= &omap3logic_usb_data,
 	.gpio		= &omap3logic_gpio_data,
+	.codec		= &omap3logic_codec_data,
 	.vmmc1		= &omap3logic_vmmc1,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
