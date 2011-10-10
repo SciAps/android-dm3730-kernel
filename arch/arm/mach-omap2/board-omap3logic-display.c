@@ -51,7 +51,7 @@ struct omap3logic_dss_board_info {
 #define LCDPRINTK(fmt, args...)
 #endif
 
-#if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
+#if (defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)) && defined(CONFIG_PANEL_OMAP3LOGIC)
 static struct {
 	struct mutex lock;
 	int enabled;
