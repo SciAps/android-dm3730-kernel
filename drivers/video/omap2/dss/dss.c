@@ -503,7 +503,7 @@ int dss_calc_clock_div(bool is_tft, unsigned long req_pck,
 
 	unsigned long fck, max_dss_fck;
 
-	u16 fck_div, fck_div_max = 16;
+	u16 fck_div, fck_div_max, fck_div_factor;
 
 	int match = 0;
 	int min_fck_per_pck;
@@ -552,16 +552,22 @@ retry:
 
 		goto found;
 	} else {
-		if (cpu_is_omap3630() || cpu_is_omap44xx())
+		if (cpu_is_omap3630() || cpu_is_omap44xx()) {
+			fck_div_factor = 1;
 			fck_div_max = 32;
+			if (cpu_is_omap3630()) {
+				/* Limit CM_CLKSEL_DSS:CLKSEL_DSS1 to 16 */
+				fck_div_max = 16;
+			}
+		} else {
+			fck_div_max = 16;
+			fck_div_factor = 2;
+		}
 
 		for (fck_div = fck_div_max; fck_div > 0; --fck_div) {
 			struct dispc_clock_info cur_dispc;
 
-			if (fck_div_max == 32)
-				fck = prate / fck_div;
-			else
-				fck = prate / fck_div * 2;
+			fck = prate / fck_div * fck_div_factor;
 
 			if (fck > max_dss_fck)
 				continue;
