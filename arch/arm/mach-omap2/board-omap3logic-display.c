@@ -137,7 +137,6 @@ static void dm3730_som_lv_bl_set_intensity(int level)
 					enb_pwm, TWL_INTBR_GPBR1);
 		LCDPRINTK("%s: turn on GPIO_%d as backlight!\n", __FUNCTION__, omap3logic_dss_lcd_data.lcd_gpio_backlight);
 		/* Turn on the backlight! */
-		gpio_set_value(omap3logic_dss_lcd_data.lcd_gpio_backlight, 1);
 	}
 
 	/* 255 -> 1, 1 -> 126 */
@@ -146,6 +145,11 @@ static void dm3730_som_lv_bl_set_intensity(int level)
 	LCDPRINTK("%s: c %d (%d%% on)\n", __FUNCTION__, c, (((MAX_BRIGHTNESS+1)-c) * 100)/(MAX_BRIGHTNESS+1));
 	twl_i2c_write_u8(TWL4030_MODULE_PWM0, 0x7F, TWL_LED_PWMOFF);
 	twl_i2c_write_u8(TWL4030_MODULE_PWM0, c, TWL_LED_PWMON);
+
+	/* Turn on the backlight! */
+	gpio_set_value(omap3logic_dss_lcd_data.lcd_gpio_backlight, 1);
+
+
 	return;
 }
 
