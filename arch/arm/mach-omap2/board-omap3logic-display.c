@@ -183,7 +183,7 @@ static void dm3730_torpedo_bl_set_intensity(int level)
 
 static void omap3logic_do_update(int level)
 {
-	if (machine_is_dm3730_som_lv())
+	if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som())
 		dm3730_som_lv_bl_set_intensity(level);
 	else
 		dm3730_torpedo_bl_set_intensity(level);
@@ -716,9 +716,9 @@ static void omap3logic_lcd_set_panel_mux(void)
 	pdata = omap3logic_lcd_device.dev.platform_data;
 
 	pdata->lcd_gpio_enable = 155;
-	if (machine_is_dm3730_som_lv()) {
+	if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()) {
 		pdata->lcd_gpio_backlight = 8;
-	} else if (machine_is_dm3730_torpedo()) {
+	} else if (machine_is_dm3730_torpedo() || machine_is_omap3_torpedo()) {
 		pdata->lcd_gpio_backlight = 154;
 		omap_mux_init_signal("gpmc_ncs5.gpt10_pwm_evt", OMAP_PIN_INPUT_PULLDOWN);
 	} else
@@ -770,6 +770,14 @@ static void omap3logic_lcd_set_panel_mux(void)
 	omap_mux_init_signal("dss_data14.dss_data14", OMAP_PIN_OUTPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW);
 	omap_mux_init_signal("dss_data15.dss_data15", OMAP_PIN_OUTPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW);
 
+	/* OMAP35x SOM/Torpedo doesn't have HDMI, has to be 16 bit display */
+	if (machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
+		if (omap3logic_default_panel.data_lines != 16) {
+			printk("%s: OMAP35x Torpedo/SOM LV is 16bpp display!\n", __FUNCTION__);
+			omap3logic_default_panel.data_lines = 16;
+		}
+	}
+
 	if (omap3logic_default_panel.data_lines == 16)
 		return;
 
@@ -793,8 +801,7 @@ static void omap3logic_lcd_set_panel_mux(void)
 		omap_mux_init_signal("sys_boot4.dss_data21", OMAP_PIN_OUTPUT);
 		omap_mux_init_signal("sys_boot5.dss_data22", OMAP_PIN_OUTPUT);
 		omap_mux_init_signal("sys_boot6.dss_data23", OMAP_PIN_OUTPUT);
-	} else
-		BUG();
+	}
 }
 
 void omap3logic_lcd_init(void)
@@ -818,9 +825,9 @@ void omap3logic_lcd_init(void)
 		if (result)
 			printk("%s: platform device register of DSS2 device failed: %d\n", __FUNCTION__, result);
 		mutex_init(&omap3logic_bl_data.lock);
-		if (machine_is_dm3730_som_lv()) {
+		if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()) {
 			omap3logic_bl_info.set_bl_intensity = omap3logic_do_bl_intensity;
-		} else if (machine_is_dm3730_torpedo()) {
+		} else if (machine_is_dm3730_torpedo() || machine_is_omap3_torpedo()) {
 			intensity_timer = omap_dm_timer_request_specific(10);
 			if (intensity_timer == NULL) {
 				printk("%s: can't get backlight timer!\n", __FUNCTION__);
