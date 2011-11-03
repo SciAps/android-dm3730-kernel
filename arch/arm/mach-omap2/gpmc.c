@@ -912,3 +912,53 @@ int gpmc_calculate_ecc(int cs, const u_char *dat, u_char *ecc_code)
 	gpmc_ecc_used = -EINVAL;
 	return 0;
 }
+
+#if defined(CONFIG_DEBUG_FS)
+
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
+static int dbg_gpmc_show(struct seq_file *s, void *unused)
+{
+	int i;
+
+	seq_printf(s, "CONFIG: %08x\n", gpmc_read_reg(GPMC_CONFIG));
+	seq_printf(s, "STATUS: %08x\n", gpmc_read_reg(GPMC_STATUS));
+	seq_printf(s, "IRQSTATUS: %08x\n", gpmc_read_reg(GPMC_IRQSTATUS));
+	seq_printf(s, "IRQENABLE: %08x\n", gpmc_read_reg(GPMC_IRQENABLE));
+	for (i=0; i < GPMC_CS_NUM; ++i) {
+		if (0 || gpmc_cs_mem_enabled(i)) {
+			seq_printf(s, "CS%d: %08x %08x %08x %08x\n", i,
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG1),
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG2),
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG3),
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG4));
+			seq_printf(s, "     %08x %08x %08x\n",
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG5),
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG6),
+				gpmc_cs_read_reg(i, GPMC_CS_CONFIG7));
+		}
+	}
+	return 0;
+}
+
+static int dbg_gpmc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dbg_gpmc_show, &inode->i_private);
+}
+
+static const struct file_operations debug_gpmc_fops = {
+	.open		= dbg_gpmc_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static int __init omap_gpmc_debuginit(void)
+{
+	(void) debugfs_create_file("omap_gpmc", S_IRUGO,
+					NULL, NULL, &debug_gpmc_fops);
+	return 0;
+}
+late_initcall(omap_gpmc_debuginit);
+#endif
