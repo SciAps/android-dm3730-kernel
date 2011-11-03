@@ -631,11 +631,11 @@ static inline void __init board_smsc911x_init(void)
 		/* OMAP3530 LV SOM board */
 		board_smsc911x_data.gpio_irq =
 					OMAP3530_LV_SOM_SMSC911X_GPIO_IRQ;
-		omap_mux_init_signal("gpio_152", OMAP_PIN_INPUT);
+		omap_mux_init_gpio(OMAP3530_LV_SOM_SMSC911X_GPIO_IRQ, OMAP_PIN_INPUT);
 	} else if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
 		/* OMAP3 Torpedo board */
 		board_smsc911x_data.gpio_irq = OMAP3_TORPEDO_SMSC911X_GPIO_IRQ;
-		omap_mux_init_signal("gpio_129", OMAP_PIN_INPUT);
+		omap_mux_init_gpio(OMAP3_TORPEDO_SMSC911X_GPIO_IRQ, OMAP_PIN_INPUT);
 	} else {
 		/* unsupported board */
 		printk(KERN_ERR "%s(): unknown machine type\n", __func__);
