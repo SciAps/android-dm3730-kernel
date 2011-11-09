@@ -402,15 +402,11 @@ static int isp1763_run(struct usb_hcd *hcd)
 	u16 temp;
 	u32 command;
 	u32 chipid;
+	int i = 0;
+	int reRunInitialization = 0;
 
-
-	hcd->uses_new_polling = 1;
-
-	clear_bit(HCD_FLAG_POLL_RH, &hcd->flags);
-
-	hcd->state = HC_STATE_RUNNING;
-
-	isp1763_enable_interrupts(hcd);
+re_run_init:
+	reRunInitialization++;
 	temp = isp1763_readw(hcd->regs + HC_HW_MODE_CTRL);
 	isp1763_writew(temp | HW_GLOBAL_INTR_EN,
 		       hcd->regs + HC_HW_MODE_CTRL);
@@ -420,6 +416,10 @@ static int isp1763_run(struct usb_hcd *hcd)
 	command |= CMD_RUN;
 	isp1763_writel(command, hcd->regs + HC_USBCMD);
 
+	// Add a delay, for the controller has just been started
+	for (i=0; i < 50; i++)
+		udelay(1000);
+
 	retval = handshake(priv, hcd->regs + HC_USBCMD, CMD_RUN, CMD_RUN,
 			   250 * 1000);
 	if (retval)
@@ -428,15 +428,30 @@ static int isp1763_run(struct usb_hcd *hcd)
 	down_write(&ehci_cf_port_reset_rwsem);
 	isp1763_writel(FLAG_CF, hcd->regs + HC_CONFIGFLAG);
 
+	for (i=0; i < 50; i++)
+		udelay(1000);
+
 	retval = handshake(priv, hcd->regs + HC_CONFIGFLAG, FLAG_CF, FLAG_CF,
 								250 * 1000);
 	up_write(&ehci_cf_port_reset_rwsem);
 	if (retval)
-		return retval;
+		if (reRunInitialization > 100)
+			return retval;
+		else
+		{
+			isp1763_info(priv, "ISP1763 isp1763_run: Re-run initialization.\n");
+			goto re_run_init;
+		}
 
 	chipid = isp1763_readl(hcd->regs + HC_CHIP_ID_REG);
 	isp1763_info(priv, "USB ISP %04x HW rev. %d started\n",
 		     ((chipid & 0x00ffff00) >> 8), (chipid & 0x000000ff));
+
+	hcd->uses_new_polling = 1;
+	clear_bit(HCD_FLAG_POLL_RH, &hcd->flags);
+	hcd->state = HC_STATE_RUNNING;
+
+	isp1763_enable_interrupts(hcd);
 
 	/* PTD Register Init Part 2, Step 28 */
 	/* enable INTs */
