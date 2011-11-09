@@ -225,7 +225,7 @@ void ubi_dbg_dump_flash(struct ubi_device *ubi, int pnum, int offset, int len)
 	if (!buf)
 		return;
 	err = ubi->mtd->read(ubi->mtd, addr, len, &read, buf);
-	if (err && err != -EUCLEAN) {
+	if (err && err != -EUCLEAN && err != -ESTALE) {
 		ubi_err("error %d while reading %d bytes from PEB %d:%d, "
 			"read %zd bytes", err, len, pnum, offset, read);
 		goto out;

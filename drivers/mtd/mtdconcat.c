@@ -98,7 +98,7 @@ concat_read(struct mtd_info *mtd, loff_t from, size_t len,
 			if (err == -EBADMSG) {
 				mtd->ecc_stats.failed++;
 				ret = err;
-			} else if (err == -EUCLEAN) {
+			} else if (err == -EUCLEAN || err == -ESTALE) {
 				mtd->ecc_stats.corrected++;
 				/* Do not overwrite -EBADMSG !! */
 				if (!ret)
@@ -282,7 +282,7 @@ concat_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 			if (err == -EBADMSG) {
 				mtd->ecc_stats.failed++;
 				ret = err;
-			} else if (err == -EUCLEAN) {
+			} else if (err == -EUCLEAN || err == -ESTALE) {
 				mtd->ecc_stats.corrected++;
 				/* Do not overwrite -EBADMSG !! */
 				if (!ret)

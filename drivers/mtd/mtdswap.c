@@ -314,7 +314,7 @@ static int mtdswap_read_oob(struct mtdswap_dev *d, loff_t from,
 {
 	int ret = d->mtd->read_oob(d->mtd, from, ops);
 
-	if (ret == -EUCLEAN)
+	if (ret == -EUCLEAN || ret == -ESTALE)
 		return ret;
 
 	if (ret) {
@@ -354,7 +354,7 @@ static int mtdswap_read_markers(struct mtdswap_dev *d, struct swap_eb *eb)
 
 	ret = mtdswap_read_oob(d, offset, &ops);
 
-	if (ret && ret != -EUCLEAN)
+	if (ret && ret != -EUCLEAN && ret != -ESTALE)
 		return ret;
 
 	data = (struct mtdswap_oobdata *)d->oob_buf;
@@ -363,7 +363,7 @@ static int mtdswap_read_markers(struct mtdswap_dev *d, struct swap_eb *eb)
 
 	if (le16_to_cpu(data->magic) == MTDSWAP_MAGIC_CLEAN) {
 		eb->erase_count = le32_to_cpu(data->count);
-		if (ret == -EUCLEAN)
+		if (ret == -EUCLEAN || -ESTALE)
 			ret = MTDSWAP_SCANNED_BITFLIP;
 		else {
 			if (le16_to_cpu(data2->magic) == MTDSWAP_MAGIC_DIRTY)
@@ -738,7 +738,7 @@ static int mtdswap_move_block(struct mtdswap_dev *d, unsigned int oldblock,
 retry:
 	ret = mtd->read(mtd, readpos, PAGE_SIZE, &retlen, d->page_buf);
 
-	if (ret < 0 && ret != -EUCLEAN) {
+	if (ret < 0 && ret != -EUCLEAN && ret != -ESTALE) {
 		oldeb = d->eb_data + oldblock / d->pages_per_eblk;
 		oldeb->flags |= EBLOCK_READERR;
 
@@ -1164,7 +1164,7 @@ retry:
 	ret = mtd->read(mtd, readpos, PAGE_SIZE, &retlen, buf);
 
 	d->mtd_read_count++;
-	if (ret == -EUCLEAN) {
+	if (ret == -EUCLEAN || ret == -EL2SYNC) {
 		eb->flags |= EBLOCK_BITFLIP;
 		mtdswap_rb_add(d, eb, MTDSWAP_BITFLIP);
 		ret = 0;

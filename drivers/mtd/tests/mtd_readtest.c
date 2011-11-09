@@ -53,7 +53,7 @@ static int read_eraseblock_by_page(int ebnum)
 	for (i = 0; i < pgcnt; i++) {
 		memset(buf, 0 , pgcnt);
 		ret = mtd->read(mtd, addr, pgsize, &read, buf);
-		if (ret == -EUCLEAN)
+		if (ret == -EUCLEAN || err == -ESTALE)
 			ret = 0;
 		if (ret || read != pgsize) {
 			printk(PRINT_PREF "error: read failed at %#llx\n",

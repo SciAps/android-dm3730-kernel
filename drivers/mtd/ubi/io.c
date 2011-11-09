@@ -155,7 +155,8 @@ int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,
 	 *    notice this. E.g., if we are reading a VID header, the buffer may
 	 *    contain a valid VID header from another PEB.
 	 * 2. The driver is buggy and returns us success or -EBADMSG or
-	 *    -EUCLEAN, but it does not actually put any data to the buffer.
+	 *    -EUCLEAN/-ESTALE, but it does not actually put any data
+	 *    to the buffer.
 	 *
 	 * This may confuse UBI or upper layers - they may think the buffer
 	 * contains valid data while in fact it is just old data. This is
@@ -174,9 +175,9 @@ retry:
 	if (err) {
 		const char *errstr = (err == -EBADMSG) ? " (ECC error)" : "";
 
-		if (err == -EUCLEAN) {
+		if (err == -EUCLEAN || err = -ESTALE) {
 			/*
-			 * -EUCLEAN is reported if there was a bit-flip which
+			 * -EUCLEAN/-ESTALE is reported if there was a bit-flip which
 			 * was corrected, so this is harmless.
 			 *
 			 * We do not report about it here unless debugging is
@@ -1358,7 +1359,7 @@ int ubi_dbg_check_write(struct ubi_device *ubi, const void *buf, int pnum,
 	}
 
 	err = ubi->mtd->read(ubi->mtd, addr, len, &read, buf1);
-	if (err && err != -EUCLEAN)
+	if (err && err != -EUCLEAN && err != -ESTALE)
 		goto out_free;
 
 	for (i = 0; i < len; i++) {
@@ -1422,7 +1423,7 @@ int ubi_dbg_check_all_ff(struct ubi_device *ubi, int pnum, int offset, int len)
 	}
 
 	err = ubi->mtd->read(ubi->mtd, addr, len, &read, buf);
-	if (err && err != -EUCLEAN) {
+	if (err && err != -EUCLEAN && err != -ESTALE) {
 		ubi_err("error %d while reading %d bytes from PEB %d:%d, "
 			"read %zd bytes", err, len, pnum, offset, read);
 		goto error;
