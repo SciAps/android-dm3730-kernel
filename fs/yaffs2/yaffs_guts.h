@@ -144,7 +144,8 @@ union yaffs_tags_union {
 enum yaffs_ecc_result {
 	YAFFS_ECC_RESULT_UNKNOWN,
 	YAFFS_ECC_RESULT_NO_ERROR,
-	YAFFS_ECC_RESULT_FIXED,
+	YAFFS_ECC_RESULT_VALID,		/* ECC rewuired; not a strike */
+	YAFFS_ECC_RESULT_FIXED,		/* ECC required counts as strike */
 	YAFFS_ECC_RESULT_UNFIXED
 };
 
@@ -288,7 +289,7 @@ struct yaffs_block_info {
 
 	u32 has_shrink_hdr:1;	/* This block has at least one shrink header */
 	u32 seq_number;		/* block sequence number for yaffs2 */
-
+	u32 chunk_valid_count;	/* How many times block came up valid */
 };
 
 /* -------------------------- Object structure -------------------------------*/
@@ -753,6 +754,7 @@ struct yaffs_dev {
 	u32 bg_gcs;
 	u32 n_retired_writes;
 	u32 n_retired_blocks;
+	u32 n_ecc_valid;
 	u32 n_ecc_fixed;
 	u32 n_ecc_unfixed;
 	u32 n_tags_ecc_fixed;
@@ -766,6 +768,7 @@ struct yaffs_dev {
 	u32 block_strikes[YAFFS_MAX_STRIKE_COUNT];
 					/* summary of blocks with n strikes */
 	u32 n_max_block_strike;		/* highest strike number so far */
+	u32 n_max_block_valid;		/* highest valid count on a block so far */
 };
 
 /* The CheckpointDevice structure holds the device information that changes
@@ -900,7 +903,8 @@ void yaffs_chunk_del(struct yaffs_dev *dev, int chunk_id, int mark_flash,
 		     int lyn);
 int yaffs_check_ff(u8 *buffer, int n_bytes);
 void yaffs_handle_chunk_error(struct yaffs_dev *dev,
-			      struct yaffs_block_info *bi);
+			      struct yaffs_block_info *bi,
+			      int counts_as_strike);
 
 u8 *yaffs_get_temp_buffer(struct yaffs_dev *dev);
 void yaffs_release_temp_buffer(struct yaffs_dev *dev, u8 *buffer);

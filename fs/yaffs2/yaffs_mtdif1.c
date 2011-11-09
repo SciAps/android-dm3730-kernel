@@ -203,6 +203,12 @@ int nandmtd1_read_chunk_tags(struct yaffs_dev *dev,
 		/* no error */
 		break;
 
+	case -ESTALE:
+		/* MTD's ECC fixed the data, but not enough to be a strike */
+		eccres = YAFFS_ECC_RESULT_VALID;
+		dev->n_ecc_valid++;
+		break;
+
 	case -EUCLEAN:
 		/* MTD's ECC fixed the data */
 		eccres = YAFFS_ECC_RESULT_FIXED;

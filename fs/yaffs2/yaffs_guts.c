@@ -233,37 +233,44 @@ static void yaffs_handle_chunk_update(struct yaffs_dev *dev, int nand_chunk,
 }
 
 void yaffs_handle_chunk_error(struct yaffs_dev *dev,
-			      struct yaffs_block_info *bi)
+			struct yaffs_block_info *bi,
+			int counts_as_strike)
 {
 	if (!bi->gc_prioritise) {
 		bi->gc_prioritise = 1;
 		dev->has_pending_prioritised_gc = 1;
 
-		/* Gather statistics */
-		if (bi->chunk_error_strikes >= YAFFS_MAX_STRIKE_COUNT-1)
-			/* Mind the top */
-			dev->block_strikes[YAFFS_MAX_STRIKE_COUNT-1]++;
-		else {
-			/* Move the block error count to the next bin */
-			if (bi->chunk_error_strikes)
-				dev->block_strikes[bi->chunk_error_strikes-1]--;
-			bi->chunk_error_strikes++;
-			dev->block_strikes[bi->chunk_error_strikes-1]++;
-		}
+		if (!counts_as_strike) {
+			bi->chunk_valid_count++;
+			if (bi->chunk_valid_count > dev->n_max_block_valid)
+				dev->n_max_block_valid++;
+		} else {
+			/* Gather statistics */
+			if (bi->chunk_error_strikes >= YAFFS_MAX_STRIKE_COUNT-1)
+				/* Mind the top */
+				dev->block_strikes[YAFFS_MAX_STRIKE_COUNT-1]++;
+			else {
+				/* Move the block error count to the next bin */
+				if (bi->chunk_error_strikes)
+					dev->block_strikes[bi->chunk_error_strikes-1]--;
+				bi->chunk_error_strikes++;
+				dev->block_strikes[bi->chunk_error_strikes-1]++;
+			}
 
-		/* Track the maximum seen */	
-		if (bi->chunk_error_strikes > dev->n_max_block_strike)
-			dev->n_max_block_strike = bi->chunk_error_strikes;
+			/* Track the maximum seen */	
+			if (bi->chunk_error_strikes > dev->n_max_block_strike)
+				dev->n_max_block_strike = bi->chunk_error_strikes;
 
-		/* Only retire the block if it's greater than the maximum
-		 * allowed strike count.  A negative max allowed strike count
-		 * disables the retirement.
-		 */
-		if ((dev->n_max_strikes >= 0) && 
-		    (bi->chunk_error_strikes > dev->n_max_strikes)) {
-			bi->needs_retiring = 1;	/* Too many stikes, so retire */
-			yaffs_trace(YAFFS_TRACE_ALWAYS,
-				"yaffs: Block struck out");
+			/* Only retire the block if it's greater than
+			 * the maximum allowed strike count.  A
+			 * negative max allowed strike count disables
+			 * the retirement. */
+			if ((dev->n_max_strikes >= 0) && 
+				(bi->chunk_error_strikes > dev->n_max_strikes)) {
+				bi->needs_retiring = 1;	/* Too many stikes, so retire */
+				yaffs_trace(YAFFS_TRACE_ALWAYS,
+					"yaffs: Block struck out");
+			}
 		}
 	}
 }
@@ -274,7 +281,7 @@ static void yaffs_handle_chunk_wr_error(struct yaffs_dev *dev, int nand_chunk,
 	int flash_block = nand_chunk / dev->param.chunks_per_block;
 	struct yaffs_block_info *bi = yaffs_get_block_info(dev, flash_block);
 
-	yaffs_handle_chunk_error(dev, bi);
+	yaffs_handle_chunk_error(dev, bi, 1);
 
 	if (erased_ok) {
 		/* Was an actual write failure,
@@ -4761,6 +4768,7 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	dev->n_deleted_files = 0;
 	dev->n_bg_deletions = 0;
 	dev->n_unlinked_files = 0;
+	dev->n_ecc_valid = 0;
 	dev->n_ecc_fixed = 0;
 	dev->n_ecc_unfixed = 0;
 	dev->n_tags_ecc_fixed = 0;
