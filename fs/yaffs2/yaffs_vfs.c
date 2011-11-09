@@ -2527,6 +2527,7 @@ struct yaffs_options {
 	int empty_lost_and_found;
 	int empty_lost_and_found_overridden;
 	int disable_summary;
+	int strikes;
 };
 
 #define MAX_OPT_LEN 30
@@ -2536,6 +2537,7 @@ static int yaffs_parse_options(struct yaffs_options *options,
 	char cur_opt[MAX_OPT_LEN + 1];
 	int p;
 	int error = 0;
+	int value;
 
 	/* Parse through the options which is a comma seperated list */
 
@@ -2585,6 +2587,8 @@ static int yaffs_parse_options(struct yaffs_options *options,
 		} else if (!strcmp(cur_opt, "no-checkpoint")) {
 			options->skip_checkpoint_read = 1;
 			options->skip_checkpoint_write = 1;
+		} else if (sscanf(cur_opt, "strikes=%d", &value) == 1) {
+			options->strikes = value;
 		} else {
 			printk(KERN_INFO "yaffs: Bad mount option \"%s\"\n",
 			       cur_opt);
@@ -2831,6 +2835,8 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 	param->n_reserved_blocks = 5;
 	param->n_caches = (options.no_cache) ? 0 : 10;
 	param->inband_tags = options.inband_tags;
+
+	dev->n_max_strikes = options.strikes;
 
 	param->enable_xattr = 1;
 	if (options.lazy_loading_overridden)
@@ -3160,7 +3166,24 @@ static char *yaffs_dump_dev_part1(char *buf, struct yaffs_dev *dev)
 	buf += sprintf(buf, "n_bg_deletions....... %u\n", dev->n_bg_deletions);
 	buf += sprintf(buf, "tags_used............ %u\n", dev->tags_used);
 	buf += sprintf(buf, "summary_used......... %u\n", dev->summary_used);
+	buf += sprintf(buf, "\n");
 
+	return buf;
+}
+
+static char *yaffs_dump_dev_part2(char *buf, struct yaffs_dev *dev)
+{
+	int i;
+
+	buf += sprintf(buf, "n_max_strikes........ %d\n",
+				dev->n_max_strikes);
+	buf += sprintf(buf, "n_max_block_strike... %d\n",
+				dev->n_max_block_strike);
+	buf += sprintf(buf, "block_strikes........ [");
+	for (i = 0; i < dev->n_max_block_strike; ++i)
+	       buf += sprintf(buf, "%s%d", i ? " " : "", dev->block_strikes[i]);
+
+	buf += sprintf(buf, "]\n");
 	return buf;
 }
 
@@ -3201,17 +3224,19 @@ static int yaffs_proc_read(char *page,
 				       context_list);
 			struct yaffs_dev *dev = dc->dev;
 
-			if (n < (step & ~1)) {
-				n += 2;
+			if (n < (step & ~0x3)) {
+				n += 4;
 				continue;
 			}
-			if ((step & 1) == 0) {
+			if ((step & 0x3) == 0) {
 				buf +=
 				    sprintf(buf, "\nDevice %d \"%s\"\n", n,
 					    dev->param.name);
 				buf = yaffs_dump_dev_part0(buf, dev);
-			} else {
+			} else if ((step & 0x3) == 1) {
 				buf = yaffs_dump_dev_part1(buf, dev);
+			} else if ((step & 0x3) == 2) {
+				buf = yaffs_dump_dev_part2(buf, dev);
                         }
 
 			break;

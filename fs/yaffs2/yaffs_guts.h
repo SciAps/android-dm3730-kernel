@@ -266,6 +266,9 @@ enum yaffs_block_state {
 
 #define	YAFFS_NUMBER_OF_BLOCK_STATES (YAFFS_BLOCK_STATE_DEAD + 1)
 
+#define YAFFS_STRIKE_COUNT_BITS	8
+#define YAFFS_MAX_STRIKE_COUNT	((1 << YAFFS_STRIKE_COUNT_BITS) - 1)
+
 struct yaffs_block_info {
 
 	int soft_del_pages:10;	/* number of soft deleted pages */
@@ -278,8 +281,9 @@ struct yaffs_block_info {
 	u32 skip_erased_check:1;/* Skip the erased check on this block */
 	u32 gc_prioritise:1;	/* An ECC check or blank check has failed.
 				   Block should be prioritised for GC */
-	u32 chunk_error_strikes:3;	/* How many times we've had ecc etc
-				failures on this block and tried to reuse it */
+	u32 chunk_error_strikes:YAFFS_STRIKE_COUNT_BITS;
+				/* How many times we've had ecc etc failures on
+				 * this block and tried to reuse it */
 	u32 has_summary:1;	/* The block has a summary */
 
 	u32 has_shrink_hdr:1;	/* This block has at least one shrink header */
@@ -660,6 +664,9 @@ struct yaffs_dev {
 	u32 alloc_page;
 	int alloc_block_finder;	/* Used to search for next allocation block */
 
+	int n_max_strikes;	/* Number of strikes before a block is declared
+				 * dead. */
+
 	/* Object and Tnode memory management */
 	void *allocator;
 	int n_obj;
@@ -756,7 +763,9 @@ struct yaffs_dev {
 	u32 cache_hits;
 	u32 tags_used;
 	u32 summary_used;
-
+	u32 block_strikes[YAFFS_MAX_STRIKE_COUNT];
+					/* summary of blocks with n strikes */
+	u32 n_max_block_strike;		/* highest strike number so far */
 };
 
 /* The CheckpointDevice structure holds the device information that changes

@@ -238,13 +238,32 @@ void yaffs_handle_chunk_error(struct yaffs_dev *dev,
 	if (!bi->gc_prioritise) {
 		bi->gc_prioritise = 1;
 		dev->has_pending_prioritised_gc = 1;
-		bi->chunk_error_strikes++;
 
-		if (bi->chunk_error_strikes > 3) {
+		/* Gather statistics */
+		if (bi->chunk_error_strikes >= YAFFS_MAX_STRIKE_COUNT-1)
+			/* Mind the top */
+			dev->block_strikes[YAFFS_MAX_STRIKE_COUNT-1]++;
+		else {
+			/* Move the block error count to the next bin */
+			if (bi->chunk_error_strikes)
+				dev->block_strikes[bi->chunk_error_strikes-1]--;
+			bi->chunk_error_strikes++;
+			dev->block_strikes[bi->chunk_error_strikes-1]++;
+		}
+
+		/* Track the maximum seen */	
+		if (bi->chunk_error_strikes > dev->n_max_block_strike)
+			dev->n_max_block_strike = bi->chunk_error_strikes;
+
+		/* Only retire the block if it's greater than the maximum
+		 * allowed strike count.  A negative max allowed strike count
+		 * disables the retirement.
+		 */
+		if ((dev->n_max_strikes >= 0) && 
+		    (bi->chunk_error_strikes > dev->n_max_strikes)) {
 			bi->needs_retiring = 1;	/* Too many stikes, so retire */
 			yaffs_trace(YAFFS_TRACE_ALWAYS,
 				"yaffs: Block struck out");
-
 		}
 	}
 }
@@ -4583,6 +4602,7 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	int init_failed = 0;
 	unsigned x;
 	int bits;
+	int i;
 
 	yaffs_trace(YAFFS_TRACE_TRACING, "yaffs: yaffs_guts_initialise()");
 
@@ -4749,6 +4769,16 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	dev->n_erased_blocks = 0;
 	dev->gc_disable = 0;
 	dev->has_pending_prioritised_gc = 1;
+
+	/* Initialize strike */
+	if (dev->n_max_strikes == 0)
+		dev->n_max_strikes = 64;
+
+	dev->n_max_block_strike = 0;
+
+	for (i = 0; i < YAFFS_MAX_STRIKE_COUNT; i++)
+		dev->block_strikes[i] = 0;
+
 		/* Assume the worst for now, will get fixed on first GC */
 	INIT_LIST_HEAD(&dev->dirty_dirs);
 	dev->oldest_dirty_seq = 0;
