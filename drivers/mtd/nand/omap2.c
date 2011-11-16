@@ -117,6 +117,11 @@ static struct nand_bbt_descr bb_descrip_x16_flashbased = {
 	.pattern = scan_ffff_pattern,
 };
 
+/* Use a single hw access control for all NAND devices. Required since
+ * ECC/write buffer exist in one instance used by all NAND devices.
+ */
+static struct nand_hw_control          controller;
+
 struct omap_nand_info {
 	struct nand_hw_control		controller;
 	struct omap_nand_platform_data	*pdata;
@@ -953,9 +958,6 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, info);
 
-	spin_lock_init(&info->controller.lock);
-	init_waitqueue_head(&info->controller.wq);
-
 	info->pdev = pdev;
 
 	info->gpmc_cs		= pdata->cs;
@@ -983,7 +985,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		goto out_release_mem_region;
 	}
 
-	info->nand.controller = &info->controller;
+	info->nand.controller = &controller;
 
 	info->nand.IO_ADDR_W = info->nand.IO_ADDR_R;
 	info->nand.cmd_ctrl  = omap_hwcontrol;
@@ -1165,6 +1167,9 @@ static struct platform_driver omap_nand_driver = {
 static int __init omap_nand_init(void)
 {
 	pr_info("%s driver initializing\n", DRIVER_NAME);
+
+	spin_lock_init(&controller.lock);
+	init_waitqueue_head(&controller.wq);
 
 	return platform_driver_register(&omap_nand_driver);
 }
