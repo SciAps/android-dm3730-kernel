@@ -44,7 +44,7 @@ int yaffs_rd_chunk_tags_nand(struct yaffs_dev *dev, int nand_chunk,
 					  nand_chunk /
 					  dev->param.chunks_per_block);
 		yaffs_handle_chunk_error(dev, bi,
-					 tags->ecc_result != YAFFS_ECC_RESULT_VALID);
+					 tags->ecc_result > YAFFS_ECC_RESULT_STALE);
 	}
 	return result;
 }

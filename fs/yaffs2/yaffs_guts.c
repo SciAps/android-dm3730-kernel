@@ -241,9 +241,11 @@ void yaffs_handle_chunk_error(struct yaffs_dev *dev,
 		dev->has_pending_prioritised_gc = 1;
 
 		if (!counts_as_strike) {
-			bi->chunk_valid_count++;
-			if (bi->chunk_valid_count > dev->n_max_block_valid)
-				dev->n_max_block_valid++;
+			/* This chunk is stale (MTD returned -ESTALE).
+			 * refresh block but don't increment strike count. */
+			bi->chunk_stale_count++;
+			if (bi->chunk_stale_count > dev->n_max_block_stale)
+				dev->n_max_block_stale++;
 		} else {
 			/* Gather statistics */
 			if (bi->chunk_error_strikes >= YAFFS_MAX_STRIKE_COUNT-1)
@@ -4768,7 +4770,7 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	dev->n_deleted_files = 0;
 	dev->n_bg_deletions = 0;
 	dev->n_unlinked_files = 0;
-	dev->n_ecc_valid = 0;
+	dev->n_ecc_stale = 0;
 	dev->n_ecc_fixed = 0;
 	dev->n_ecc_unfixed = 0;
 	dev->n_tags_ecc_fixed = 0;

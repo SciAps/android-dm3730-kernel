@@ -3152,7 +3152,7 @@ static char *yaffs_dump_dev_part1(char *buf, struct yaffs_dev *dev)
 				dev->n_retired_writes);
 	buf += sprintf(buf, "n_retired_blocks..... %u\n",
 				dev->n_retired_blocks);
-	buf += sprintf(buf, "n_ecc_valid.......... %u\n", dev->n_ecc_valid);
+	buf += sprintf(buf, "n_ecc_stale.......... %u\n", dev->n_ecc_stale);
 	buf += sprintf(buf, "n_ecc_fixed.......... %u\n", dev->n_ecc_fixed);
 	buf += sprintf(buf, "n_ecc_unfixed........ %u\n", dev->n_ecc_unfixed);
 	buf += sprintf(buf, "n_tags_ecc_fixed..... %u\n",
@@ -3176,8 +3176,8 @@ static char *yaffs_dump_dev_part2(char *buf, struct yaffs_dev *dev)
 {
 	int i;
 
-	buf += sprintf(buf, "n_max_block_valid.... %d\n",
-				dev->n_max_block_valid);
+	buf += sprintf(buf, "n_max_block_stale.... %d\n",
+				dev->n_max_block_stale);
 	buf += sprintf(buf, "n_max_strikes........ %d\n",
 				dev->n_max_strikes);
 	buf += sprintf(buf, "n_max_block_strike... %d\n",

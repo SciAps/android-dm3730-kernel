@@ -191,8 +191,8 @@ int nandmtd2_read_chunk_tags(struct yaffs_dev *dev, int nand_chunk,
 	}
 	if (tags && retval == -ESTALE
 	    && tags->ecc_result == YAFFS_ECC_RESULT_NO_ERROR) {
-		tags->ecc_result = YAFFS_ECC_RESULT_VALID;
-		dev->n_ecc_valid++;
+		tags->ecc_result = YAFFS_ECC_RESULT_STALE;
+		dev->n_ecc_stale++;
 	}
 	if (tags && retval == -EUCLEAN
 	    && tags->ecc_result == YAFFS_ECC_RESULT_NO_ERROR) {
