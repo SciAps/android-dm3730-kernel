@@ -608,6 +608,12 @@ extern int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 extern int nand_do_read(struct mtd_info *mtd, loff_t from, size_t len,
 			size_t *retlen, uint8_t *buf);
 
+extern int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
+			int new_state);
+extern void nand_release_device(struct mtd_info *mtd);
+extern uint8_t *nand_transfer_oob(struct nand_chip *chip, uint8_t *oob,
+				struct mtd_oob_ops *ops, size_t len);
+
 /**
  * struct platform_nand_chip - chip level device structure
  * @nr_chips:		max. number of chips to scan for

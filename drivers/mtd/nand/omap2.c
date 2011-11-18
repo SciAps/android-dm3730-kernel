@@ -141,6 +141,9 @@ struct omap_nand_info {
 	} iomode;
 	u_char				*buf;
 	int					buf_len;
+	/* Buffer to hold page on read when correctable ECC error found;
+	 * read is done w/o ECC to count ECC corrected bits */
+	u_char				*ecc_read_buffer;
 };
 
 /**
@@ -939,6 +942,325 @@ static int omap_dev_ready(struct mtd_info *mtd)
 	return 1;
 }
 
+/**
+ * micron_nand_do_read_ops - [Internal] Read data with ECC
+ *
+ * @mtd:	MTD device structure
+ * @from:	offset to read from
+ * @ops:	oob ops structure
+ *
+ * Internal function. Called with chip held.
+ */
+static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
+			    struct mtd_oob_ops *ops)
+{
+	int chipnr, page, realpage, col, bytes, aligned;
+	struct nand_chip *chip = mtd->priv;
+	struct mtd_ecc_stats stats;
+	int blkcheck = (1 << (chip->phys_erase_shift - chip->page_shift)) - 1;
+	int sndcmd = 1;
+	int ret = 0;
+	uint32_t readlen = ops->len;
+	uint32_t oobreadlen = ops->ooblen;
+	uint32_t max_oobsize = ops->mode == MTD_OOB_AUTO ?
+		mtd->oobavail : mtd->oobsize;
+
+	uint8_t *bufpoi, *oob, *buf;
+
+	stats = mtd->ecc_stats;
+
+	chipnr = (int)(from >> chip->chip_shift);
+	chip->select_chip(mtd, chipnr);
+
+	realpage = (int)(from >> chip->page_shift);
+	page = realpage & chip->pagemask;
+
+	col = (int)(from & (mtd->writesize - 1));
+
+	buf = ops->datbuf;
+	oob = ops->oobbuf;
+
+	while (1) {
+		bytes = min(mtd->writesize - col, readlen);
+		aligned = (bytes == mtd->writesize);
+
+		/* Is the current page in the buffer ? */
+		if (realpage != chip->pagebuf || oob) {
+			bufpoi = aligned ? buf : chip->buffers->databuf;
+
+			if (likely(sndcmd)) {
+				chip->cmdfunc(mtd, NAND_CMD_READ0, 0x00, page);
+				sndcmd = 0;
+			}
+
+			/* Now read the page into the buffer */
+			if (unlikely(ops->mode == MTD_OOB_RAW))
+				ret = chip->ecc.read_page_raw(mtd, chip,
+							      bufpoi, page);
+			else if (!aligned && NAND_SUBPAGE_READ(chip) && !oob)
+				ret = chip->ecc.read_subpage(mtd, chip,
+							col, bytes, bufpoi);
+			else
+				ret = chip->ecc.read_page(mtd, chip, bufpoi,
+							  page);
+			if (ret < 0)
+				break;
+
+			/* Transfer not aligned data */
+			if (!aligned) {
+				if (!NAND_SUBPAGE_READ(chip) && !oob &&
+				    !(mtd->ecc_stats.failed - stats.failed))
+					chip->pagebuf = realpage;
+				memcpy(buf, chip->buffers->databuf + col, bytes);
+			}
+
+			buf += bytes;
+
+			if (unlikely(oob)) {
+
+				int toread = min(oobreadlen, max_oobsize);
+
+				if (toread) {
+					oob = nand_transfer_oob(chip,
+						oob, ops, toread);
+					oobreadlen -= toread;
+				}
+			}
+
+			if (!(chip->options & NAND_NO_READRDY)) {
+				/*
+				 * Apply delay or wait for ready/busy pin. Do
+				 * this before the AUTOINCR check, so no
+				 * problems arise if a chip which does auto
+				 * increment is marked as NOAUTOINCR by the
+				 * board driver.
+				 */
+				if (!chip->dev_ready)
+					udelay(chip->chip_delay);
+				else
+					nand_wait_ready(mtd);
+			}
+		} else {
+			memcpy(buf, chip->buffers->databuf + col, bytes);
+			buf += bytes;
+		}
+
+		readlen -= bytes;
+
+		if (!readlen)
+			break;
+
+		/* For subsequent reads align to page boundary. */
+		col = 0;
+		/* Increment page address */
+		realpage++;
+
+		page = realpage & chip->pagemask;
+		/* Check, if we cross a chip boundary */
+		if (!page) {
+			chipnr++;
+			chip->select_chip(mtd, -1);
+			chip->select_chip(mtd, chipnr);
+		}
+
+		/* Check, if the chip supports auto page increment
+		 * or if we have hit a block boundary.
+		 */
+		if (!NAND_CANAUTOINCR(chip) || !(page & blkcheck))
+			sndcmd = 1;
+	}
+
+	ops->retlen = ops->len - (size_t) readlen;
+	if (oob)
+		ops->oobretlen = ops->ooblen - oobreadlen;
+
+	if (ret)
+		return ret;
+
+	if (mtd->ecc_stats.failed - stats.failed)
+		return -EBADMSG;
+
+	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
+}
+
+/**
+ * micron_nand_read - [MTD Interface] MTD compatibility function for nand_do_read_ecc
+ * @mtd:	MTD device structure
+ * @from:	offset to read from
+ * @len:	number of bytes to read
+ * @retlen:	pointer to variable to store the number of read bytes
+ * @buf:	the databuffer to put data
+ *
+ * Get hold of the chip and call nand_do_read
+ */
+static int micron_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
+		     size_t *retlen, uint8_t *buf)
+{
+	struct nand_chip *chip = mtd->priv;
+	int ret;
+
+	/* Do not allow reads past end of device */
+	if ((from + len) > mtd->size)
+		return -EINVAL;
+	if (!len)
+		return 0;
+
+	nand_get_device(chip, mtd, FL_READING);
+
+	chip->ops.len = len;
+	chip->ops.datbuf = buf;
+	chip->ops.oobbuf = NULL;
+
+	ret = micron_nand_do_read_ops(mtd, from, &chip->ops);
+
+	*retlen = chip->ops.retlen;
+
+	nand_release_device(mtd);
+
+	return ret;
+}
+
+/**
+ * micron_nand_do_read_oob - [Intern] NAND read out-of-band
+ * @mtd:	MTD device structure
+ * @from:	offset to read from
+ * @ops:	oob operations description structure
+ *
+ * NAND read out-of-band data from the spare area
+ */
+int micron_nand_do_read_oob(struct mtd_info *mtd, loff_t from,
+			    struct mtd_oob_ops *ops)
+{
+	int page, realpage, chipnr, sndcmd = 1;
+	struct nand_chip *chip = mtd->priv;
+	int blkcheck = (1 << (chip->phys_erase_shift - chip->page_shift)) - 1;
+	int readlen = ops->ooblen;
+	int len;
+	uint8_t *buf = ops->oobbuf;
+
+	DEBUG(MTD_DEBUG_LEVEL3, "%s: from = 0x%08Lx, len = %i\n",
+			__func__, (unsigned long long)from, readlen);
+
+	if (ops->mode == MTD_OOB_AUTO)
+		len = chip->ecc.layout->oobavail;
+	else
+		len = mtd->oobsize;
+
+	if (unlikely(ops->ooboffs >= len)) {
+		DEBUG(MTD_DEBUG_LEVEL0, "%s: Attempt to start read "
+					"outside oob\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Do not allow reads past end of device */
+	if (unlikely(from >= mtd->size ||
+		     ops->ooboffs + readlen > ((mtd->size >> chip->page_shift) -
+					(from >> chip->page_shift)) * len)) {
+		DEBUG(MTD_DEBUG_LEVEL0, "%s: Attempt read beyond end "
+					"of device\n", __func__);
+		return -EINVAL;
+	}
+
+	chipnr = (int)(from >> chip->chip_shift);
+	chip->select_chip(mtd, chipnr);
+
+	/* Shift to get page */
+	realpage = (int)(from >> chip->page_shift);
+	page = realpage & chip->pagemask;
+
+	while (1) {
+		sndcmd = chip->ecc.read_oob(mtd, chip, page, sndcmd);
+
+		len = min(len, readlen);
+		buf = nand_transfer_oob(chip, buf, ops, len);
+
+		if (!(chip->options & NAND_NO_READRDY)) {
+			/*
+			 * Apply delay or wait for ready/busy pin. Do this
+			 * before the AUTOINCR check, so no problems arise if a
+			 * chip which does auto increment is marked as
+			 * NOAUTOINCR by the board driver.
+			 */
+			if (!chip->dev_ready)
+				udelay(chip->chip_delay);
+			else
+				nand_wait_ready(mtd);
+		}
+
+		readlen -= len;
+		if (!readlen)
+			break;
+
+		/* Increment page address */
+		realpage++;
+
+		page = realpage & chip->pagemask;
+		/* Check, if we cross a chip boundary */
+		if (!page) {
+			chipnr++;
+			chip->select_chip(mtd, -1);
+			chip->select_chip(mtd, chipnr);
+		}
+
+		/* Check, if the chip supports auto page increment
+		 * or if we have hit a block boundary.
+		 */
+		if (!NAND_CANAUTOINCR(chip) || !(page & blkcheck))
+			sndcmd = 1;
+	}
+
+	ops->oobretlen = ops->ooblen;
+	return 0;
+}
+
+
+/**
+ * micron_nand_read_oob - [MTD Interface] NAND read data and/or out-of-band
+ * @mtd:	MTD device structure
+ * @from:	offset to read from
+ * @ops:	oob operation description structure
+ *
+ * NAND read data and/or out-of-band data
+ */
+static int micron_nand_read_oob(struct mtd_info *mtd, loff_t from,
+			 struct mtd_oob_ops *ops)
+{
+	struct nand_chip *chip = mtd->priv;
+	int ret = -ENOTSUPP;
+
+	ops->retlen = 0;
+
+	/* Do not allow reads past end of device */
+	if (ops->datbuf && (from + ops->len) > mtd->size) {
+		DEBUG(MTD_DEBUG_LEVEL0, "%s: Attempt read "
+				"beyond end of device\n", __func__);
+		return -EINVAL;
+	}
+
+	nand_get_device(chip, mtd, FL_READING);
+
+	switch (ops->mode) {
+	case MTD_OOB_PLACE:
+	case MTD_OOB_AUTO:
+	case MTD_OOB_RAW:
+		break;
+
+	default:
+		goto out;
+	}
+
+	if (!ops->datbuf)
+		ret = micron_nand_do_read_oob(mtd, from, ops);
+	else
+		ret = micron_nand_do_read_ops(mtd, from, ops);
+
+out:
+	nand_release_device(mtd);
+	return ret;
+}
+
+
+
 static int __devinit omap_nand_probe(struct platform_device *pdev)
 {
 	struct omap_nand_info		*info;
@@ -1045,7 +1367,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		if (err) {
 			dev_err(&pdev->dev, "requesting irq(%d) error:%d",
 							pdata->gpmc_irq, err);
-			goto out_release_mem_region;
+			goto out_unmap;
 		} else {
 			info->gpmc_irq	     = pdata->gpmc_irq;
 			info->nand.read_buf  = omap_read_buf_irq_pref;
@@ -1057,7 +1379,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev,
 			"xfer_type(%d) not supported!\n", pdata->xfer_type);
 		err = -EINVAL;
-		goto out_release_mem_region;
+		goto out_unmap;
 	}
 
 	info->nand.verify_buf = omap_verify_buf;
@@ -1082,8 +1404,21 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		info->nand.options ^= NAND_BUSWIDTH_16;
 		if (nand_scan_ident(&info->mtd, 1, NULL)) {
 			err = -ENXIO;
-			goto out_release_mem_region;
+			goto out_unmap;
 		}
+	}
+
+	if (info->nand.ecc.mode == NAND_ECC_HW_CHIP) {
+		printk("Micron with in-chip ECC found, overriding MTD read/read_oob\n");
+		info->mtd.read = micron_nand_read;
+		info->mtd.read_oob = micron_nand_read_oob;
+		info->ecc_read_buffer = kmalloc(2048 + 64 + sizeof(struct nand_buffers), GFP_KERNEL);
+		if (!info->ecc_read_buffer) {
+			err = -ENOMEM;
+			goto out_unmap;
+		}
+		info->nand.buffers = (void *)info->ecc_read_buffer + 2048 + 64;
+		info->nand.options |= NAND_OWN_BUFFERS;
 	}
 
 	/* rom code layout */
@@ -1112,7 +1447,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	/* second phase scan */
 	if (nand_scan_tail(&info->mtd)) {
 		err = -ENXIO;
-		goto out_release_mem_region;
+		goto out_free_buffers;
 	}
 
 	err = parse_mtd_partitions(&info->mtd, part_probes, &info->parts, 0);
@@ -1127,6 +1462,11 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 
 	return 0;
 
+out_free_buffers:
+	if (info->ecc_read_buffer)
+		kfree(info->ecc_read_buffer);
+out_unmap:
+	iounmap(info->nand.IO_ADDR_R);
 out_release_mem_region:
 	release_mem_region(info->phys_base, NAND_IO_SIZE);
 out_free_info:
@@ -1148,10 +1488,12 @@ static int omap_nand_remove(struct platform_device *pdev)
 	if (info->gpmc_irq)
 		free_irq(info->gpmc_irq, info);
 
+	if (info->ecc_read_buffer)
+		kfree(info->ecc_read_buffer);
 	/* Release NAND device, its internal structures and partitions */
 	nand_release(&info->mtd);
 	iounmap(info->nand.IO_ADDR_R);
-	kfree(&info->mtd);
+	kfree(info);
 	return 0;
 }
 
