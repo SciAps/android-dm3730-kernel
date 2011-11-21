@@ -17,6 +17,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
+#include <linux/mtd/nand_onchip_ecc.h>
 #include <linux/io.h>
 #include <linux/slab.h>
 
@@ -942,6 +943,76 @@ static int omap_dev_ready(struct mtd_info *mtd)
 	return 1;
 }
 
+/* Define NAND_DEBUG_DUMP_ECC_DIFFERENCES to show the differences between
+ * a page read w/ECC and one read w/o ECC; debing only */
+#undef NAND_DEBUG_DUMP_ECC_DIFFERENCES
+
+#ifdef NAND_DEBUG_DUMP_ECC_DIFFERENCES
+static void nand_dump_hex(uint8_t *r_data, uint8_t *e_data, int data_size, uint8_t *r_oob, uint8_t *e_oob, int oob_size)
+{
+	char buf[128], *p;
+	int i;
+
+	p = buf;
+	for (i=0; i<data_size; ++i) {
+		if (i && ((i & 7) == 7)) {
+			printk("%s\n", buf);
+			p = buf;
+		}
+		p += sprintf(p, "%02x%s%02x, ", r_data[i], r_data[i]==e_data[i]?"==":"!=", e_data[i]);
+	}
+	if (p != buf) {
+		printk("%s\n", buf);
+		p = buf;
+	}
+
+	if (r_oob) {
+		for (i=0; i<oob_size; ++i) {
+			if (i && ((i & 7) == 7)) {
+				printk("%s\n", buf);
+				p = buf;
+			}
+			p += sprintf(buf, "%02x%s%02x, ", r_oob[i], r_oob[i]==e_oob[i]?"==":"!=", e_oob[i]);
+		}
+		if (p != buf)
+			printk(buf);
+	}
+}
+#endif
+
+/* Array of byte bit counts; used to count up bit differences
+ * in a page read w/ECC from one read w/o ECC */
+static uint8_t diff_bit_count[256] = {
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+	4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8,
+};
+
+static uint32_t count_diff_bits(uint8_t *a, uint8_t *b, uint32_t size)
+{
+	int total = 0;
+
+	while (size--)
+		total += diff_bit_count[*a ^ *b];
+	return total;
+}
+
+/* debug flag to force ecc check on every page */
+static int force_ecc_check;
+
 /**
  * micron_nand_do_read_ops - [Internal] Read data with ECC
  *
@@ -954,6 +1025,11 @@ static int omap_dev_ready(struct mtd_info *mtd)
 static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 			    struct mtd_oob_ops *ops)
 {
+	struct omap_nand_info *info = container_of(mtd,
+					struct omap_nand_info, mtd);
+	uint32_t differences;
+	int return_state = 0;
+	struct mtd_ecc_stats page_stats, ecc_read_stats;
 	int chipnr, page, realpage, col, bytes, aligned;
 	struct nand_chip *chip = mtd->priv;
 	struct mtd_ecc_stats stats;
@@ -965,7 +1041,7 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	uint32_t max_oobsize = ops->mode == MTD_OOB_AUTO ?
 		mtd->oobavail : mtd->oobsize;
 
-	uint8_t *bufpoi, *oob, *buf;
+	uint8_t *bufpoi, *oob, *new_oob = NULL, *buf;
 
 	stats = mtd->ecc_stats;
 
@@ -987,6 +1063,8 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 		/* Is the current page in the buffer ? */
 		if (realpage != chip->pagebuf || oob) {
 			bufpoi = aligned ? buf : chip->buffers->databuf;
+
+			page_stats = mtd->ecc_stats;
 
 			if (likely(sndcmd)) {
 				chip->cmdfunc(mtd, NAND_CMD_READ0, 0x00, page);
@@ -1014,16 +1092,14 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 				memcpy(buf, chip->buffers->databuf + col, bytes);
 			}
 
-			buf += bytes;
+			new_oob = oob;
 
 			if (unlikely(oob)) {
-
 				int toread = min(oobreadlen, max_oobsize);
 
 				if (toread) {
-					oob = nand_transfer_oob(chip,
+					new_oob = nand_transfer_oob(chip,
 						oob, ops, toread);
-					oobreadlen -= toread;
 				}
 			}
 
@@ -1040,6 +1116,85 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 				else
 					nand_wait_ready(mtd);
 			}
+
+			if (mtd->ecc_stats.failed - page_stats.failed)
+				return_state = -EBADMSG;
+			else if (force_ecc_check || mtd->ecc_stats.corrected - page_stats.corrected) {
+				/* We have to at least declare this page -ESTALE */
+				if (!return_state)
+					return_state = -ESTALE;
+
+				/* Turn off ECC */
+				nand_onchip_enable_ecc(mtd, 0);
+				ecc_read_stats = mtd->ecc_stats;
+				/* Re-send the page command */
+				chip->cmdfunc(mtd, NAND_CMD_READ0, 0x00, page);
+
+				if (unlikely(ops->mode == MTD_OOB_RAW))
+					ret = chip->ecc.read_page_raw(mtd, chip,
+							      info->ecc_read_buffer, page);
+				else if (!aligned && NAND_SUBPAGE_READ(chip) && !oob)
+					ret = chip->ecc.read_subpage(mtd, chip,
+							col, bytes, info->ecc_read_buffer);
+				else
+					ret = chip->ecc.read_page(mtd, chip, info->ecc_read_buffer,
+								page);
+
+				/* Re-enable ECC */
+				nand_onchip_enable_ecc(mtd, 1);
+
+				/* Force sending READ0 on next page */
+				sndcmd = 1;
+
+				if (ret < 0)
+					break;
+
+				/* Count up the differences */
+				differences = count_diff_bits(bufpoi, info->ecc_read_buffer, bytes);
+				if (unlikely(oob)) {
+					int toread = min(oobreadlen, max_oobsize);
+
+					if (toread) {
+						nand_transfer_oob(chip,
+						info->ecc_read_buffer + mtd->writesize, ops, toread);
+					}
+					differences += count_diff_bits(oob, info->ecc_read_buffer + mtd->writesize, toread);
+				}
+				if (differences)
+					printk("%s: differences %d return_state %d\n", __FUNCTION__, differences, return_state);
+				/* If there are more than two-bits (out of four)
+				 * of differences between ECC and non-ECC
+				 * then we want to return -EUCLEAN, unless a
+				 * previous page forces a return of -EBADMSG */
+				if (differences > 2) {
+					if (return_state != -EBADMSG) 
+						return_state = -EUCLEAN;
+#ifdef NAND_DEBUG_DUMP_ECC_DIFFERENCES
+					if (unlikely(oob)) {
+						int toread = min(oobreadlen, max_oobsize);
+						nand_dump_hex(bufpoi, info->ecc_read_buffer, mtd->writesize, oob, info->ecc_read_buffer+mtd->writesize, toread);
+					} else
+						nand_dump_hex(bufpoi, info->ecc_read_buffer, mtd->writesize, NULL, NULL, 0);
+#endif
+				} else if (differences) {
+					/* With at least some differences,
+					 * need to return -ESTALE unless
+					 * a previous page requires either
+					 * -EUCLEAN/-EBADMSG */
+					if (!return_state)
+						return_state = -ESTALE;
+				}
+					
+			}
+			/* Bump the destination pointers forward for
+			 * both data (buf) and OOB (oob - if read) */
+			if (unlikely(oob)) {
+				int toread = min(oobreadlen, max_oobsize);
+				oobreadlen -= toread;
+				oob = new_oob;
+			}
+			buf += bytes;
+
 		} else {
 			memcpy(buf, chip->buffers->databuf + col, bytes);
 			buf += bytes;
@@ -1077,10 +1232,16 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	if (ret)
 		return ret;
 
+#if 1
+	if (return_state)
+		printk("%s: return_state %d\n", __FUNCTION__, return_state);
+	return return_state;
+#else
 	if (mtd->ecc_stats.failed - stats.failed)
 		return -EBADMSG;
 
 	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
+#endif
 }
 
 /**
@@ -1409,15 +1570,16 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	}
 
 	if (info->nand.ecc.mode == NAND_ECC_HW_CHIP) {
+		uint32_t ecc_buffer_size = info->mtd.writesize + info->mtd.oobsize;
 		printk("Micron with in-chip ECC found, overriding MTD read/read_oob\n");
 		info->mtd.read = micron_nand_read;
 		info->mtd.read_oob = micron_nand_read_oob;
-		info->ecc_read_buffer = kmalloc(2048 + 64 + sizeof(struct nand_buffers), GFP_KERNEL);
+		info->ecc_read_buffer = kmalloc(ecc_buffer_size + sizeof(struct nand_buffers), GFP_KERNEL);
 		if (!info->ecc_read_buffer) {
 			err = -ENOMEM;
 			goto out_unmap;
 		}
-		info->nand.buffers = (void *)info->ecc_read_buffer + 2048 + 64;
+		info->nand.buffers = (void *)info->ecc_read_buffer + ecc_buffer_size;
 		info->nand.options |= NAND_OWN_BUFFERS;
 	}
 
