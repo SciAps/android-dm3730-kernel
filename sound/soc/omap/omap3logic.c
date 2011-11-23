@@ -3,7 +3,7 @@
  *
  * Author: Peter Barada <peter.barada@logicpd.com>
  *
- * Based on sound/soc/omap/omap3evm.c by Anuj Aggarwal
+ * Based on sound/soc/omap/omap3beagle.c by Steve Sakoman
  *
  * Copyright (C) 2011 Logic Product Development, Incorporated
  *
@@ -22,7 +22,6 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
-#include <sound/soc-dapm.h>
 
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
@@ -38,26 +37,35 @@ static int omap3logic_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	unsigned int fmt;
 	int ret;
 
-#if 0
+	switch (params_channels(params)) {
+	case 2: /* Stereo I2S mode */
+		fmt =	SND_SOC_DAIFMT_I2S |
+			SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBM_CFM;
+		break;
+	case 4: /* Four channel TDM mode */
+		fmt =	SND_SOC_DAIFMT_DSP_A |
+			SND_SOC_DAIFMT_IB_NF |
+			SND_SOC_DAIFMT_CBM_CFM;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	/* Set codec DAI configuration */
-	ret = snd_soc_dai_set_fmt(codec_dai,
-				  SND_SOC_DAIFMT_I2S |
-				  SND_SOC_DAIFMT_NB_NF |
-				  SND_SOC_DAIFMT_CBM_CFM);
+	ret = snd_soc_dai_set_fmt(codec_dai, fmt);
 	if (ret < 0) {
-		printk(KERN_ERR "Can't set codec DAI configuration\n");
+		printk(KERN_ERR "can't set codec DAI configuration\n");
 		return ret;
 	}
 
 	/* Set cpu DAI configuration */
-	ret = snd_soc_dai_set_fmt(cpu_dai,
-				  SND_SOC_DAIFMT_I2S |
-				  SND_SOC_DAIFMT_NB_NF |
-				  SND_SOC_DAIFMT_CBM_CFM);
+	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
 	if (ret < 0) {
-		printk(KERN_ERR "Can't set cpu DAI configuration\n");
+		printk(KERN_ERR "can't set cpu DAI configuration\n");
 		return ret;
 	}
 
@@ -65,50 +73,10 @@ static int omap3logic_hw_params(struct snd_pcm_substream *substream,
 	ret = snd_soc_dai_set_sysclk(codec_dai, 0, 26000000,
 				     SND_SOC_CLOCK_IN);
 	if (ret < 0) {
-		printk(KERN_ERR "Can't set codec system clock\n");
+		printk(KERN_ERR "can't set codec system clock\n");
 		return ret;
 	}
-#else
-	unsigned int fmt;
 
-    switch (params_channels(params)) {
-    case 2: /* Stereo I2S mode */
-        fmt =   SND_SOC_DAIFMT_I2S |
-            SND_SOC_DAIFMT_NB_NF |
-            SND_SOC_DAIFMT_CBM_CFM;
-        break;
-    case 4: /* Four channel TDM mode */
-        fmt =   SND_SOC_DAIFMT_DSP_A |
-            SND_SOC_DAIFMT_IB_NF |
-            SND_SOC_DAIFMT_CBM_CFM;
-        break;
-    default:
-        return -EINVAL;
-    }   
-
-    /* Set codec DAI configuration */
-    ret = snd_soc_dai_set_fmt(codec_dai, fmt);
-    if (ret < 0) {
-        printk(KERN_ERR "can't set codec DAI configuration\n");
-        return ret;
-    }   
-
-    /* Set cpu DAI configuration */
-    ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
-    if (ret < 0) {
-        printk(KERN_ERR "can't set cpu DAI configuration\n");
-        return ret;
-    }   
-
-    /* Set the codec system clock for DAC and ADC */
-    ret = snd_soc_dai_set_sysclk(codec_dai, 0, 26000000,
-                     SND_SOC_CLOCK_IN);
-    if (ret < 0) {
-        printk(KERN_ERR "can't set codec system clock\n");
-        return ret;
-    }   
-
-#endif
 	return 0;
 }
 
@@ -118,29 +86,22 @@ static struct snd_soc_ops omap3logic_ops = {
 
 /* Digital audio interface glue - connects codec <--> CPU */
 static struct snd_soc_dai_link omap3logic_dai = {
-	.name 		= "TWL4030",
-	.stream_name 	= "TWL4030",
-	.cpu_dai_name 	= "omap-mcbsp-dai.1",
-	.codec_dai_name	= "twl4030-hifi",
-	.codec_name	= "twl4030-codec",
-	.ops 		= &omap3logic_ops,
+	.name = "TWL4030",
+	.stream_name = "TWL4030",
+	.cpu_dai_name = "omap-mcbsp-dai.1",
+	.platform_name = "omap-pcm-audio",
+	.codec_dai_name = "twl4030-hifi",
+	.codec_name = "twl4030-codec",
+	.ops = &omap3logic_ops,
 };
 
 /* Audio machine driver */
 static struct snd_soc_card snd_soc_omap3logic = {
-	.name		= "omap3logic",
-	.owner		= THIS_MODULE,
-	.dai_link	= &omap3logic_dai,
-	.num_links	= 1,
+	.name = "omap3logic",
+	.owner = THIS_MODULE,
+	.dai_link = &omap3logic_dai,
+	.num_links = 1,
 };
-
-/* twl4030 setup */
-/*
-static struct twl4030_setup_data twl4030_setup = {
-	.ramp_delay_value = 4,
-	.sysclk = 26000,
-};
-*/
 
 static struct platform_device *omap3logic_snd_device;
 
@@ -152,7 +113,7 @@ static int __init omap3logic_soc_init(void)
 			|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo())) {
 		return -ENODEV;
 	}
-	pr_info("Omap3logic SoC init\n");
+	pr_info("OMAP3 Logic DM37x/OMAP35x SOM LV/Torpedo SoC init\n");
 
 	omap3logic_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!omap3logic_snd_device) {
@@ -183,6 +144,6 @@ static void __exit omap3logic_soc_exit(void)
 module_init(omap3logic_soc_init);
 module_exit(omap3logic_soc_exit);
 
-MODULE_AUTHOR("Peter Barada <peter.barada@logicpd.com>");
-MODULE_DESCRIPTION("ALSA SoC OMAP3 Logic reference boards");
-MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("Steve Sakoman <steve@sakoman.com>");
+MODULE_DESCRIPTION("ALSA SoC OMAP3 Beagle");
+MODULE_LICENSE("GPL");

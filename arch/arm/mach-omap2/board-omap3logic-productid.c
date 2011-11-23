@@ -999,8 +999,8 @@ static int omap3logic_is_dash_11_module(void)
 	if (!omap3logic_is_product_data_valid())
 		return 0;
 
-	/* Not a SOM, no Murata */
-	if (!machine_is_omap3530_lv_som())
+	/* Not a SOM, no Murata; might need to tweak for Torpedo WiFi */
+	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()))
 		return 0;
 
 	/* If earlier than rev3, it can't be a -11 */
@@ -1064,24 +1064,17 @@ int omap3logic_has_murata_wifi_module(void)
 	static int wilink_found = 0;
 	int i;
 
-	printk("%s:%d\n", __FUNCTION__, __LINE__);
 	/* No valid data, then no WiLink */
-	if (!omap3logic_is_product_data_valid()) {
-		printk("%s:%d no productID data!\n", __FUNCTION__, __LINE__);
+	if (!omap3logic_is_product_data_valid())
 		return 0;
-	}
 
 	/* Not a SOM, no WiLink */
-	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som())) {
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
+	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()))
 		return 0;
-	}
 
 	/* If earlier than rev3, then can't have a WiLink */
-	if (header_version < LOGIC_HEADER_VERSION_3) {
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
+	if (header_version < LOGIC_HEADER_VERSION_3)
 		return 0;
-	}
 
 	if (!wilink_probed) {
 		int val;
@@ -1184,7 +1177,7 @@ int omap3logic_has_isp1760(void)
 		return 0;
 
 	/* If not a SOM, assume its on the baseboard */
-	if (!machine_is_omap3530_lv_som())
+	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()))
 		return 1;
 
 	/* If its a -11 SOM then it uses the internal USB host controller */

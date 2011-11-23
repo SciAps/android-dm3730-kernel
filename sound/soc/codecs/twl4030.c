@@ -34,13 +34,23 @@
 #include <sound/soc.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
+#include <asm/mach-types.h>
+
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+#include <plat/board-omap3logic-audio.h>
+#endif
 
 /* Register descriptions are here */
 #include <linux/mfd/twl4030-codec.h>
 
 /* Shadow register used by the audio driver */
 #define TWL4030_REG_SW_SHADOW		0x4A
-#define TWL4030_CACHEREGNUM	(TWL4030_REG_SW_SHADOW + 1)
+
+/* External mute (gpio-controlled FETs as psqudo register) */
+#define TWL4030_REG_EXT_MUTE		0x50
+
+#define TWL4030_CACHEREGNUM	(TWL4030_REG_EXT_MUTE + 1)
 
 /* TWL4030_REG_SW_SHADOW (0x4A) Fields */
 #define TWL4030_HFL_EN			0x01
@@ -49,7 +59,7 @@
 /*
  * twl4030 register cache & default register settings
  */
-static const u8 twl4030_reg[TWL4030_CACHEREGNUM] = {
+static u8 twl4030_reg[TWL4030_CACHEREGNUM] = {
 	0x00, /* this register not used		*/
 	0x00, /* REG_CODEC_MODE		(0x1)	*/
 	0x00, /* REG_OPTION		(0x2)	*/
@@ -163,10 +173,22 @@ static inline unsigned int twl4030_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u8 *cache = codec->reg_cache;
+	u8 value;
 
 	if (reg >= TWL4030_CACHEREGNUM)
 		return -EIO;
 
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
+		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
+		if (reg == TWL4030_REG_EXT_MUTE)
+			value = twl4030_get_ext_mute();
+		else
+			value = cache[reg];
+		return value;
+	}
+#endif
 	return cache[reg];
 }
 
@@ -180,6 +202,18 @@ static inline void twl4030_write_reg_cache(struct snd_soc_codec *codec,
 
 	if (reg >= TWL4030_CACHEREGNUM)
 		return;
+
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
+		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
+		if (reg == TWL4030_REG_EXT_MUTE)
+			twl4030_set_ext_mute(value);
+		else
+			cache[reg] = value;
+		return;
+	}
+#endif
 	cache[reg] = value;
 }
 
@@ -1203,6 +1237,12 @@ static const struct snd_kcontrol_new twl4030_snd_controls[] = {
 
 	SOC_DOUBLE_TLV_TWL4030("Headset Playback Volume",
 		TWL4030_REG_HS_GAIN_SET, 0, 2, 3, 0, output_tvl),
+
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	SOC_SINGLE("Master Playback Switch",
+		TWL4030_REG_EXT_MUTE, 0, 1, 0),
+#endif
 
 	SOC_DOUBLE_R_TLV_TWL4030("Carkit Playback Volume",
 		TWL4030_REG_PRECKL_CTL, TWL4030_REG_PRECKR_CTL,
@@ -2248,6 +2288,15 @@ static int twl4030_soc_resume(struct snd_soc_codec *codec)
 	twl4030_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	return 0;
 }
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+static int twl4030_mute(struct snd_soc_dai *dai, int mute)
+{
+	twl4030_set_path_mute(!mute);
+
+	return 0;
+}
+#endif
 
 static int twl4030_soc_probe(struct snd_soc_codec *codec)
 {
@@ -2298,14 +2347,31 @@ static struct snd_soc_codec_driver soc_codec_dev_twl4030 = {
 static int __devinit twl4030_codec_probe(struct platform_device *pdev)
 {
 	struct twl4030_codec_audio_data *pdata = pdev->dev.platform_data;
+	int ret;
 
 	if (!pdata) {
 		dev_err(&pdev->dev, "platform_data is missing\n");
 		return -EINVAL;
 	}
 
-	return snd_soc_register_codec(&pdev->dev, &soc_codec_dev_twl4030,
+#if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
+	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
+		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
+
+		/* If the Logic board is new enough then it has mute FETs,
+		 * the mute entry handles either case (i.e. NOP if no FETs) */
+		twl4030_dai_hifi_ops.digital_mute = twl4030_mute;
+
+		twl4030_reg[TWL4030_REG_ANAMICL] = TWL4030_MICAMPL_EN | TWL4030_AUXL_EN;
+		twl4030_reg[TWL4030_REG_ANAMICR] = TWL4030_MICAMPL_EN | TWL4030_AUXL_EN;
+	}
+#endif
+
+	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_twl4030,
 			twl4030_dai, ARRAY_SIZE(twl4030_dai));
+
+	return ret;
 }
 
 static int __devexit twl4030_codec_remove(struct platform_device *pdev)

@@ -795,6 +795,7 @@ static void omap3logic_usb_init(void)
  */
 void omap3logic_init_productid_specifics(void)
 {
+	omap3logic_init_twl_audio();
 }
 
 static void __init omap3logic_init(void)
