@@ -109,7 +109,7 @@ config USB_SUSPEND
 config USB_OTG
 	bool "OTG support"
 	depends on USB && EXPERIMENTAL
-	depends on USB_SUSPEND
+#	depends on USB_SUSPEND
 	default n
 	help
 	  The most notable feature of USB OTG is support for a
