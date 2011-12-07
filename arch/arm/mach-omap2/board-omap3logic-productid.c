@@ -1007,11 +1007,17 @@ static int omap3logic_is_dash_11_module(void)
 	if (header_version < LOGIC_HEADER_VERSION_3)
 		return 0;
 
+#if 1
+	/* Due to error in programming 1017348 (platform bits:bit4 is zero)
+	 * must assume if its a som with a rev3 header version its a -11 */
+	return 1;
+#else
 	/* If platform_bits bit 4 is set its a -11 */
 	if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
 		return 1;
 
 	return 0;
+#endif
 }
 
 
