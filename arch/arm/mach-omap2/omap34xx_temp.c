@@ -154,7 +154,7 @@ static ssize_t show_temp(struct device *dev,
 			struct device_attribute *devattr, char *buf)
 {
 	struct omap34xx_data *data = dev_get_drvdata(dev);
-	u32 temp_val;
+	s32 temp_val;
      
 	omap34xx_update(data);
 
