@@ -1003,21 +1003,21 @@ static int omap3logic_is_dash_11_module(void)
 	if (!(machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som()))
 		return 0;
 
+	/* If a DM3730 SOM LV its effectively a -11 (even though those boards
+	 * currently indicate they are a -10 as the model numbers restarted
+	 * at -10 for the DM37x */
+	if (machine_is_dm3730_som_lv())
+		return 1;
+
 	/* If earlier than rev3, it can't be a -11 */
 	if (header_version < LOGIC_HEADER_VERSION_3)
 		return 0;
 
-#if 1
-	/* Due to error in programming 1017348 (platform bits:bit4 is zero)
-	 * must assume if its a som with a rev3 header version its a -11 */
-	return 1;
-#else
 	/* If platform_bits bit 4 is set its a -11 */
 	if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
 		return 1;
 
 	return 0;
-#endif
 }
 
 
