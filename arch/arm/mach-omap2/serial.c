@@ -369,17 +369,19 @@ static void omap_uart_block_sleep(struct omap_uart_state *uart)
 
 static void omap_uart_allow_sleep(struct omap_uart_state *uart)
 {
-	if (device_may_wakeup(&uart->pdev->dev))
-		omap_uart_enable_wakeup(uart);
-	else
-		omap_uart_disable_wakeup(uart);
+	if (uart->pdev) {
+		if (device_may_wakeup(&uart->pdev->dev))
+			omap_uart_enable_wakeup(uart);
+		else
+			omap_uart_disable_wakeup(uart);
 
-	if (!uart->clocked)
+		if (!uart->clocked)
 		return;
 
-	omap_uart_smart_idle_enable(uart, 1);
-	uart->can_sleep = 1;
-	del_timer(&uart->timer);
+		omap_uart_smart_idle_enable(uart, 1);
+		uart->can_sleep = 1;
+		del_timer(&uart->timer);
+	}
 }
 
 static void omap_uart_idle_timer(unsigned long data)
@@ -478,78 +480,80 @@ static void omap_uart_idle_init(struct omap_uart_state *uart)
 {
 	int ret;
 
-	uart->can_sleep = 0;
-	uart->timeout = DEFAULT_TIMEOUT;
-	setup_timer(&uart->timer, omap_uart_idle_timer,
-		    (unsigned long) uart);
-	if (uart->timeout)
-		mod_timer(&uart->timer, jiffies + uart->timeout);
-	omap_uart_smart_idle_enable(uart, 0);
+	if (uart->pdev) {
+		uart->can_sleep = 0;
+		uart->timeout = DEFAULT_TIMEOUT;
+		setup_timer(&uart->timer, omap_uart_idle_timer,
+			(unsigned long) uart);
+		if (uart->timeout)
+			mod_timer(&uart->timer, jiffies + uart->timeout);
+		omap_uart_smart_idle_enable(uart, 0);
 
-	if (cpu_is_omap34xx() && !cpu_is_ti816x()) {
-		u32 mod = (uart->num > 1) ? OMAP3430_PER_MOD : CORE_MOD;
-		u32 wk_mask = 0;
-		u32 padconf = 0;
+		if (cpu_is_omap34xx() && !cpu_is_ti816x()) {
+			u32 mod = (uart->num > 1) ? OMAP3430_PER_MOD : CORE_MOD;
+			u32 wk_mask = 0;
+			u32 padconf = 0;
 
-		/* XXX These PRM accesses do not belong here */
-		uart->wk_en = OMAP34XX_PRM_REGADDR(mod, PM_WKEN1);
-		uart->wk_st = OMAP34XX_PRM_REGADDR(mod, PM_WKST1);
-		switch (uart->num) {
-		case 0:
-			wk_mask = OMAP3430_ST_UART1_MASK;
-			padconf = 0x182;
-			break;
-		case 1:
-			wk_mask = OMAP3430_ST_UART2_MASK;
-			padconf = 0x17a;
-			break;
-		case 2:
-			wk_mask = OMAP3430_ST_UART3_MASK;
-			padconf = 0x19e;
-			break;
-		case 3:
-			wk_mask = OMAP3630_ST_UART4_MASK;
-			padconf = 0x0d2;
-			break;
-		}
-		uart->wk_mask = wk_mask;
-		uart->padconf = padconf;
-	} else if (cpu_is_omap24xx()) {
-		u32 wk_mask = 0;
-		u32 wk_en = PM_WKEN1, wk_st = PM_WKST1;
+			/* XXX These PRM accesses do not belong here */
+			uart->wk_en = OMAP34XX_PRM_REGADDR(mod, PM_WKEN1);
+			uart->wk_st = OMAP34XX_PRM_REGADDR(mod, PM_WKST1);
+			switch (uart->num) {
+			case 0:
+				wk_mask = OMAP3430_ST_UART1_MASK;
+				padconf = 0x182;
+				break;
+			case 1:
+				wk_mask = OMAP3430_ST_UART2_MASK;
+				padconf = 0x17a;
+				break;
+			case 2:
+				wk_mask = OMAP3430_ST_UART3_MASK;
+				padconf = 0x19e;
+				break;
+			case 3:
+				wk_mask = OMAP3630_ST_UART4_MASK;
+				padconf = 0x0d2;
+				break;
+			}
+			uart->wk_mask = wk_mask;
+			uart->padconf = padconf;
+		} else if (cpu_is_omap24xx()) {
+			u32 wk_mask = 0;
+			u32 wk_en = PM_WKEN1, wk_st = PM_WKST1;
 
-		switch (uart->num) {
-		case 0:
-			wk_mask = OMAP24XX_ST_UART1_MASK;
-			break;
-		case 1:
-			wk_mask = OMAP24XX_ST_UART2_MASK;
-			break;
-		case 2:
-			wk_en = OMAP24XX_PM_WKEN2;
-			wk_st = OMAP24XX_PM_WKST2;
-			wk_mask = OMAP24XX_ST_UART3_MASK;
-			break;
+			switch (uart->num) {
+			case 0:
+				wk_mask = OMAP24XX_ST_UART1_MASK;
+				break;
+			case 1:
+				wk_mask = OMAP24XX_ST_UART2_MASK;
+				break;
+			case 2:
+				wk_en = OMAP24XX_PM_WKEN2;
+				wk_st = OMAP24XX_PM_WKST2;
+				wk_mask = OMAP24XX_ST_UART3_MASK;
+				break;
+			}
+			uart->wk_mask = wk_mask;
+			if (cpu_is_omap2430()) {
+				uart->wk_en = OMAP2430_PRM_REGADDR(CORE_MOD, wk_en);
+				uart->wk_st = OMAP2430_PRM_REGADDR(CORE_MOD, wk_st);
+			} else if (cpu_is_omap2420()) {
+				uart->wk_en = OMAP2420_PRM_REGADDR(CORE_MOD, wk_en);
+				uart->wk_st = OMAP2420_PRM_REGADDR(CORE_MOD, wk_st);
+			}
+		} else {
+			uart->wk_en = NULL;
+			uart->wk_st = NULL;
+			uart->wk_mask = 0;
+			uart->padconf = 0;
 		}
-		uart->wk_mask = wk_mask;
-		if (cpu_is_omap2430()) {
-			uart->wk_en = OMAP2430_PRM_REGADDR(CORE_MOD, wk_en);
-			uart->wk_st = OMAP2430_PRM_REGADDR(CORE_MOD, wk_st);
-		} else if (cpu_is_omap2420()) {
-			uart->wk_en = OMAP2420_PRM_REGADDR(CORE_MOD, wk_en);
-			uart->wk_st = OMAP2420_PRM_REGADDR(CORE_MOD, wk_st);
-		}
-	} else {
-		uart->wk_en = NULL;
-		uart->wk_st = NULL;
-		uart->wk_mask = 0;
-		uart->padconf = 0;
+
+		uart->irqflags |= IRQF_SHARED;
+		ret = request_threaded_irq(uart->irq, NULL, omap_uart_interrupt,
+					IRQF_SHARED, "serial idle", (void *)uart);
+		WARN_ON(ret);
 	}
-
-	uart->irqflags |= IRQF_SHARED;
-	ret = request_threaded_irq(uart->irq, NULL, omap_uart_interrupt,
-				   IRQF_SHARED, "serial idle", (void *)uart);
-	WARN_ON(ret);
 }
 
 void omap_uart_enable_irqs(int enable)
@@ -558,16 +562,18 @@ void omap_uart_enable_irqs(int enable)
 	struct omap_uart_state *uart;
 
 	list_for_each_entry(uart, &uart_list, node) {
-		if (enable) {
-			pm_runtime_put_sync(&uart->pdev->dev);
-			ret = request_threaded_irq(uart->irq, NULL,
-						   omap_uart_interrupt,
-						   IRQF_SHARED,
-						   "serial idle",
-						   (void *)uart);
-		} else {
-			pm_runtime_get_noresume(&uart->pdev->dev);
-			free_irq(uart->irq, (void *)uart);
+		if (uart->pdev) {
+			if (enable) {
+				pm_runtime_put_sync(&uart->pdev->dev);
+				ret = request_threaded_irq(uart->irq, NULL,
+							omap_uart_interrupt,
+							IRQF_SHARED,
+							"serial idle",
+							(void *)uart);
+			} else {
+				pm_runtime_get_noresume(&uart->pdev->dev);
+				free_irq(uart->irq, (void *)uart);
+			}
 		}
 	}
 }
