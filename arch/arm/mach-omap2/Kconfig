@@ -369,6 +369,15 @@ config MACH_OMAP4_PANDA
 	select OMAP_PACKAGE_CBS
 	select REGULATOR_FIXED_VOLTAGE
 
+config DEBUG_SUSPEND_ENTRY
+	depends on ARCH_OMAP3 && DEBUG_FS
+	bool "Capture OMAP PM registers on suspend entry"
+	help
+	  Say Y here to enable code to captur OMAP PM registers on entry
+	  into suspend, availble in debugfs (pm_debug/regusters/on_suspend)
+          on resume.  Used to determine why power/clock domains don't go
+	  idle.
+
 config OMAP3_EMU
 	bool "OMAP3 debugging peripherals"
 	depends on ARCH_OMAP3

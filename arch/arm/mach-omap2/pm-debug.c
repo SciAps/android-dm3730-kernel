@@ -31,6 +31,7 @@
 #include <plat/board.h>
 #include "powerdomain.h"
 #include "clockdomain.h"
+#include <plat/prcm-debug.h>
 #include <plat/dmtimer.h>
 #include <plat/omap-pm.h>
 
@@ -344,7 +345,7 @@ static int pm_dbg_get_regset_size(void)
 	if (regset_size == 0) {
 		int i = 0;
 
-		while (pm_dbg_reg_modules[i].name != NULL) {
+		while (pm_dbg_reg_modules[i].name) {
 			regset_size += pm_dbg_reg_modules[i].high +
 				4 - pm_dbg_reg_modules[i].low;
 			i++;
@@ -375,7 +376,7 @@ static int pm_dbg_show_regs(struct seq_file *s, void *unused)
 
 	i = 0;
 
-	while (pm_dbg_reg_modules[i].name != 0) {
+	while (pm_dbg_reg_modules[i].name) {
 		if (type != pm_dbg_reg_modules[i].type
 			|| offset != pm_dbg_reg_modules[i].offset) {
 			if (regs) {
@@ -431,7 +432,7 @@ static void pm_dbg_regset_store(u32 *ptr)
 
 	i = 0;
 
-	while (pm_dbg_reg_modules[i].name != 0) {
+	while (pm_dbg_reg_modules[i].name) {
 		for (j = pm_dbg_reg_modules[i].low;
 			j <= pm_dbg_reg_modules[i].high; j += 4) {
 			if (pm_dbg_reg_modules[i].type == MOD_CM)
@@ -701,6 +702,304 @@ static int option_set(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(pm_dbg_option_fops, option_get, option_set, "%llu\n");
 
+#ifdef CONFIG_DEBUG_SUSPEND_ENTRY
+#include <asm/cacheflush.h>
+#include <plat/sram.h>
+
+struct omap_pm_debug_register_names pm_debug_reg_names[] = 
+{
+	{ 1, 0x00000000, "CM_FCLKEN_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, CM_FCLKEN) },
+	{ 0, 0x00000000, "CM_CLKEN_PLL_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_CM_CLKEN_PLL) },
+	{ 1, 0x00000001, "CM_IDLEST_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, CM_IDLEST) },
+	{ 1, 0x00000000, "CM_IDLEST_PLL_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_CM_IDLEST_PLL) },
+	{ 0, 0x00000000, "CM_AUTOIDLE_PLL_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, CM_AUTOIDLE2) },
+	{ 1, 0x00000003, "CM_CLKSTCTRL_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, OMAP2_CM_CLKSTCTRL) },
+	{ 0, 0x00000000, "CM_CLKSTST_IVA2",
+	  OMAP34XX_CM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_CM_CLKSTST) },
+
+
+	{ 1, 0x00000003, "CM_CLKSTCTRL_MPU",
+	  OMAP34XX_CM_REGADDR(MPU_MOD, OMAP2_CM_CLKSTCTRL) },
+
+	{ 1, 0x00000000, "CM_FCLKEN1_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_FCLKEN1) },
+	{ 1, 0x00000000, "CM_FCLKEN3_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, OMAP3430ES2_CM_FCLKEN3) },
+	{ 1, 0x00000042, "CM_ICLKEN1_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_ICLKEN1) },
+	{ 0, 0x00000000, "CM_ICLKEN2_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_ICLKEN2) },
+	{ 1, 0x00000000, "CM_ICLKEN3_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_ICLKEN3) },
+	{ 1, 0xffffffbd, "CM_IDLEST1_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_IDLEST1) },
+	{ 1, 0x0000001f, "CM_IDLEST2_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_IDLEST2) },
+	{ 1, 0x0000000d, "CM_IDLEST3_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, OMAP3430_CM_IDLEST3) },
+	{ 1, 0xfffffed9, "CM_AUTOIDLE1_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_AUTOIDLE1) },
+	{ 0, 0x00000000, "CM_AUTOIDLE2_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_AUTOIDLE2) },
+	{ 0, 0x00000000, "CM_AUTOIDLE3_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_AUTOIDLE3) },
+	{ 0, 0x00000000, "CM_CLKSEL_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, CM_CLKSEL) },
+	{ 1, 0x0000003f, "CM_CLKSTCTRL_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, OMAP2_CM_CLKSTCTRL) },
+	{ 0, 0x00000000, "CM_CLKSTST_CORE",
+	  OMAP34XX_CM_REGADDR(CORE_MOD, OMAP3430_CM_CLKSTST) },
+
+
+	{ 1, 0x00000000, "CM_FCLKEN_SGX",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_SGX_MOD, CM_FCLKEN) },
+	{ 1, 0x00000000, "CM_ICLKEN_SGX",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_SGX_MOD, CM_ICLKEN) },
+	{ 1, 0x00000001, "CM_IDLEST_SGX",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_SGX_MOD, CM_IDLEST) },
+
+	{ 1, 0x00000001, "CM_IDLEST_CKGEN",
+	  OMAP34XX_CM_REGADDR(PLL_MOD, CM_IDLEST) },
+	{ 1, 0x00000000, "CM_IDLEST2_CKGEN",
+	  OMAP34XX_CM_REGADDR(PLL_MOD, CM_IDLEST2) },
+
+	{ 1, 0x00000000, "CM_FCLKEN_DSS",
+	  OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, CM_FCLKEN) },
+	{ 1, 0x00000003, "CM_IDLEST_DSS",
+	  OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, CM_IDLEST) },
+	{ 1, 0x00000000, "CM_ICLKEN_DSS",
+	  OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, CM_ICLKEN) },
+	{ 1, 0x00000001, "CM_AUTOIDLE_DSS",
+	  OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, CM_AUTOIDLE) },
+
+	{ 1, 0x00000000, "CM_FCLKEN_CAM",
+	  OMAP34XX_CM_REGADDR(OMAP3430_CAM_MOD, CM_FCLKEN) },
+	{ 1, 0x00000000, "CM_ICLKEN_CAM",
+	  OMAP34XX_CM_REGADDR(OMAP3430_CAM_MOD, CM_ICLKEN) },
+	{ 1, 0x00000001, "CM_IDLEST_CAM",
+	  OMAP34XX_CM_REGADDR(OMAP3430_CAM_MOD, CM_IDLEST) },
+	{ 1, 0x00000001, "CM_AUTOIDLE_CAM",
+	  OMAP34XX_CM_REGADDR(OMAP3430_CAM_MOD, CM_AUTOIDLE) },
+
+	{ 1, 0x00000000, "CM_FCLKEN_PER",
+	  OMAP34XX_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN) },
+	{ 1, 0x0003e000, "CM_ICLKEN_PER",
+	  OMAP34XX_CM_REGADDR(OMAP3430_PER_MOD, CM_ICLKEN) },
+	{ 1, 0x0003ffff, "CM_AUTOIDLE_PER",
+	  OMAP34XX_CM_REGADDR(OMAP3430_PER_MOD, CM_AUTOIDLE) },
+	{ 1, 0x00041fff, "CM_IDLEST_PER",
+	  OMAP34XX_CM_REGADDR(OMAP3430_PER_MOD, CM_IDLEST) },
+
+	{ 1, 0x00000000, "CM_IDLEST_NEON",
+	  OMAP34XX_CM_REGADDR(OMAP3430_NEON_MOD, CM_IDLEST) },
+	{ 1, 0x00000003, "CM_CLKSTCTRL_NEON",
+	  OMAP34XX_CM_REGADDR(OMAP3430_NEON_MOD, OMAP2_CM_CLKSTCTRL) },
+
+
+	{ 1, 0x00000000, "CM_FCLKEN_USBHOST",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, CM_FCLKEN) },
+	{ 1, 0x00000000, "CM_ICLKEN_USBHOST",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, CM_ICLKEN) },
+	{ 1, 0x00000003, "CM_IDLEST_USBHOST",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, CM_IDLEST) },
+	{ 1, 0x00000001, "CM_AUTOIDLE_USBHOST",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, CM_AUTOIDLE) },
+	{ 1, 0x00000003, "CM_CLKSTCTRL_USBHOST",
+	  OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, OMAP2_CM_CLKSTCTRL) },
+
+	{ 0, 0x00000000, "RM_RSTCTRL_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP3_PRM_RSTCTRL_OFFSET) },
+	{ 0, 0x00000000, "RM_RSTST_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP3_PRM_RSTST_OFFSET) },
+	{ 0, 0x00000000, "PM_WKDEP_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, PM_WKDEP) },
+	{ 0, 0x00000000, "PM_PWSTCTRL_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP2_PM_PWSTCTRL) },
+	{ 1, 0x00000555, "PM_PWSTST_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP2_PM_PWSTST) },
+	{ 0, 0x00000000, "PM_PREPWSTST_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_PM_PREPWSTST) },
+	{ 0, 0x00000000, "PRM_IRQSTATUS_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_PRM_IRQSTATUS_IVA2) },
+	{ 0, 0x00000000, "PRM_IRQENABLE_IVA2",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_IVA2_MOD, OMAP3430_PRM_IRQENABLE_IVA2) },
+
+	{ 0, 0x00000000, "RM_RSTST_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3_PRM_RSTST_OFFSET) },
+	{ 0, 0x00000000, "PM_WKEN1_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, PM_WKEN1) },
+	{ 0, 0x00000000, "PM_MPUGRPSEL1_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430_PM_MPUGRPSEL) },
+	{ 0, 0x00000000, "PM_IVA2GRPSEL1_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430_PM_IVAGRPSEL) },
+	{ 1, 0x00000000, "PM_WKST1_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, PM_WKST1) },
+	{ 1, 0x00000000, "PM_WKST3_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430ES2_PM_WKST3) },
+	{ 0, 0x00000000, "PM_PWSTCTRL_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP2_PM_PWSTCTRL) },
+	{ 0, 0x00000000, "PM_PWSTST_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP2_PM_PWSTST) },
+	{ 0, 0x00000000, "PM_PREPWSTST_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430_PM_PREPWSTST) },
+	{ 0, 0x00000000, "PM_WKEN3_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430ES2_PM_WKEN3) },
+	{ 0, 0x00000000, "PM_IVA2GRPSEL3_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430ES2_PM_IVAGRPSEL3) },
+	{ 0, 0x00000000, "PM_MPUGRPSEL3_CORE",
+	  OMAP34XX_PRM_REGADDR(CORE_MOD, OMAP3430ES2_PM_MPUGRPSEL3) },
+
+	{ 1, 0x00000000, "PM_PWSTST_SGX",
+	  OMAP34XX_PRM_REGADDR(OMAP3430ES2_SGX_MOD, OMAP2_PM_PWSTST) },
+
+	{ 0, 0x00000000, "PM_WKEN_WKUP",
+	  OMAP34XX_PRM_REGADDR(WKUP_MOD, PM_WKEN) },
+	{ 1, 0x00010000, "PM_WKST_WKUP",
+	  OMAP34XX_PRM_REGADDR(WKUP_MOD, PM_WKST) },
+
+	{ 1, 0x00000001, "PM_PWSTST_DSS",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_DSS_MOD, OMAP2_PM_PWSTST) },
+
+	{ 1, 0x00000001, "PM_PWSTST_CAM",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_CAM_MOD, OMAP2_PM_PWSTST) },
+
+	{ 1, 0x00000007, "PM_PWSTST_PER",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_PER_MOD, OMAP2_PM_PWSTST) },
+	{ 1, 0x00000000, "PM_WKST_PER",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_PER_MOD, PM_WKST) },
+	{ 1, 0x00000003, "PM_PWSTST_NEON",
+	  OMAP34XX_PRM_REGADDR(OMAP3430_NEON_MOD, OMAP2_PM_PWSTST) },
+
+	{ 1, 0x00000000, "PM_WKST_USBHOST",
+	  OMAP34XX_PRM_REGADDR(OMAP3430ES2_USBHOST_MOD, PM_WKST) },
+	{ 1, 0x00000001, "PM_PWSTST_USBHOST",
+	  OMAP34XX_PRM_REGADDR(OMAP3430ES2_USBHOST_MOD, OMAP2_PM_PWSTST) },
+
+};
+
+/* Ptr to structure in SRAM holding PM register just before wfi instruction */
+struct omap_pm_debug_sram_registers *_omap34xx_sram_dbg_suspend_struct;
+
+void pm_debug_suspend_entry_init(void **dbg_sram_ptr)
+{
+	int i, size;
+	int nelems;
+
+	size = offsetof(struct omap_pm_debug_sram_registers, regs);
+	nelems = ARRAY_SIZE(pm_debug_reg_names);
+	/* Debug registers in sram have NULL terminator (hence nelems+1) */
+	size += (nelems+1) * sizeof(struct omap_pm_debug_sram_register);
+
+	_omap34xx_sram_dbg_suspend_struct = omap_sram_push_address(size);
+	memset(_omap34xx_sram_dbg_suspend_struct, 0, size);
+
+	/* Copy in v_ptrs into sram structure */
+	for (i=0; i<nelems; ++i) {
+		_omap34xx_sram_dbg_suspend_struct->regs[i].v_ptr =
+			pm_debug_reg_names[i].v_ptr;
+	}
+
+	/* Flush out of caches into SRAM */
+	flush_icache_range((unsigned long)_omap34xx_sram_dbg_suspend_struct, size);
+	*dbg_sram_ptr = _omap34xx_sram_dbg_suspend_struct;
+}
+
+static void suspend_dbg_reg_show_addr(struct seq_file *s)
+{
+	int i;
+	void *phys;
+	struct omap_pm_debug_register_names *name;
+
+	seq_printf(s, "%-8s %-20s    %-8s\n", "PhysAddr", "Register Name", "Expected");
+	for (i=0; i<ARRAY_SIZE(pm_debug_reg_names); ++i) {
+		name = &pm_debug_reg_names[i];
+		phys = OMAP2_L4_IO_PA(name->v_ptr);
+		if (name->have_expected_value)
+			seq_printf(s, "%p %-20s ?= %08x\n", phys, name->name, name->expected_value);
+		else
+			seq_printf(s, "%p %-20s ?\n", phys, name->name);
+	}
+}
+
+static int suspend_dbg_reg_show_values(struct seq_file *s)
+{
+	struct omap_pm_debug_sram_register *sram;
+	struct omap_pm_debug_register_names *name;
+	int i;
+	void *phys;
+
+	if (!_omap34xx_sram_dbg_suspend_struct->valid)
+		return 0;
+
+	sram = _omap34xx_sram_dbg_suspend_struct->regs;
+	if (sram->v_ptr)
+		seq_printf(s, "%-8s %-20s %-8s    %-8s\n", "PhysAddr", "Register Name", "Value", "Expected");
+	while (sram->v_ptr) {
+		phys = OMAP2_L4_IO_PA(sram->v_ptr);
+		for (i=0; i<ARRAY_SIZE(pm_debug_reg_names); ++i) {
+			name = &pm_debug_reg_names[i];
+			if (sram->v_ptr == name->v_ptr) {
+				if (name->have_expected_value) {
+					if (sram->value == name->expected_value)
+						seq_printf(s, "%p %-20s %08x\n", phys, name->name, sram->value);
+					else
+						seq_printf(s, "%p %-20s %08x != %08x\n", phys, name->name, sram->value, name->expected_value);
+				} else {
+					seq_printf(s, "%p %-20s %08x?\n", phys, name->name, sram->value);
+				}
+
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(pm_debug_reg_names)) {
+			char buf[32];
+			sprintf(buf, "*(int *)0x%p", phys);
+			seq_printf(s, "%-20s %08x\n", buf, sram->value);
+		}
+		sram++;
+	}
+	return 0;
+}
+
+static int suspend_dbg_reg_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "Suspend Entry Debug Struct: %p\n", _omap34xx_sram_dbg_suspend_struct);
+	if (!_omap34xx_sram_dbg_suspend_struct->valid)
+		suspend_dbg_reg_show_addr(s);
+	else
+		suspend_dbg_reg_show_values(s);
+	return 0;
+}
+
+static int suspend_dbg_reg_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, suspend_dbg_reg_show, inode->i_private);
+}
+
+static const struct file_operations suspend_dbg_fops = {
+	.open           = suspend_dbg_reg_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+
+static void __init omap_dbg_suspend_init(struct dentry *d)
+{
+	(void) debugfs_create_file("on_suspend", S_IRUGO,
+				d, NULL, &suspend_dbg_fops);
+}
+#else
+static void __init omap_dbg_suspend_init(struct dentry *d)
+{
+}
+#endif
+
 static int pm_dbg_init(void)
 {
 	int i;
@@ -752,6 +1051,9 @@ static int pm_dbg_init(void)
 	(void) debugfs_create_file("wakeup_timer_milliseconds",
 			S_IRUGO | S_IWUSR, d, &wakeup_timer_milliseconds,
 			&pm_dbg_option_fops);
+
+	omap_dbg_suspend_init(pm_dbg_dir);
+
 	pm_dbg_init_done = 1;
 
 	return 0;

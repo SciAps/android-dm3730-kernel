@@ -37,6 +37,7 @@
 #include <plat/serial.h>
 #include <plat/sdrc.h>
 #include <plat/prcm.h>
+#include <plat/prcm-debug.h>
 #include <plat/gpmc.h>
 #include <plat/dma.h>
 
@@ -859,6 +860,14 @@ void omap_push_sram_idle(void)
 	if (omap_type() != OMAP2_DEVICE_TYPE_GP)
 		_omap_save_secure_sram = omap_sram_push(save_secure_ram_context,
 				save_secure_ram_context_sz);
+
+#ifdef CONFIG_DEBUG_SUSPEND_ENTRY
+	/* push the debug suspend_entry structure into SRAM, and update
+	 * the omap34xx_sram_dbg_suspend_struct_ptr in SRAM (its address is
+	 * the arg to pm_debug_suspend_entry_init() */
+	pm_debug_suspend_entry_init((void *)_omap_sram_idle
+				+ omap34xx_sram_dbg_suspend_struct_offset);
+#endif
 }
 
 static void __init pm_errata_configure(void)

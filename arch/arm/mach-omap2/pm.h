@@ -140,4 +140,9 @@ static inline int omap4_twl_init(void)
 }
 #endif
 
+#ifdef CONFIG_DEBUG_SUSPEND_ENTRY
+/* Offset from omap34xx_cpu_suspend to OMAP34xx_sram_dbg_suspend_struct_ptr */
+extern int omap34xx_sram_dbg_suspend_struct_offset;
+#endif
+
 #endif
