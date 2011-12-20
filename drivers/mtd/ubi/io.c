@@ -175,7 +175,7 @@ retry:
 	if (err) {
 		const char *errstr = (err == -EBADMSG) ? " (ECC error)" : "";
 
-		if (err == -EUCLEAN || err = -ESTALE) {
+		if (err == -EUCLEAN || err == -ESTALE) {
 			/*
 			 * -EUCLEAN/-ESTALE is reported if there was a bit-flip which
 			 * was corrected, so this is harmless.
