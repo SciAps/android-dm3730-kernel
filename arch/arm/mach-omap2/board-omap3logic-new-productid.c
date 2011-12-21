@@ -29,7 +29,7 @@
 #include "control.h"
 #include <plat/sram.h>
 
-#include <plat/omap3logic-productid.h>
+#include <plat/omap3logic-new-productid.h>
 #include "mux.h"
 
 #undef DEBUG
@@ -189,8 +189,10 @@ struct id_key {
 static unsigned char id_fetch_byte(int offset, int *oor)
 {
 	unsigned char *p = sram_get_base_va();
-	if (offset < (32<<10))
+	if (offset < (32<<10)) {
+		*oor = ID_EOK;
 		return p[offset];
+	}
 
 	*oor = -ID_ERANGE;
 	return 0;
@@ -803,6 +805,13 @@ static int id_find_numbers(struct id_cookie *cookie, id_keys_t *keys, int key_si
 	return ID_EOK;
 }
 
+/* --------------------------------------------------------- */
+
+/*
+ * Here down is the code to interface tothe kernel to extract product
+ * ID information from the SRAM/AT24 chip.
+ */
+
 struct id_data id_data;
 static int found_id_data;
 
@@ -958,4 +967,12 @@ int logic_has_new_product_id(void)
 		}
 	}
 	return found_id_data;
+}
+
+int omap3logic_fetch_sram_new_product_id_data(void)
+{
+	if (!logic_has_new_product_id())
+		return -ENOENT;
+
+	return logic_dump_serialization_info();
 }

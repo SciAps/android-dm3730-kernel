@@ -55,6 +55,7 @@
 
 #include <plat/board-omap3logic.h>
 #include <plat/board-omap3logic-display.h>
+#include <plat/omap3logic-new-productid.h>
 #include <plat/omap3logic-productid.h>
 // #include "board-omap3logic.h"
 
@@ -604,7 +605,11 @@ static void __init board_mmc_init(void)
 	}
 
 	/* Check the SRAM for valid product_id data(put there by u-boot). */
-	omap3logic_fetch_sram_product_id_data();
+	ret = omap3logic_fetch_sram_new_product_id_data();
+	if (ret)
+		ret = omap3logic_fetch_sram_product_id_data();
+	if (ret)
+		printk(KERN_ERR "No valid product ID data found in SRAM\n");
 
 	ret = board_wl12xx_init();
 	if (ret) {

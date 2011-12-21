@@ -675,7 +675,7 @@ void valid_data_extract_dump(struct product_id_data *p)
 }
 
 /* Check the product data passed in from u-boot at the start of SRAM. */
-void omap3logic_fetch_sram_product_id_data(void)
+int omap3logic_fetch_sram_product_id_data(void)
 {
 	struct product_id_data *p;
 	unsigned int checksum;
@@ -692,13 +692,13 @@ void omap3logic_fetch_sram_product_id_data(void)
 
 	if (checksum != product_id_data.checksum) {
 		printk(KERN_INFO "U-boot provided product_id data is invalid\n");
-		return;
+		return -1;
 	}
 
 	/* If the header doesn't match, we can't map any of the data */
 	if (omap3logic_extract_header_version(&product_id_data, &header_version)) {
 		printk(KERN_ERR "U-boot provided product_id data has invalid header version %d!\n", header_version);
-		return;
+		return -1;
 	}
 
 	printk(KERN_INFO "U-boot provided product_id data is valid\n");
@@ -710,6 +710,8 @@ void omap3logic_fetch_sram_product_id_data(void)
 	/* If the data is not valid, then later fetch_product_data()
 	 * is invoked(after the twl4030 comes up) and it will fetch
 	 * the data for us. */
+
+	return 0;
 }
 
 
