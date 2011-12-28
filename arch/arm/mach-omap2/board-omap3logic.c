@@ -1,4 +1,3 @@
-
 /*
  * linux/arch/arm/mach-omap2/board-omap3logic.c
  *
@@ -57,6 +56,7 @@
 #include <plat/board-omap3logic-display.h>
 #include <plat/omap3logic-new-productid.h>
 #include <plat/omap3logic-productid.h>
+#include <plat/omap3logic-cf.h>
 // #include "board-omap3logic.h"
 
 #define OMAP3LOGIC_SMSC911X_CS			1
@@ -794,6 +794,101 @@ static void omap3logic_usb_init(void)
 		omap3logic_init_isp1763();
 }
 
+#if defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH) || defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH_MODULE)
+
+#define DM3730_SOM_LV_CF_RESET_GPIO 6
+#define DM3730_SOM_LV_CF_EN_GPIO 128
+#define DM3730_SOM_LV_CF_CD_GPIO 154
+
+static struct resource omap3logic_som_lv_cf_resources[] = {
+	[0] = {
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = OMAP_GPIO_IRQ(DM3730_SOM_LV_CF_CD_GPIO),
+		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_LOWLEVEL,
+	},
+};
+
+static struct omap3logic_cf_data cf_data = {
+	.gpio_reset = DM3730_SOM_LV_CF_RESET_GPIO,
+	.gpio_en = DM3730_SOM_LV_CF_EN_GPIO,
+	.gpio_cd = DM3730_SOM_LV_CF_CD_GPIO,
+};
+
+static struct platform_device omap3logic_som_lv_cf = {
+	.name		= "omap3logic-cf",
+	.id		= 0,
+	.dev		= {
+		.platform_data	= &cf_data,
+	},
+	.num_resources = ARRAY_SIZE(omap3logic_som_lv_cf_resources),
+	.resource = omap3logic_som_lv_cf_resources,
+};
+
+void omap3logic_cf_init(void)
+{
+	unsigned long cs_mem_base;
+	int result;
+
+	/* Only the LV SOM SDK has a CF interface */
+	if (!machine_is_dm3730_som_lv())
+		return;
+
+	/* Fix PBIAS to get USIM enough voltage to power up */
+	omap3torpedo_fix_pbias_voltage();
+
+	if (gpmc_cs_request(3, SZ_16M, &cs_mem_base) < 0) {
+		printk(KERN_ERR "Failed to request GPMC mem for CF\n");
+		return;
+	}
+
+	omap3logic_som_lv_cf_resources[0].start = cs_mem_base;
+	omap3logic_som_lv_cf_resources[0].end = cs_mem_base + 0x1fff;
+	
+	omap_mux_init_signal("gpmc_ncs3", OMAP_PIN_OUTPUT);
+	omap_mux_init_signal("gpmc_io_dir", OMAP_PIN_OUTPUT);
+
+	omap_mux_init_gpio(DM3730_SOM_LV_CF_CD_GPIO, OMAP_PIN_INPUT_PULLUP);
+	if (gpio_request(DM3730_SOM_LV_CF_CD_GPIO, "CF card detect") < 0) {
+		printk(KERN_ERR "Failed to request GPIO%d for CompactFlash CD IRQ\n",
+		DM3730_SOM_LV_CF_CD_GPIO);
+		return;
+	}
+	gpio_set_debounce(DM3730_SOM_LV_CF_CD_GPIO, 0xa);
+	gpio_direction_input(DM3730_SOM_LV_CF_CD_GPIO);
+	gpio_export(DM3730_SOM_LV_CF_CD_GPIO, 0);
+
+	// Setup ComapctFlash Enable pin
+	omap_mux_init_gpio(DM3730_SOM_LV_CF_EN_GPIO, OMAP_PIN_OUTPUT);
+	if (gpio_request(DM3730_SOM_LV_CF_EN_GPIO, "CF enable") < 0) {
+		printk(KERN_ERR "Failed to request GPIO%d for CompactFlash EN\n",
+		DM3730_SOM_LV_CF_EN_GPIO);
+		return;
+	}
+	gpio_direction_output(DM3730_SOM_LV_CF_EN_GPIO, 0);
+	gpio_export(DM3730_SOM_LV_CF_EN_GPIO, 0);
+
+	// Setup ComapctFlash Reset pin
+	omap_mux_init_gpio(DM3730_SOM_LV_CF_RESET_GPIO, OMAP_PIN_OUTPUT);
+	if (gpio_request(DM3730_SOM_LV_CF_RESET_GPIO, "CF reset") < 0) {
+		printk(KERN_ERR "Failed to request GPIO%d for CompactFlash Reset\n",
+		DM3730_SOM_LV_CF_RESET_GPIO);
+		return;
+	}
+	gpio_direction_output(DM3730_SOM_LV_CF_RESET_GPIO, 0);
+	gpio_export(DM3730_SOM_LV_CF_RESET_GPIO, 0);
+
+	result = platform_device_register(&omap3logic_som_lv_cf);
+	if (result)
+		printk("%s: platform device register of CompactFlash device failed: %d\n", __FUNCTION__, result);
+}
+#else
+static void omap3logic_cf_init(void)
+{
+}
+#endif
+
 /* Code that is invoked only after
  * the product ID data has been found; used for finer-grain
  * board configuration
@@ -880,6 +975,9 @@ static void __init omap3logic_init(void)
 
 	/* Initialise OTG MUSB port */
 	omap3logic_musb_init();
+
+	/* Initialise ComapctFlash */
+	omap3logic_cf_init();
 
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
