@@ -623,13 +623,13 @@ int omap3logic_extract_lan_ethaddr(u8 *ethaddr)
 EXPORT_SYMBOL(omap3logic_extract_lan_ethaddr);
 
 /* Extract the WiFi ethaddr, and return !0 if its valid */
-int omap3logic_extract_wifi_ethaddr(u8 *ethaddr)
+int omap3logic_extract_old_wifi_ethaddr(u8 *ethaddr)
 {
 	int ret;
 	ret = extract_product_id_mac_address(&product_id_data, 1, ethaddr);
 	return !ret;
 }
-EXPORT_SYMBOL(omap3logic_extract_wifi_ethaddr);
+EXPORT_SYMBOL(omap3logic_extract_old_wifi_ethaddr);
 
 extern int omap3logic_has_murata_wifi_module(void);
 
@@ -758,7 +758,7 @@ static int fetch_product_id_data(void)
 	checksum = calculate_product_id_checksum(&product_id_data.d, sizeof(product_id_data.d));
 
 	if (checksum != product_id_data.checksum) {
-		printk(KERN_INFO "Production Data is invalid\n");
+		printk(KERN_INFO "Production Data (old format) is invalid\n");
 		err = -2;
 		goto out;
 	}
@@ -770,7 +770,7 @@ static int fetch_product_id_data(void)
 		goto out;
 	}
 
-	printk(KERN_INFO "Production Data is valid\n");
+	printk(KERN_INFO "Production Data (old format) is valid\n");
 
 	valid_data_extract_dump(&product_id_data);
 
@@ -853,7 +853,7 @@ ssize_t product_id_show_zone2_data(struct class *class, struct class_attribute *
 	struct product_id_data *p = &product_id_data;
 
 	if (!omap3logic_is_product_data_valid()) {
-		len = sprintf(buf, "Product ID data is invalid\n");
+		len = sprintf(buf, "Product ID data (old format) is invalid\n");
 		return len;
 	}
 

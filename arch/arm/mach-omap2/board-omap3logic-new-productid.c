@@ -971,8 +971,19 @@ int logic_has_new_product_id(void)
 
 int omap3logic_fetch_sram_new_product_id_data(void)
 {
-	if (!logic_has_new_product_id())
+	if (!logic_has_new_product_id()) {
+		printk(KERN_INFO "U-boot provided product_id data (new format) is invalid\n");
 		return -ENOENT;
+	}
+
+	printk(KERN_INFO "U-boot Production Data (new format) is valid\n");
 
 	return logic_dump_serialization_info();
 }
+
+/* Extract the WiFi ethaddr, and return !0 if its valid */
+int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr)
+{
+	return 0;
+}
+
