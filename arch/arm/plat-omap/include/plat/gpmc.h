@@ -94,6 +94,8 @@ enum omap_ecc {
 	OMAP_ECC_HAMMING_CODE_HW, /* gpmc to detect the error */
 		/* 1-bit ecc: stored at beginning of spare area as romcode */
 	OMAP_ECC_HAMMING_CODE_HW_ROMCODE, /* gpmc method & romcode layout */
+	OMAP_ECC_BCH,			  /* BCH 4-bit method & layout */
+	OMAP_ECC_BCH_NEW_MICRON = 0x100,	/* Use BCH on new Micron */
 };
 
 /*

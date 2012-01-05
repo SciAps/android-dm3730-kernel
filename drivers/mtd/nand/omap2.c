@@ -1428,6 +1428,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	struct omap_nand_platform_data	*pdata;
 	int				err;
 	int				i, offset;
+	int				ecc_opt;
 
 	pdata = pdev->dev.platform_data;
 	if (pdata == NULL) {
@@ -1546,16 +1547,21 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	info->nand.verify_buf = omap_verify_buf;
 
 	/* selsect the ecc type */
-	if (pdata->ecc_opt == OMAP_ECC_HAMMING_CODE_DEFAULT)
+	ecc_opt = pdata->ecc_opt & ~OMAP_ECC_BCH_NEW_MICRON;
+	if (ecc_opt == OMAP_ECC_HAMMING_CODE_DEFAULT)
 		info->nand.ecc.mode = NAND_ECC_SOFT;
-	else if ((pdata->ecc_opt == OMAP_ECC_HAMMING_CODE_HW) ||
-		(pdata->ecc_opt == OMAP_ECC_HAMMING_CODE_HW_ROMCODE)) {
+	else if ((ecc_opt == OMAP_ECC_HAMMING_CODE_HW) ||
+		(ecc_opt == OMAP_ECC_HAMMING_CODE_HW_ROMCODE)) {
 		info->nand.ecc.bytes            = 3;
 		info->nand.ecc.size             = 512;
 		info->nand.ecc.calculate        = omap_calculate_ecc;
 		info->nand.ecc.hwctl            = omap_enable_hwecc;
 		info->nand.ecc.correct          = omap_correct_data;
 		info->nand.ecc.mode             = NAND_ECC_HW;
+#ifdef CONFIG_MTD_NAND_ECC_BCH
+		if (pdata->ecc_opt & OMAP_ECC_BCH_NEW_MICRON)
+			info->nand.ecc.mode = NAND_ECC_HW_BCH;
+#endif
 	}
 
 	/* DIP switches on some boards change between 8 and 16 bit

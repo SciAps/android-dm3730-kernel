@@ -21,7 +21,7 @@ config MTD_DEBUG
 config MTD_DEBUG_VERBOSE
 	int "Debugging verbosity (0 = quiet, 3 = noisy)"
 	depends on MTD_DEBUG
-	default "0"
+#	default "0"
 	help
 	  Determines the verbosity level of the MTD debugging messages.
 

@@ -358,18 +358,24 @@ void mtd_erase_callback(struct erase_info *instr);
 /*
  * Debugging macro and defines
  */
+
 #define MTD_DEBUG_LEVEL0	(0)	/* Quiet   */
 #define MTD_DEBUG_LEVEL1	(1)	/* Audible */
 #define MTD_DEBUG_LEVEL2	(2)	/* Loud    */
 #define MTD_DEBUG_LEVEL3	(3)	/* Noisy   */
+#define MTD_DEBUG_LEVEL4	(3)	/* Noisy   */
 
 #ifdef CONFIG_MTD_DEBUG
+#define MTD_DEBUG_FLAG_SET(flag) (mtd_debug_verbose & (1 << (flag)))
+extern int mtd_debug_verbose;
 #define DEBUG(n, args...)				\
 	do {						\
-		if (n <= CONFIG_MTD_DEBUG_VERBOSE)	\
+		if (MTD_DEBUG_FLAG_SET(n))		\
 			printk(KERN_INFO args);		\
-	} while(0)
+ 	} while(0)
 #else /* CONFIG_MTD_DEBUG */
+#define MTD_DEBUG_LEVEL_SET(level) 0
+#define MTD_DEBUG_FLAG_SET(level) 0
 #define DEBUG(n, args...)				\
 	do {						\
 		if (0)					\

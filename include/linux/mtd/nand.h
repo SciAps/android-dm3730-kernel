@@ -138,6 +138,7 @@ typedef enum {
 	NAND_ECC_NONE,
 	NAND_ECC_SOFT,
 	NAND_ECC_HW,
+	NAND_ECC_HW_BCH,	/* If a new Micron use BCH instead of ECC_HW */
 	NAND_ECC_HW_SYNDROME,
 	NAND_ECC_HW_OOB_FIRST,
 	NAND_ECC_HW_CHIP,	/* ECC hardware on NAND chip */

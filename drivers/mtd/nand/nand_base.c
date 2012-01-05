@@ -3209,8 +3209,21 @@ ident_done:
 		chip->erase_cmd = single_erase_cmd;
 
 	/* Check for Micron chips with on chip hardware ECC */
-	if ((*maf_id == NAND_MFR_MICRON) && id_data[4] & 0x03)
-		chip->ecc.mode = NAND_ECC_HW_CHIP;
+	if ((*maf_id == NAND_MFR_MICRON) && id_data[4] & 0x03) {
+		/* If the ECC mode is NAND_ECC_HW_BCH, then use the BCH
+		 * ECC method - and disable any on-chip ECC. */
+		if (chip->ecc.mode == NAND_ECC_HW_BCH) {
+			/* Want to use BCH for Micron w/internal ECC */
+			chip->ecc.mode = NAND_ECC_SOFT_BCH;
+			/* disable on-chip ECC (since BCH done in software) */
+			nand_onchip_enable_ecc(mtd, 0);
+			/* Clear out any ECC definitions to allow bch_init
+			 * to compute ECC size/layout */
+			chip->ecc.bytes = 0;
+			chip->ecc.size = 0;
+		} else
+			chip->ecc.mode = NAND_ECC_HW_CHIP;
+	}
 
 	/* Do not replace user supplied command function ! */
 	if (mtd->writesize > 512 && chip->cmdfunc == nand_command)
@@ -3338,6 +3351,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 
 	switch (chip->ecc.mode) {
 	case NAND_ECC_HW_OOB_FIRST:
+		printk(KERN_INFO "NAND ECC: HW_OOB_FIRST\n");
 		/* Similar to NAND_ECC_HW, but a separate read_page handle */
 		if (!chip->ecc.calculate || !chip->ecc.correct ||
 		     !chip->ecc.hwctl) {
@@ -3349,6 +3363,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 			chip->ecc.read_page = nand_read_page_hwecc_oob_first;
 
 	case NAND_ECC_HW:
+		printk(KERN_INFO "NAND ECC: HW\n");
 		/* Use standard hwecc read page function ? */
 		if (!chip->ecc.read_page)
 			chip->ecc.read_page = nand_read_page_hwecc;
@@ -3364,6 +3379,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 			chip->ecc.write_oob = nand_write_oob_std;
 
 	case NAND_ECC_HW_SYNDROME:
+		printk(KERN_INFO "NAND ECC: HW_SYNCROME\n");
 		if ((!chip->ecc.calculate || !chip->ecc.correct ||
 		     !chip->ecc.hwctl) &&
 		    (!chip->ecc.read_page ||
@@ -3396,6 +3412,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 		chip->ecc.mode = NAND_ECC_SOFT;
 
 	case NAND_ECC_SOFT:
+		printk(KERN_INFO "NAND ECC: SOFT\n");
 		chip->ecc.calculate = nand_calculate_ecc;
 		chip->ecc.correct = nand_correct_data;
 		chip->ecc.read_page = nand_read_page_swecc;
@@ -3411,6 +3428,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 		break;
 
 	case NAND_ECC_SOFT_BCH:
+		printk(KERN_INFO "NAND ECC: SOFT_BCH\n");
 		if (!mtd_nand_has_bch()) {
 			printk(KERN_WARNING "CONFIG_MTD_ECC_BCH not enabled\n");
 			BUG();
@@ -3445,6 +3463,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 		break;
 
 	case NAND_ECC_HW_CHIP:
+		printk(KERN_INFO "NAND ECC: HW_CHIP\n");
 		chip->ecc.bytes = 0;
 		chip->ecc.size = 2048;
 		chip->ecc.layout = &hw_micron_oob_64;

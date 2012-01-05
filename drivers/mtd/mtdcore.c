@@ -41,6 +41,11 @@
 #include <linux/mtd/partitions.h>
 
 #include "mtdcore.h"
+
+#ifdef CONFIG_MTD_DEBUG
+int mtd_debug_verbose = CONFIG_MTD_DEBUG_VERBOSE;
+#endif
+
 /*
  * backing device capabilities for non-mappable devices (such as NAND flash)
  * - permits private mappings, copies are taken of the data
@@ -739,6 +744,9 @@ EXPORT_SYMBOL_GPL(mtd_kmalloc_up_to);
 /* Support for /proc/mtd */
 
 static struct proc_dir_entry *proc_mtd;
+#ifdef CONFIG_MTD_DEBUG
+static struct proc_dir_entry *proc_mtd_debug;
+#endif
 
 static int mtd_proc_show(struct seq_file *m, void *v)
 {
@@ -766,6 +774,25 @@ static const struct file_operations mtd_proc_ops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+
+#ifdef CONFIG_MTD_DEBUG
+static int mtd_debug_read_proc (char *page, char **start, off_t off, int count,
+			  int *eof, void *data_unused)
+{
+	return sprintf(page, "0x%x\n", mtd_debug_verbose);
+}
+
+static int mtd_debug_write_proc(struct file *file, const char *buf,
+				unsigned long count, void *data)
+{
+	int val;
+	char *end;
+
+	val = simple_strtoul(buf, &end, 0);
+	mtd_debug_verbose = val;
+	return count;
+}
+#endif /* CONFIG_MTD_DEBUG */
 #endif /* CONFIG_PROC_FS */
 
 /*====================================================================*/
@@ -807,6 +834,14 @@ static int __init init_mtd(void)
 
 #ifdef CONFIG_PROC_FS
 	proc_mtd = proc_create("mtd", 0, NULL, &mtd_proc_ops);
+#ifdef CONFIG_MTD_DEBUG
+	if ((proc_mtd_debug = create_proc_entry( "mtd-debug", S_IRUGO | S_IFREG, NULL))) {
+		proc_mtd_debug->write_proc = mtd_debug_write_proc;
+		proc_mtd_debug->read_proc = mtd_debug_read_proc;
+		proc_mtd_debug->data = NULL;
+	} else
+		return -ENOMEM;
+#endif /* CONFIG_MTD_DEBUG */
 #endif /* CONFIG_PROC_FS */
 	return 0;
 
@@ -826,6 +861,10 @@ static void __exit cleanup_mtd(void)
 #ifdef CONFIG_PROC_FS
 	if (proc_mtd)
 		remove_proc_entry( "mtd", NULL);
+#ifdef CONFIG_MTD_DEBUG
+	if (proc_mtd_debug)
+		remove_proc_entry( "mtd-debug", NULL);
+#endif /* CONFIG_MTD_DEBUG */
 #endif /* CONFIG_PROC_FS */
 	class_unregister(&mtd_class);
 	bdi_destroy(&mtd_bdi_unmappable);

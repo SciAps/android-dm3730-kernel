@@ -111,6 +111,15 @@ static struct mtd_partition omap3logic_nand_partitions[] = {
 };
 
 #ifdef CONFIG_MTD_NAND_OMAP2
+static int omap3logic_use_soft_bch;
+static int __init omap3logic_soft_bch_option(char *str)
+{
+	omap3logic_use_soft_bch = 1;
+	return 1;
+}
+
+__setup("soft-bch", omap3logic_soft_bch_option);
+
 static int __init _nand_init(u32 id, u32 nand_cs)
 {
 	struct platform_device *pdev;
@@ -141,7 +150,11 @@ static int __init _nand_init(u32 id, u32 nand_cs)
 	ndata->xfer_type	= NAND_OMAP_PREFETCH_DMA;
 	ndata->parts		= omap3logic_nand_partitions;
 	ndata->nr_parts		= ARRAY_SIZE(omap3logic_nand_partitions);
-	ndata->ecc_opt		= OMAP_ECC_HAMMING_CODE_DEFAULT;
+	ndata->ecc_opt		= OMAP_ECC_HAMMING_CODE_HW_ROMCODE;
+	if (omap3logic_use_soft_bch) {
+		/* use software BCH ECC if new Micron NAND w/internal ECC */
+		ndata->ecc_opt |= OMAP_ECC_BCH_NEW_MICRON;
+	}
 	ndata->gpmc_irq		= OMAP_GPMC_IRQ_BASE + nand_cs;
 	ndata->nand_setup	= omap2_nand_gpmc_retime;
 	ndata->phys_base	= cs_mem_base;

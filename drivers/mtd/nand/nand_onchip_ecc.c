@@ -11,7 +11,7 @@
 #define NAND_CMD_GET_FEATURES	0xee
 #define NAND_CMD_SET_FEATURES	0xef
 
-#define ONCHIP_MTD_DEBUG_LEVEL	MTD_DEBUG_LEVEL3
+#define ONCHIP_MTD_DEBUG_LEVEL	MTD_DEBUG_LEVEL4
 
 static void micron_set_features(struct mtd_info *mtd, uint8_t faddr,
 				uint8_t *features)
