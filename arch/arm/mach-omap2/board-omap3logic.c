@@ -59,6 +59,10 @@
 #include <plat/omap3logic-cf.h>
 // #include "board-omap3logic.h"
 
+#ifdef CONFIG_PRINTK_DEBUG
+#include <plat/printk-debug.h>
+#endif
+
 #define OMAP3LOGIC_SMSC911X_CS			1
 
 #define OMAP3530_LV_SOM_MMC_GPIO_CD		110
@@ -900,6 +904,19 @@ void omap3logic_init_productid_specifics(void)
 {
 	omap3logic_init_twl_audio();
 }
+
+#ifdef CONFIG_PRINTK_DEBUG
+struct printk_debug *printk_debug;
+static int __init printk_debug_setup(char *str)
+{
+	/* printk debug buffer is in start of DRAM; u-boot will look
+	 * there for printk_buffer information */
+	printk_debug = (void *)PAGE_OFFSET;
+	printk_debug->tag = PRINTK_DEBUG_COOKIE;
+	return 1;
+}
+__setup("printk-debug", printk_debug_setup);
+#endif
 
 static void __init omap3logic_init(void)
 {

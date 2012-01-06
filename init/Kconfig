@@ -991,6 +991,19 @@ config PRINTK
 	  very difficult to diagnose system problems, saying N here is
 	  strongly discouraged.
 
+config PRINTK_DEBUG
+	default n
+	bool "Enable support for debugging with printk" if EMBEDDED
+	depends on PRINTK
+	help
+	  This option enables debugging with printk in situations
+	  where printk doesn't output its data.  This is useful in
+	  debugging suspend/resume code.  If enabled, then a record
+	  in a known DRAM location is setup that includes a pointer to
+	  the log buffer as well as the size and start/stop indices as
+	  well as cache flushes of each printk into main memory to allow
+	  seeing the content of the printk log after a reset.
+
 config BUG
 	bool "BUG() support" if EXPERT
 	default y

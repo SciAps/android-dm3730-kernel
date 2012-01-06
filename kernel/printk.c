@@ -44,6 +44,11 @@
 
 #include <asm/uaccess.h>
 
+#if defined(CONFIG_PRINTK_DEBUG)
+#include <plat/printk-debug.h>
+#include <asm/cacheflush.h>
+#endif
+
 /*
  * Architectures can override it:
  */
@@ -823,6 +828,33 @@ static inline void printk_delay(void)
 	}
 }
 
+#ifdef CONFIG_PRINTK_DEBUG
+/**
+ * printk_flush_log_end - flush any changes to the log_buf
+ * @old_log_end: previous value of log_end before printk
+ */
+void printk_flush_log(unsigned old_log_end)
+{
+	if (printk_debug) {
+		if ((log_end & LOG_BUF_MASK) < (old_log_end & LOG_BUF_MASK)) {
+			/* flush from old_log_end to end of buffer */
+			clean_dcache_area(&log_buf[old_log_end & LOG_BUF_MASK], (LOG_BUF_MASK - (old_log_end & LOG_BUF_MASK)));
+			/* flush from start of buffer to log_end */
+			clean_dcache_area(&log_buf[0], (log_end & LOG_BUF_MASK));
+		} else if ((old_log_end & LOG_BUF_MASK) < (log_end & LOG_BUF_MASK)) {
+			/* flush from old_log_end to log_end */
+			clean_dcache_area(&log_buf[old_log_end & LOG_BUF_MASK], (log_end & LOG_BUF_MASK) - (old_log_end & LOG_BUF_MASK));
+		}
+		printk_debug->log_buf_phys = (char *)virt_to_phys(log_buf);
+		printk_debug->log_size = log_buf_len;
+		printk_debug->log_start = log_start;
+		printk_debug->log_end = log_end;
+		printk_debug->ndump_chars = (4<<10); /* dump 4K of log */
+		clean_dcache_area(printk_debug, sizeof(*printk_debug));
+	}
+}
+#endif
+
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -832,6 +864,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	char *p;
 	size_t plen;
 	char special;
+#ifdef CONFIG_PRINTK_DEBUG
+	unsigned org_log_end = log_end;
+#endif
 
 	boot_delay_msec();
 	printk_delay();
@@ -961,6 +996,10 @@ out_restore_irqs:
 	raw_local_irq_restore(flags);
 
 	preempt_enable();
+#ifdef CONFIG_PRINTK_DEBUG
+	if (printk_debug)
+		printk_flush_log(org_log_end);
+#endif
 	return printed_len;
 }
 EXPORT_SYMBOL(printk);
