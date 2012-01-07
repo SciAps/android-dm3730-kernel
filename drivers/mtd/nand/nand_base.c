@@ -44,11 +44,13 @@
 #include <linux/mtd/nand_ecc.h>
 #include <linux/mtd/nand_bch.h>
 #include <linux/mtd/nand_onchip_ecc.h>
+#include <linux/mtd/nand_disturb.h>
 #include <linux/interrupt.h>
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/io.h>
 #include <linux/mtd/partitions.h>
+#include <asm/div64.h>
 
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
@@ -1549,6 +1551,8 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 			if (ret < 0)
 				break;
 
+			nand_disturb_incr_read_cnt(chip, page);
+
 			/* Transfer not aligned data */
 			if (!aligned) {
 				if (!NAND_SUBPAGE_READ(chip) && !oob &&
@@ -1872,6 +1876,8 @@ static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 		readlen -= len;
 		if (!readlen)
 			break;
+
+		nand_disturb_incr_read_cnt(chip, page);
 
 		/* Increment page address */
 		realpage++;
@@ -2661,6 +2667,8 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 			goto erase_exit;
 		}
 
+		nand_disturb_incr_erase_cnt(chip, page);
+
 		/*
 		 * If BBT requires refresh, set the BBT rewrite flag to the
 		 * page being erased
@@ -3223,6 +3231,17 @@ ident_done:
 			chip->ecc.size = 0;
 		} else
 			chip->ecc.mode = NAND_ECC_HW_CHIP;
+		/* For the new-ECC Micron, need a structure that tracks erasures/reads on
+		 * a per-block basis.  This is used to throw -ESTALE/-EUCLEAN returns if
+		 * number of reads between erasures reaches a limit (-ESTALE), and if erasures
+		 * reach a limit (-EUCLEAN). */
+		{
+			uint64_t chipsize = chip->chipsize;
+			uint32_t erasesize = mtd->erasesize;
+			do_div(chipsize, erasesize);
+			nand_alloc_disturb(chip, chipsize, 100000, 20000);
+		}
+		printk("%s: disturb %p chipsize %llu erasesize %u\n", __FUNCTION__, chip->disturb, chip->chipsize, mtd->erasesize);
 	}
 
 	/* Do not replace user supplied command function ! */

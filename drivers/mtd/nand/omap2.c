@@ -18,6 +18,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand_onchip_ecc.h>
+#include <linux/mtd/nand_disturb.h>
 #include <linux/io.h>
 #include <linux/slab.h>
 
@@ -1084,6 +1085,8 @@ static int micron_nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 			if (ret < 0)
 				break;
 
+			nand_disturb_incr_read_cnt(chip, page);
+
 			/* Transfer not aligned data */
 			if (!aligned) {
 				if (!NAND_SUBPAGE_READ(chip) && !oob &&
@@ -1347,6 +1350,8 @@ int micron_nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 			else
 				nand_wait_ready(mtd);
 		}
+
+		nand_disturb_incr_read_cnt(chip, page);
 
 		readlen -= len;
 		if (!readlen)
@@ -1658,6 +1663,9 @@ static int omap_nand_remove(struct platform_device *pdev)
 
 	if (info->ecc_read_buffer)
 		kfree(info->ecc_read_buffer);
+
+	if (info->nand.disturb)
+		kfree(info->nand.disturb);
 	/* Release NAND device, its internal structures and partitions */
 	nand_release(&info->mtd);
 	iounmap(info->nand.IO_ADDR_R);
