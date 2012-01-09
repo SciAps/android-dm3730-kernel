@@ -328,6 +328,350 @@ static struct twl4030_usb_data omap3logic_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
+#define STANDARD_OMAP	0
+#define TEST_LOGIC	1
+
+//#define TEST_GROUP	DEV_GRP_P1
+#define TEST_GROUP	DEV_GRP_NULL
+
+static struct twl4030_ins  sleep_on_seq[] = {
+#if STANDARD_OMAP
+	/* Broadcast message to put res to sleep (TYPE2 = 1, 2) */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R1, RES_STATE_SLEEP), 2},
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_SLEEP), 2},
+#else
+	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_OFF), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD1,     RES_STATE_OFF), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD2,     RES_STATE_OFF), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VPLL1,    RES_STATE_OFF), 2},
+#if TEST_LOGIC
+	{MSG_BROADCAST(TEST_GROUP, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_OFF), 2},
+#endif
+#endif
+};
+
+static struct twl4030_script sleep_on_script = {
+	.script	= sleep_on_seq,
+	.size	= ARRAY_SIZE(sleep_on_seq),
+	.flags	= TWL4030_SLEEP_SCRIPT,
+};
+
+static struct twl4030_ins wakeup_p12_seq[] = {
+#if STANDARD_OMAP
+	/*
+	 * Broadcast message to put resources to active
+	 *
+	 * Since we are not using TYPE, resources which have TYPE2 configured
+	 * as 1 will be targeted (VPLL1, VDD1, VDD2, REGEN, NRES_PWRON, SYSEN).
+	 */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R1, RES_STATE_ACTIVE), 2},
+#else
+	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD1,     RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD2,     RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, RES_VPLL1,    RES_STATE_ACTIVE), 2},
+#if TEST_LOGIC
+	{MSG_BROADCAST(TEST_GROUP, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_ACTIVE), 2},
+#endif
+#endif
+};
+
+static struct twl4030_script wakeup_p12_script = {
+	.script	= wakeup_p12_seq,
+	.size	= ARRAY_SIZE(wakeup_p12_seq),
+	.flags	= TWL4030_WAKEUP12_SCRIPT,
+};
+
+static struct twl4030_ins wakeup_p3_seq[] = {
+#if STANDARD_OMAP
+	/*
+	 * Broadcast message to put resources to active
+	 *
+	 * Since we are not using TYPE, resources which have TYPE2 configured
+	 * as 2 will be targeted
+	 * (VINTANA1, VINTANA2, VINTDIG, VIO, CLKEN, HFCLKOUT).
+	 */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_ACTIVE), 2},
+#else
+	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
+#endif
+};
+
+static struct twl4030_script wakeup_p3_script = {
+	.script = wakeup_p3_seq,
+	.size   = ARRAY_SIZE(wakeup_p3_seq),
+	.flags  = TWL4030_WAKEUP3_SCRIPT,
+};
+
+static struct twl4030_ins wrst_seq[] = {
+#if STANDARD_OMAP
+	/*
+	 * As a workaround for OMAP Erratum  (ID: i537 - OMAP HS devices are
+	 * not recovering from warm reset while in OFF mode)
+	 * NRESPWRON is toggled to force a power on reset condition to OMAP
+	 */
+	/* Trun OFF NRES_PWRON */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_NRES_PWRON, RES_STATE_OFF), 2},
+	/* Reset twl4030 */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET, RES_STATE_OFF), 2},
+	/* Reset MAIN_REF */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_MAIN_REF, RES_STATE_WRST), 2},
+	/* Reset All type2_group2 */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_WRST), 2},
+	/* Reset VUSB_3v1 */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_VUSB_3V1, RES_STATE_WRST), 2},
+	/* Reset All type2_group1 */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R1, RES_STATE_WRST), 2},
+	/* Reset the Reset & Contorl_signals */
+	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_RC, RES_TYPE_ALL, RES_TYPE2_R0, RES_STATE_WRST), 2},
+	/* Re-enable twl4030 */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET, RES_STATE_ACTIVE), 2},
+	/* Trun ON NRES_PWRON */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_NRES_PWRON, RES_STATE_ACTIVE), 2},
+#else
+	/*
+	 * Reset twl4030.
+	 * Reset VDD1 regulator.
+	 * Reset VDD2 regulator.
+	 * Reset VPLL1 regulator.
+	 * Enable sysclk output.
+	 * Reenable twl4030.
+	 */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET,    RES_STATE_OFF),    2},
+	{MSG_SINGULAR(DEV_GRP_P1,   RES_VDD1,     RES_STATE_WRST),   15},
+	{MSG_SINGULAR(DEV_GRP_P1,   RES_VDD2,     RES_STATE_WRST),   15},
+	{MSG_SINGULAR(DEV_GRP_P1,   RES_VPLL1,    RES_STATE_WRST),   0x60},
+	{MSG_SINGULAR(DEV_GRP_P1,   RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET,    RES_STATE_ACTIVE), 2},
+#endif
+};
+static struct twl4030_script wrst_script = {
+	.script = wrst_seq,
+	.size   = ARRAY_SIZE(wrst_seq),
+	.flags  = TWL4030_WRST_SCRIPT,
+};
+
+static struct twl4030_script *twl4030_scripts[] = {
+	&wakeup_p12_script,
+	&wakeup_p3_script,
+	&sleep_on_script,
+	&wrst_script,
+};
+
+static struct twl4030_resconfig twl4030_rconfig[] = {
+#if STANDARD_OMAP
+	{
+		.resource = RES_NRES_PWRON,
+		.devgroup = DEV_GRP_ALL,
+		.type = 0,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VINTANA2,
+		.devgroup = DEV_GRP_ALL,
+		.type = 0,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_HFCLKOUT,
+		.devgroup = DEV_GRP_P3,
+		.type = 0,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VINTANA1,
+		.devgroup = DEV_GRP_ALL,
+		.type = 1,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VINTDIG,
+		.devgroup = DEV_GRP_ALL,
+		.type = 1,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_REGEN,
+		.devgroup = DEV_GRP_ALL,
+		.type = 2,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VIO,
+		.devgroup = DEV_GRP_ALL,
+		.type = 2,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VPLL1,
+		.devgroup = DEV_GRP_P1,
+		.type = 3,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_OFF
+	},
+	{
+		.resource = RES_VDD2,
+		.devgroup = DEV_GRP_P1,
+		.type = 3,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_OFF
+	},
+	{
+		.resource = RES_CLKEN,
+		.devgroup = DEV_GRP_ALL,
+		.type = 3,
+		.type2 = 2,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+	{
+		.resource = RES_VDD1,
+		.devgroup = DEV_GRP_P1,
+		.type = 4,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_OFF
+	},
+	{
+		.resource = RES_SYSEN,
+		.devgroup = DEV_GRP_ALL,
+		.type = 6,
+		.type2 = 1,
+		.remap_sleep = RES_STATE_SLEEP
+	},
+#else
+	{
+		.resource = RES_HFCLKOUT,
+		.devgroup = DEV_GRP_P3,
+		.type = -1,
+		.type2 = -1
+	},
+	{
+		.resource = RES_VDD1,
+		.devgroup = DEV_GRP_P1,
+		.type = -1,
+		.type2 = -1
+	},
+	{
+		.resource = RES_VDD2,
+		.devgroup = DEV_GRP_P1,
+		.type = -1,
+		.type2 = -1
+	},
+#if TEST_LOGIC
+	{
+		.resource = RES_VAUX1,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VAUX2,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VAUX3,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VAUX4,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VMMC1,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VMMC2,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VSIM,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VDAC,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+#if 0
+	// Disabling these seems to to hose up the warm reset.  The system will
+	// still come up from a cold start.
+	{
+		.resource = RES_VINTANA1,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VINTANA2,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+#endif
+	{
+		.resource = RES_VUSB_1V5,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VUSB_1V8,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+	{
+		.resource = RES_VUSB_3V1,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+#if 1
+	// No effect on power consumption when the system is in suspend.
+	{
+		.resource = RES_VUSBCP,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+#endif
+	{
+		.resource = RES_SYSEN,
+		.devgroup = TEST_GROUP,
+		.type = -1,
+		.type2 = RES_TYPE2_R2,
+	},
+#endif
+#endif
+	{ 0, 0},
+};
+
+static struct twl4030_power_data omap3logic_t2scripts_data __initdata = {
+	.scripts        = twl4030_scripts,
+	.num = ARRAY_SIZE(twl4030_scripts),
+	.resource_config = twl4030_rconfig,
+};
+
 static struct twl4030_codec_audio_data omap3logic_audio_data;
 
 static struct twl4030_codec_data omap3logic_codec_data = {
@@ -342,6 +686,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	/* platform_data for children goes here */
 	.usb		= &omap3logic_usb_data,
 	.gpio		= &omap3logic_gpio_data,
+	.power		= &omap3logic_t2scripts_data,
 	.codec		= &omap3logic_codec_data,
 	.vmmc1		= &omap3logic_vmmc1,
 	.vaux1		= &omap3logic_vaux1,
