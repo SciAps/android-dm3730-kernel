@@ -11,6 +11,7 @@
  */
 
 #define DEBUG
+#define STATIC
 
 #define DEBUG_CF_WAIT		0x001
 #define DEBUG_CF_STATUS		0x002
@@ -22,9 +23,10 @@
 #define DEBUG_CF_ENTRY		0x080
 #define DEBUG_CF_ID		0x100
 #define DEBUG_CF_GENDISK	0x200		
+#define DEBUG_CF_RW_THREAD	0x400
 #define DEBUG_CF_ALL		0xfff
 
-#define DEBUG_INIT_BITS 0
+#define DEBUG_INIT_BITS DEBUG_CF_INTERRUPT | DEBUG_CF_REQUEST | DEBUG_CF_GENDISK | DEBUG_CF_RW_THREAD
 
 static int omap3logic_cf_debug_bits = (DEBUG_INIT_BITS);
 #ifdef DEBUG
@@ -32,7 +34,7 @@ static int omap3logic_cf_debug_bits = (DEBUG_INIT_BITS);
 #  define DPRINTK(flg, fmt, args...)					\
 do {									\
 	if ((flg) & omap3logic_cf_debug_bits)					\
-		printk(KERN_INFO fmt, ## args);			\
+		printk(KERN_INFO "%s:%d " fmt, __FUNCTION__, __LINE__, ## args); \
 } while (0)
 #else
 #define DEBUG_BITS 0
@@ -93,18 +95,23 @@ struct cf_device {
 	struct request_queue *queue;
 	struct gendisk *gd;
 
-	struct task_struct *task;  // thread stack
-	struct completion task_completion;  // completion
+	/* Insertion IRQ thread */
 	struct semaphore irq_sem;
+	struct task_struct *irq_task;		// stack
+	struct completion task_irq_completion;	// completion
+
+	/* R/W thread */
 	struct semaphore rw_sem;
+	struct task_struct *rw_task;			// stack
+	struct completion task_rw_completion;		// completion
+
 	/* Inserted CF card parameters */
 	int card_inserted;
 
 	u16 cf_id[ATA_ID_WORDS];
 };
 
-// flag if we're in cf_request
-static int cf_in_request;
+static struct request *current_req;
 
 #define CF_NUM_MINORS 16
 
@@ -143,7 +150,7 @@ static int cf_major;
 
 
 #define cf_read_reg16(cf, reg, dump) my_cf_read_reg16(__FUNCTION__, __LINE__, cf, reg, dump)
-static u16 my_cf_read_reg16(const char *func, int line, struct cf_device *cf, u32 reg, int dump)
+STATIC u16 my_cf_read_reg16(const char *func, int line, struct cf_device *cf, u32 reg, int dump)
 {
 	u32 address1, address2;
 	u16 data;
@@ -162,7 +169,7 @@ static u16 my_cf_read_reg16(const char *func, int line, struct cf_device *cf, u3
 
 
 #define cf_write_reg16(cf, reg, data, dump) my_cf_write_reg16(__FUNCTION__, __LINE__, cf, reg, data, dump)
-static void my_cf_write_reg16(const char *func, int line, struct cf_device *cf, u32 reg, u16 data, int dump)
+STATIC void my_cf_write_reg16(const char *func, int line, struct cf_device *cf, u32 reg, u16 data, int dump)
 {
 	u32 address1, address2;
 
@@ -179,12 +186,12 @@ static void my_cf_write_reg16(const char *func, int line, struct cf_device *cf, 
 #define TIMEOUT 0x80000
 
 // Wait for the previous command to finish
-static int cf_wait_fin(struct cf_device *cf)
+STATIC int cf_wait_fin(struct cf_device *cf)
 {
 	int timer;
 	u32 reg, old_reg = ~0;
 
-	DPRINTK(DEBUG_CF_WAIT, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_WAIT, "\n");
 
 	udelay(500);  // wait 500us
 
@@ -206,19 +213,19 @@ static int cf_wait_fin(struct cf_device *cf)
 		return -EIO;
 	}
 
-	DPRINTK(DEBUG_CF_WAIT, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_WAIT, "\n");
 
 	return 0;
 
 }
 
 // Wait for the previous command to finish
-static int cf_wait_ready(struct cf_device *cf)
+STATIC int cf_wait_ready(struct cf_device *cf)
 {
 	int timer;
 	u32 reg, old_reg = ~0;
 
-	DPRINTK(DEBUG_CF_WAIT, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_WAIT, "\n");
 
 	udelay(500);  // wait 500us
 
@@ -240,19 +247,19 @@ static int cf_wait_ready(struct cf_device *cf)
 		return -EIO;
 	}
 
-	DPRINTK(DEBUG_CF_WAIT, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_WAIT, "\n");
 
 	return 0;
 
 }
 
 // Wait for the previous command to finish
-static int cf_wait_drq(struct cf_device *cf, const char *func, int line)
+STATIC int cf_wait_drq(struct cf_device *cf, const char *func, int line)
 {
 	int timer;
 	u32 reg, old_reg = ~0;
 
-	DPRINTK(DEBUG_CF_ENTRY, "%s:%d called from %s:%d\n", __FUNCTION__, __LINE__, func, line);
+	DPRINTK(DEBUG_CF_ENTRY, "called from %s:%d\n", func, line);
 	udelay(500);  // wait 500us
 
 	for (timer = 0; timer < TIMEOUT; ++timer) {
@@ -278,13 +285,13 @@ static int cf_wait_drq(struct cf_device *cf, const char *func, int line)
 
 int driveno = 0;
 
-static int cf_ident_card(struct cf_device *cf)
+STATIC int cf_ident_card(struct cf_device *cf)
 {
 	int i, ret;
 	u16 buf[256];
 	unsigned short tmp;
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	/* Set disk_in to zero - successful ID command enables it */
 	cf->disk_in = 0;
@@ -305,7 +312,7 @@ static int cf_ident_card(struct cf_device *cf)
 
 	ata_id_to_hd_driveid(cf->cf_id);
 
-	DPRINTK(DEBUG_CF_GENDISK, "%s: H %d S %d C %d\n", __FUNCTION__, cf->cf_id[ATA_ID_HEADS], cf->cf_id[ATA_ID_SECTORS], cf->cf_id[ATA_ID_CYLS]);
+	DPRINTK(DEBUG_CF_GENDISK, "H %d S %d C %d\n", cf->cf_id[ATA_ID_HEADS], cf->cf_id[ATA_ID_SECTORS], cf->cf_id[ATA_ID_CYLS]);
 
 	cf->disk_in = 1;
 
@@ -320,7 +327,7 @@ static int cf_ident_card(struct cf_device *cf)
 // Return 0 for success, non-zero for error.
 
 /* cf_read_sectors: handle a read request */
-static int cf_read_sectors(struct cf_device *cf, unsigned char *buffer,u_int block,u_int count)
+STATIC int cf_read_sectors(struct cf_device *cf, unsigned char *buffer,u_int block,u_int count)
 {
 	u_int i,j;
 	u_int orig_block = block;
@@ -385,7 +392,7 @@ static int cf_read_sectors(struct cf_device *cf, unsigned char *buffer,u_int blo
 	return 0; // Success!
 }
 
-static int cf_write_sectors(struct cf_device *cf, unsigned char *buffer,u_int block,u_int count)
+STATIC int cf_write_sectors(struct cf_device *cf, unsigned char *buffer,u_int block,u_int count)
 {
 	u_int i,j;
 	u_int orig_block = block;
@@ -450,79 +457,62 @@ static int cf_write_sectors(struct cf_device *cf, unsigned char *buffer,u_int bl
 	return 0;
 }
 
-
-static void cf_request(struct request_queue *q)
+STATIC void cf_request(struct request_queue *q)
 {
 	struct cf_device *cf;
-	struct request *req;
-	unsigned block, count;
-	int rw, err;
 
-	DPRINTK(DEBUG_CF_REQUEST, "%s: q %p", __FUNCTION__, q);
+	DPRINTK(DEBUG_CF_REQUEST, "q %p curret_req %p\n", q, current_req);
 
-	req = blk_fetch_request(q);
-	while (req) {
-		err = -EIO;
-		DPRINTK(DEBUG_CF_REQUEST, "%s:%d req %p", __FUNCTION__, __LINE__, req);
+	BUG_ON(current_req);
+	current_req = blk_fetch_request(q);
 
-		if (!blk_fetch_request(q))
-			goto done;
+	DPRINTK(DEBUG_CF_REQUEST, "current_req %p\n", current_req);
 
-		block = blk_rq_pos(req);
-		count = blk_rq_sectors(req);
-		rw = rq_data_dir(req);
-		cf = req->rq_disk->private_data;
+	if (current_req == NULL)
+		return;
 
-		DPRINTK(DEBUG_CF_REQUEST, "req %p block %d count %d rw %c\n", req, block, count, (rw == READ)?'R':'W');
-
-		if (block+count > get_capacity(req->rq_disk)) {
-			printk("%s: %u+%u is larger than %llu\n", __FUNCTION__, block, count, get_capacity(req->rq_disk));
-			goto done;
-		}
-
-		/* Grab the R/W semaphore to prevent more than
-		 * one request from trying to R/W at the same time */
-		err = down_interruptible(&cf->rw_sem);
-		if (err)
-			break;
-
-		if (rw == READ)
-			err = cf_read_sectors(cf, req->buffer, block, count);
-		else
-			err = cf_write_sectors(cf, req->buffer, block, count);
-		up(&cf->rw_sem);
-
-	done:
-		DPRINTK(DEBUG_CF_REQUEST, "%s: blk_end_request_cur(%p, %d)\n", __FUNCTION__, req, err);
-		if (!__blk_end_request_cur(req, err))
-			req = blk_fetch_request(q);
+	if (current_req->cmd_type != REQ_TYPE_FS) {
+		DPRINTK(DEBUG_CF_REQUEST, "req %p not fs_request\n", current_req);
+		__blk_end_request_all(current_req, -EIO);
+		current_req = NULL;
+		return;
 	}
-	DPRINTK(DEBUG_CF_REQUEST, "end\n");
-	cf_in_request--;
+
+	cf = current_req->rq_disk->private_data;
+
+	/* Due to changes found in 3.0 kernel, I/O requests that yeild can
+	 * cause "inconsistent lock state" due to cfq_idle_slice_timer()
+	 * trying to get the queue lock.  The only way I can figure out how
+	 * to get around this is to stop the block queue while handling
+	 * the request.  In cf_rw_task the queue is restarted when the
+	 * request is done. */
+	blk_stop_queue(q);
+
+	up(&cf->rw_sem);
 }
 
-static int cf_media_changed(struct gendisk *gd)
+STATIC int cf_media_changed(struct gendisk *gd)
 {
 	struct cf_device *cf = gd->private_data;
 
-	DPRINTK(DEBUG_CF_GENDISK, "%s: ejected %d\n", __FUNCTION__, cf->ejected);
+	DPRINTK(DEBUG_CF_GENDISK, "ejected %d\n", cf->ejected);
 
 	return cf->ejected;
 }
 
 
-static int cf_revalidate_disk(struct gendisk *gd)
+STATIC int cf_revalidate_disk(struct gendisk *gd)
 {
 	struct cf_device *cf = gd->private_data;
 
-	DPRINTK(DEBUG_CF_GENDISK, "%s: cf_revalidate_disk: ejected %d disk_in %d\n", __FUNCTION__, cf->ejected, cf->disk_in);
+	DPRINTK(DEBUG_CF_GENDISK, "cf_revalidate_disk: ejected %d disk_in %d\n", cf->ejected, cf->disk_in);
 
 	return !cf->disk_in;
 }
 
 static int cf_open(struct block_device *bdev, fmode_t mode)
 {
-	DPRINTK(DEBUG_CF_GENDISK, "cf_open\n");
+	DPRINTK(DEBUG_CF_GENDISK, "\n");
 
 	check_disk_change(bdev);
 	return 0;
@@ -561,7 +551,7 @@ static irqreturn_t cf_interrupt(int irq, void *v)
 {
 	struct cf_device *cf = v;
 
-	DPRINTK(DEBUG_CF_INTERRUPT, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_INTERRUPT, "\n");
 
 	// On the first interrupt we want to change to rising/falling
 	// so we see only the edges...
@@ -587,21 +577,21 @@ static void omap3logic_cf_reset_card(struct cf_device *cf)
 
 static int cf_create_disk(struct cf_device *cf);
 
-static int cf_thread(void *v)
+static int cf_irq_thread(void *v)
 {
 	struct cf_device *cf = v;
 	struct task_struct *tsk = current;
 	int /* card_inserted = ~0, */ old_card_inserted = ~0;
 	int ret;
 
-	cf->task = tsk;
+	cf->irq_task = tsk;
 
-	daemonize("omap-cf");
+	daemonize("omap-cf-irq");
 	allow_signal(SIGKILL);
 
-	DPRINTK(DEBUG_CF_INTERRUPT, "%s: Entered\n", __FUNCTION__);
+	DPRINTK(DEBUG_CF_INTERRUPT, "Entered\n");
 
-	complete(&cf->task_completion);
+	complete(&cf->task_irq_completion);
 
 	cf->card_inserted = ~0;
 
@@ -611,7 +601,7 @@ static int cf_thread(void *v)
 		if (ret)
 			break;
 
-		DPRINTK(DEBUG_CF_INTERRUPT, "%s: got irq_sem\n", __FUNCTION__);
+		DPRINTK(DEBUG_CF_INTERRUPT, "got irq_sem\n");
 
 		/* Wait a moment and then read read the nDetect pin */
 		msleep(100);
@@ -621,7 +611,7 @@ static int cf_thread(void *v)
 	  
 
 		if (cf->card_inserted != old_card_inserted) {
-			DPRINTK(DEBUG_CF_INTERRUPT, "%s:%d at %lu: pin %d old %d\n", __FUNCTION__, __LINE__, jiffies, cf->card_inserted, old_card_inserted);
+			DPRINTK(DEBUG_CF_INTERRUPT, "at %lu: pin %d old %d\n", jiffies, cf->card_inserted, old_card_inserted);
 			if (cf->card_inserted) {
 
 				/* Reset the card */
@@ -650,17 +640,84 @@ static int cf_thread(void *v)
 
 			}
 
-			DPRINTK(DEBUG_CF_TRACE, "%s: disk_in %d\n", __FUNCTION__, cf->disk_in);
+			DPRINTK(DEBUG_CF_TRACE, "disk_in %d\n", cf->disk_in);
 			// Save the state until next time
 			old_card_inserted = cf->card_inserted;
 		}
 
 	} while (!signal_pending(tsk));
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
-	cf->task = NULL;
-	complete_and_exit(&cf->task_completion, 0);
+	cf->irq_task = NULL;
+	complete_and_exit(&cf->task_irq_completion, 0);
+}
+
+static int cf_rw_thread(void *v)
+{
+	struct cf_device *cf = v;
+	struct task_struct *tsk = current;
+	int err;
+	unsigned block, count;
+	int rw;
+	unsigned long flags;
+
+	cf->rw_task = tsk;
+
+	daemonize("omap-cf-rw");
+	allow_signal(SIGKILL);
+
+	DPRINTK(DEBUG_CF_RW_THREAD, "Entered\n");
+
+	complete(&cf->task_rw_completion);
+
+	DPRINTK(DEBUG_CF_RW_THREAD, "\n");
+
+	do {
+		err = down_interruptible(&cf->rw_sem);
+		if (err)
+			break;
+
+		DPRINTK(DEBUG_CF_RW_THREAD, "got rw_sem\n");
+
+		BUG_ON(!current_req);
+		block = blk_rq_pos(current_req);
+		count = blk_rq_cur_sectors(current_req);
+		rw = rq_data_dir(current_req);
+
+		DPRINTK(DEBUG_CF_REQUEST, "req %p block %d count %d rw %c\n", current_req, block, count, (rw == READ)?'R':'W');
+
+		if (block+count > get_capacity(current_req->rq_disk)) {
+			printk("%u+%u is larger than %llu\n", block, count, get_capacity(current_req->rq_disk));
+			err = -EIO;
+			goto done;
+		}
+
+		if (rw == READ)
+			err = cf_read_sectors(cf, current_req->buffer, block, count);
+		else
+			err = cf_write_sectors(cf, current_req->buffer, block, count);
+
+	done:
+		DPRINTK(DEBUG_CF_REQUEST, "__blk_end_request(%p, %d, %u)\n", current_req, err, count<<9);
+		spin_lock_irqsave(cf->queue->queue_lock, flags);
+		__blk_end_request_all(current_req, err);
+		current_req = NULL;
+
+		/* Restart the queue now that the request is complete */
+		blk_start_queue(cf->queue);
+
+		spin_unlock_irqrestore(cf->queue->queue_lock, flags);
+
+		DPRINTK(DEBUG_CF_REQUEST, "end\n");
+
+
+	} while (!signal_pending(tsk));
+
+	DPRINTK(DEBUG_CF_TRACE, "\n");
+
+	cf->rw_task = NULL;
+	complete_and_exit(&cf->task_rw_completion, 0);
 }
 
 
@@ -674,12 +731,11 @@ static int __devinit omap3logic_cf_setup(struct cf_device *cf)
 	int rc;
 	// int version;
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	DPRINTK(DEBUG_CF_ENTRY, "cf_setup(cf=0x%p)\n", cf);
 	DPRINTK(DEBUG_CF_ENTRY, "physaddr=0x%lx physize=0x%lx irq=%i\n", cf->physaddr, cf->physize, cf->irq);
 
-	spin_lock_init(&cf->blk_lock);
 	/*
 	 * Map the device
 	 */
@@ -731,11 +787,11 @@ static int cf_create_disk(struct cf_device *cf)
 {
 	struct gendisk *disk;
 
-	DPRINTK(DEBUG_CF_GENDISK, "%s: cf %p\n", __FUNCTION__, cf);
+	DPRINTK(DEBUG_CF_GENDISK, "cf %p\n", cf);
 
 	disk = alloc_disk(1 << 4);
 	if (!disk) {
-		DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+		DPRINTK(DEBUG_CF_TRACE, "\n");
 		blk_cleanup_queue(cf->queue);
 		cf->queue = NULL;
 		return -ENOMEM;
@@ -766,10 +822,9 @@ omap3logic_cf_alloc(struct platform_device *pdev, int id, unsigned long physaddr
 	struct device *dev = &pdev->dev;
 	struct omap3logic_cf_data *cf_data = dev->platform_data;
 	struct cf_device *cf;
-	struct request_queue *rq;
 	int rc;
 
-	DPRINTK(DEBUG_CF_GENDISK, "%s: dev %p\n", __FUNCTION__, dev);
+	DPRINTK(DEBUG_CF_GENDISK, "dev %p\n", dev);
 
 	if (!physaddr) {
 		rc = -ENODEV;
@@ -812,56 +867,72 @@ omap3logic_cf_alloc(struct platform_device *pdev, int id, unsigned long physaddr
 	/* We fake it as ejected to start with */
 	cf->ejected = 1;
 
-	rq = blk_init_queue(cf_request, &cf->blk_lock);
-	if (rq == NULL) {
-		DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_GENDISK, "\n");
+	spin_lock_init(&cf->blk_lock);
+	cf->queue = blk_init_queue(cf_request, &cf->blk_lock);
+	if (cf->queue == NULL) {
+		DPRINTK(DEBUG_CF_TRACE, "\n");
 		return -ENOMEM;
 	}
-	blk_queue_logical_block_size(rq, 512);
+	blk_queue_logical_block_size(cf->queue, 512);
 
 	// Limit requests to simple contiguous ones
 #if 1
-	blk_queue_max_hw_sectors(rq, 8);  //4KB
+	blk_queue_max_hw_sectors(cf->queue, 255);  /* max sectors in reqeust */
 #else
-	blk_queue_max_phys_segments(rq, 1);
-	blk_queue_max_hw_segments(rq, 1);
+	blk_queue_max_phys_segments(cf->queue, 1);
+	blk_queue_max_hw_segments(cf->queue, 1);
 #endif
 
-	cf->queue = rq;
-
-	// The IRQ semaphore is locked and only in the IRQ is it released
+	DPRINTK(DEBUG_CF_GENDISK, "\n");
+	/* The IRQ semaphore is locked and only in the IRQ is it released */
 	sema_init(&cf->irq_sem, 0);
 
 	/* The RW semaphore to have only one call into either read/write
 	 * at a time */
-	sema_init(&cf->rw_sem, 1);
+	sema_init(&cf->rw_sem, 0);
 
-	init_completion(&cf->task_completion);
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	// Create the thread that sits and waits for an interrupt
-	rc = kernel_thread(cf_thread, cf, CLONE_KERNEL);
+	init_completion(&cf->task_irq_completion);
+	rc = kernel_thread(cf_irq_thread, cf, CLONE_KERNEL);
 	if (rc < 0) {
-		printk("%s:%d thread create fail! %d\n", __FUNCTION__, __LINE__, rc);
+		printk("cf_irq_thread create fail! %d\n", rc);
 		goto err_setup;
 	} else {
-		wait_for_completion(&cf->task_completion);
+		wait_for_completion(&cf->task_irq_completion);
 	}
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_GENDISK, "\n");
+
+	/* Create the thread that handles R/W requests */
+	init_completion(&cf->task_rw_completion);
+	DPRINTK(DEBUG_CF_GENDISK, "\n");
+	rc = kernel_thread(cf_rw_thread, cf, CLONE_KERNEL);
+	DPRINTK(DEBUG_CF_GENDISK, "rc %d\n", rc);
+	if (rc < 0) {
+		printk("cf_rw_thread create fail! %d\n", rc);
+		goto err_setup;
+	} else {
+		DPRINTK(DEBUG_CF_GENDISK, "\n");
+		wait_for_completion(&cf->task_rw_completion);
+	}
+
+	DPRINTK(DEBUG_CF_GENDISK|DEBUG_CF_TRACE, "\n");
 
 	/* Call the setup code */
 	rc = omap3logic_cf_setup(cf);
 	if (rc)
 		goto err_setup;
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	dev_set_drvdata(dev, cf);
 
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	return 0;
 
@@ -904,7 +975,6 @@ int omap3logic_cf_suspend(struct platform_device *pdev, pm_message_t state)
 	gpio_set_value(cf->gpio_en, 1);
 	msleep(10);
 
-	// printk("%s:%d pdev %p cf %p\n", __FUNCTION__, __LINE__, pdev, cf);
 	return 0;
 }
 
@@ -938,7 +1008,7 @@ static int __devinit omap3logic_cf_probe(struct platform_device *pdev)
 	int gpio = 0;
 	int i;
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	dev_dbg(&pdev->dev, "omap3logic_cf_probe(%p)\n", &pdev->dev);
 
@@ -952,7 +1022,7 @@ static int __devinit omap3logic_cf_probe(struct platform_device *pdev)
 		}
 	}
 
-	DPRINTK(DEBUG_CF_TRACE, "%s:%d\n", __FUNCTION__, __LINE__);
+	DPRINTK(DEBUG_CF_TRACE, "\n");
 
 	/* Call the bus-independant setup code */
 	physize = physend - physaddr + 1;
@@ -1033,8 +1103,6 @@ static const struct file_operations omap3logic_cf_debug_fops = {
 static int __init omap3logic_cf_init(void)
 {
 	int rc;
-
-	// printk(KERN_INFO "%s:%d\n", __FUNCTION__, __LINE__);
 
 	cf_major = register_blkdev(cf_major, "omap-cf");
 	if (cf_major <= 0) {
