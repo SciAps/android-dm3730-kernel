@@ -981,6 +981,7 @@ static void nand_dump_hex(uint8_t *r_data, uint8_t *e_data, int data_size, uint8
 }
 #endif
 
+#if 0
 /* Array of byte bit counts; used to count up bit differences
  * in a page read w/ECC from one read w/o ECC */
 static uint8_t diff_bit_count[256] = {
@@ -1283,6 +1284,7 @@ static int micron_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 
 	return ret;
 }
+#endif
 
 /**
  * micron_nand_do_read_oob - [Intern] NAND read out-of-band
@@ -1379,7 +1381,7 @@ int micron_nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 	return 0;
 }
 
-
+#if 0
 /**
  * micron_nand_read_oob - [MTD Interface] NAND read data and/or out-of-band
  * @mtd:	MTD device structure
@@ -1424,7 +1426,7 @@ out:
 	nand_release_device(mtd);
 	return ret;
 }
-
+#endif
 
 
 static int __devinit omap_nand_probe(struct platform_device *pdev)
@@ -1580,6 +1582,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		}
 	}
 
+#if 0
 	if (info->nand.ecc.mode == NAND_ECC_HW_CHIP) {
 		uint32_t ecc_buffer_size = info->mtd.writesize + info->mtd.oobsize;
 		printk("Micron with in-chip ECC found, overriding MTD read/read_oob\n");
@@ -1593,6 +1596,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 		info->nand.buffers = (void *)info->ecc_read_buffer + ecc_buffer_size;
 		info->nand.options |= NAND_OWN_BUFFERS;
 	}
+#endif
 
 	/* rom code layout */
 	if (pdata->ecc_opt == OMAP_ECC_HAMMING_CODE_HW_ROMCODE) {

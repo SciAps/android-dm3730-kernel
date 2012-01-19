@@ -1511,6 +1511,7 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 		mtd->oobavail : mtd->oobsize;
 
 	uint8_t *bufpoi, *oob, *buf;
+	int disturb_state = 0;
 
 	stats = mtd->ecc_stats;
 
@@ -1551,7 +1552,7 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 			if (ret < 0)
 				break;
 
-			nand_disturb_incr_read_cnt(chip, page);
+			disturb_state = nand_disturb_incr_read_cnt(chip, page);
 
 			/* Transfer not aligned data */
 			if (!aligned) {
@@ -1627,7 +1628,13 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	if (mtd->ecc_stats.failed - stats.failed)
 		return -EBADMSG;
 
-	return  mtd->ecc_stats.corrected - stats.corrected ? -EUCLEAN : 0;
+	if (mtd->ecc_stats.corrected - stats.corrected)
+		return -EUCLEAN;
+
+	if (disturb_state)
+		return disturb_state;
+
+	return 0;
 }
 
 /**

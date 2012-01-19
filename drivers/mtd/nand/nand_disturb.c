@@ -30,6 +30,7 @@ static int nand_disturb_dbg_show(struct seq_file *s, void *unused)
 {
 	struct nand_chip *chip = s->private;
 	struct nand_disturb_stats *p;
+	struct nand_disturb *q;
 	int i;
 
 	seq_printf(s, "chip: %p\n", chip);
@@ -38,10 +39,11 @@ static int nand_disturb_dbg_show(struct seq_file *s, void *unused)
 		seq_printf(s, "chip->disturb: %p\n", p);
 		seq_printf(s, "num_blocks: %u read_limit %u erase_limit %u\n",
 			p->num_blocks, p->read_limit, p->erase_limit);
-		for (i=0; i<p->num_blocks; ++i)
-			if (p->stats[i].read_count || p->stats[i].erase_count)
-				seq_printf(s, "%u: [%u %u]\n", i,
-					p->stats[i].read_count, p->stats[i].erase_count);
+		seq_printf(s, "Following are block: Erase count, Read count, Max read count\n");
+		for (i=0, q=p->stats; i<p->num_blocks; ++i, ++q)
+			if (q->read_count || q->erase_count)
+				seq_printf(s, "%4u: %6u %5u %5u]\n", i,
+					q->read_count, q->erase_count, q->max_read_count);
 	}
 	return 0;
 }
@@ -123,10 +125,13 @@ int nand_disturb_incr_read_cnt(struct nand_chip *chip, uint32_t page)
 		WARN_ON(block > p->num_blocks);
 		if (nand_disturb_debug)
 			printk("%s: block %u read_count %d\n", __FUNCTION__, block, p->stats[block].read_count);
-		p->stats[block].read_count++;
-		if (p->stats[block].read_count > p->read_limit)
+		if (++p->stats[block].read_count > p->stats[block].max_read_count)
+			p->stats[block].max_read_count = p->stats[block].read_count;
+		if (p->stats[block].read_count > p->read_limit) {
+			if (nand_disturb_debug)
+				printk("block %d has %d reads, returning -ESTALE\n", block, p->stats[block].read_count);
 			return -ESTALE;
-		else
+		} else
 			return 0;
 	}
 	return -ERANGE;

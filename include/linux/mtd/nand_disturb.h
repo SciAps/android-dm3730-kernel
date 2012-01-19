@@ -14,6 +14,7 @@
 struct nand_disturb {
 	uint32_t erase_count;
 	uint32_t read_count;
+	uint32_t max_read_count;
 };
 struct nand_disturb_stats {
 	uint32_t erase_limit;
