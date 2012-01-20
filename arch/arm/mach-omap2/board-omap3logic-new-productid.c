@@ -78,10 +78,10 @@ ID_KEY_START
 /* Manufacturing unique data for each SOM */
 ID_KEY_ENTRY(serialization_group)
 ID_KEY_ENTRY(serial_number)
-ID_KEY_ENTRY(lan_ethaddr1)
-ID_KEY_ENTRY(lan_ethaddr2)
-ID_KEY_ENTRY(lan_ethaddr3)
-ID_KEY_ENTRY(lan_ethaddr4)
+ID_KEY_ENTRY(wifi_ethaddr1)
+ID_KEY_ENTRY(wifi_ethaddr2)
+ID_KEY_ENTRY(wifi_ethaddr3)
+ID_KEY_ENTRY(wifi_ethaddr4)
 ID_KEY_ENTRY(nvs)
 
 /* BOM Model number infromation */
@@ -133,6 +133,12 @@ ID_KEY_ENTRY(config4_reg)
 ID_KEY_ENTRY(config5_reg)
 ID_KEY_ENTRY(config6_reg)
 ID_KEY_ENTRY(config7_reg)
+
+/* Manufacturing unique data for each SOM */
+ID_KEY_ENTRY(lan_ethaddr1)
+ID_KEY_ENTRY(lan_ethaddr2)
+ID_KEY_ENTRY(lan_ethaddr3)
+ID_KEY_ENTRY(lan_ethaddr4)
 
 /* End of keys */
 ID_KEY_END
@@ -1009,12 +1015,9 @@ int logic_dump_serialization_info(void)
 		return ret;
 	}
 
-	printk("%s:%d\n", __FUNCTION__, __LINE__);
 	if (omap3logic_wl12xx_exists()) {
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
 		valid_product_id_has_wifi_config_data = 1;
 	}
-	printk("%s:%d\n", __FUNCTION__, __LINE__);
 
 	printk(KERN_INFO "Part Number  : %u\n", part_number);
 	printk(KERN_INFO "Model Name   : %.*s\n", model_name_size, model_name);
@@ -1123,7 +1126,9 @@ int logic_has_new_product_id(void)
 int omap3logic_fetch_sram_new_product_id_data(void)
 {
 	if (!logic_has_new_product_id()) {
+#if 0
 		printk(KERN_INFO "U-boot provided product_id data (new format) is invalid\n");
+#endif
 		return -ENOENT;
 	}
 
@@ -1162,17 +1167,15 @@ int omap3logic_extract_new_lan_ethaddr(u8 *ethaddr)
 	ethaddr_size = 6;
 	ret = id_find_string(&cookie, ID_KEY_lan_ethaddr1, ethaddr, &ethaddr_size);
 	if (ret != ID_EOK) {
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
 		goto done;
 	}
 	if (ethaddr_size != 6) {
 		ret = -E2BIG;
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		printk("%s:%d ethaddr_size %u\n", __FUNCTION__, __LINE__, ethaddr_size);
 		goto done;
 	}
 	ret = 0;
 done:
-	printk("%s: return %d\n", __FUNCTION__, ret);
 	return ret;
 }
 
@@ -1204,20 +1207,18 @@ int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr)
 
 	/* Find /lan_ethaddr2 */
 	ethaddr_size = 6;
-	ret = id_find_string(&cookie, ID_KEY_lan_ethaddr2, ethaddr, &ethaddr_size);
+	ret = id_find_string(&cookie, ID_KEY_wifi_ethaddr1, ethaddr, &ethaddr_size);
 	if (ret != ID_EOK) {
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
 		goto done;
 	}
 	if (ethaddr_size != 6) {
 		ret = -E2BIG;
-		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		printk("%s:%d ethadr_size %d\n", __FUNCTION__, __LINE__, ethaddr_size);
 		goto done;
 	}
 
 	ret = 0;
 done:
-	printk("%s: return %d\n", __FUNCTION__, ret);
 	return ret;
 }
 
