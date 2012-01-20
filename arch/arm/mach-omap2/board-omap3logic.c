@@ -54,7 +54,7 @@
 
 #include <plat/board-omap3logic.h>
 #include <plat/board-omap3logic-display.h>
-#include <plat/omap3logic-new-productid.h>
+// #include <plat/omap3logic-new-productid.h>
 #include <plat/omap3logic-productid.h>
 #include <plat/omap3logic-cf.h>
 // #include "board-omap3logic.h"
@@ -813,6 +813,50 @@ static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 	{}      /* Terminator */
 };
 
+static int omap3logic_wl12xx_probed;
+static int omap3logic_wl12xx_found;
+int omap3logic_wl12xx_exists(void)
+{
+	int i, gpio, val;
+
+	if (omap3logic_wl12xx_probed)
+		return omap3logic_wl12xx_found;
+
+	omap3logic_wl12xx_probed = 1;
+
+	/* Figure out if a WiLink is on the board.  Use
+	   the pullup on WIFI_EN to determine such */
+	if (machine_is_dm3730_torpedo())
+		gpio = OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO;
+	else
+		gpio = OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO;
+
+	omap_mux_init_gpio(gpio, OMAP_PIN_INPUT);
+	if (gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "wifi probe") < 0)
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+
+	/* Let it soak for a while */
+	for (i=0; i<0x100; ++i)
+		asm("nop");
+
+	/* Now flip the GPIO to an input and let it drain.  If there's a
+	   pulldown on the pin then when we read it back it will come out as
+	   zero */
+	if (gpio_direction_input(gpio) < 0)
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+
+	/* Let it soak for a while */
+	for (i=0; i<0x100; ++i)
+		asm("nop");
+
+	val = gpio_get_value(gpio);
+	gpio_free(gpio);
+
+	omap3logic_wl12xx_found = !val;
+
+	return omap3logic_wl12xx_found;
+}
+
 static int __init board_wl12xx_init(void)
 {
 	unsigned char mac_addr[6];
@@ -834,7 +878,9 @@ static int __init board_wl12xx_init(void)
 
 	if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO, OMAP_PIN_OUTPUT);
+#if 0
 		gpio_export(OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO, 0);
+#endif
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
 		if (gpio_request_one(OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
 			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO);
@@ -847,7 +893,9 @@ static int __init board_wl12xx_init(void)
 		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
 	} else if (machine_is_dm3730_torpedo()) {
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO, OMAP_PIN_OUTPUT);
+#if 0
 		gpio_export( OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO, 0 );
+#endif
 		omap_mux_init_gpio(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, OMAP_PIN_INPUT_PULLUP);
 		if (gpio_request_one(OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO, GPIOF_IN, "wlan_irq") < 0) {
 			printk(KERN_WARNING "Failed to gpio_request %d for wlan_irq\n", OMAP3LOGIC_WLAN_TORPEDO_IRQ_GPIO);
@@ -867,11 +915,8 @@ static int __init board_wl12xx_init(void)
 		return -ENODEV;
 
 	/* Extract the MAC addr from the productID data */
-	if (omap3logic_extract_new_wifi_ethaddr(mac_addr))
+	if (omap3logic_extract_wifi_ethaddr(mac_addr))
 		memcpy(omap3logic_wlan_data.mac_addr, mac_addr, sizeof(mac_addr));
-	else if (omap3logic_extract_old_wifi_ethaddr(mac_addr))
-		memcpy(omap3logic_wlan_data.mac_addr, mac_addr, sizeof(mac_addr));
-
 
 #ifdef CONFIG_WL12XX_PLATFORM_DATA
 	/* WL12xx WLAN Init */
@@ -957,11 +1002,11 @@ static void __init board_mmc_init(void)
 	}
 
 	/* Check the SRAM for valid product_id data(put there by u-boot). */
-	ret = omap3logic_fetch_sram_new_product_id_data();
-	if (ret)
-		ret = omap3logic_fetch_sram_product_id_data();
+	ret = omap3logic_fetch_sram_product_id_data();
 	if (ret)
 		printk(KERN_ERR "No valid product ID data found in SRAM\n");
+	else
+		omap3logic_create_product_id_sysfs();
 
 	ret = board_wl12xx_init();
 	if (ret) {

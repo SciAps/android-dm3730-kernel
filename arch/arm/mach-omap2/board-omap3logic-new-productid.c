@@ -29,6 +29,7 @@
 #include "control.h"
 #include <plat/sram.h>
 
+#include <plat/board-omap3logic.h>
 #include <plat/omap3logic-new-productid.h>
 #include "mux.h"
 
@@ -808,46 +809,27 @@ static int id_find_numbers(struct id_cookie *cookie, id_keys_t *keys, int key_si
 /* --------------------------------------------------------- */
 
 /*
- * Here down is the code to interface tothe kernel to extract product
+ * Here down is the code to interface to the kernel to extract product
  * ID information from the SRAM/AT24 chip.
  */
 
 struct id_data id_data;
 static int found_id_data;
+static struct id_cookie serialization_group_cookie;
+static struct id_cookie model_group_cookie;
 
-int logic_dump_serialization_info(void)
+static int omap3logic_find_model_group_cookie(struct id_cookie *mg_cookie)
 {
 	int ret;
 	struct id_cookie cookie;
-	int part_number;
-	u8 model_name[32];
-	u32 model_name_size;
-	u8 serial_number[10];
-	u32 serial_number_size;
 
 	if (!found_id_data) {
 		return -1;
 	}
 
-	ret = id_init_cookie(&id_data, &cookie);
-	if (ret != ID_EOK) {
-		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
-		return ret;
-	}
-
-	/* find /serialization_group from root */
-	ret = id_find_dict(&cookie, ID_KEY_serialization_group, IDENUM_DICT);
-	if (ret != ID_EOK) {
-		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
-		return ret;
-	}
-
-	/* Find serial_number */
-	serial_number_size = sizeof(serial_number);
-	ret = id_find_string(&cookie, ID_KEY_serial_number, serial_number, &serial_number_size);
-	if (ret != ID_EOK) {
-		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
-		return ret;
+	if (model_group_cookie.offset) {
+		*mg_cookie = model_group_cookie;
+		return ID_EOK;
 	}
 
 	/* Reinitialise cookie back to the root */
@@ -864,24 +846,193 @@ int logic_dump_serialization_info(void)
 		return ret;
 	}
 
-	/* Find part number */
-	ret = id_find_number(&cookie, ID_KEY_part_number, &part_number);
+	model_group_cookie = cookie;
+	*mg_cookie = cookie;
+	return ret;
+}
+
+static int omap3logic_find_serialization_cookie(struct id_cookie *s_cookie)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	if (!found_id_data) {
+		return -1;
+	}
+
+	if (serialization_group_cookie.offset) {
+		*s_cookie = serialization_group_cookie;
+		return ID_EOK;
+	}
+
+	ret = id_init_cookie(&id_data, &cookie);
 	if (ret != ID_EOK) {
 		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
 		return ret;
 	}
 
-	/* Find model name */
-	model_name_size = sizeof(model_name);
-	ret = id_find_string(&cookie, ID_KEY_model_name, model_name, &model_name_size);
+	/* find /serialization_group from root */
+	ret = id_find_dict(&cookie, ID_KEY_serialization_group, IDENUM_DICT);
 	if (ret != ID_EOK) {
 		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
 		return ret;
 	}
+
+	serialization_group_cookie = cookie;
+	*s_cookie = cookie;
+	return ID_EOK;
+}
+
+int omap3logic_extract_new_part_number(u32 *part_number)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_model_group_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	/* Find part number */
+	ret = id_find_number(&cookie, ID_KEY_part_number, part_number);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+static int omap3logic_extract_new_model_name(char *model_name, u32 *model_name_size)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_model_group_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	ret = id_find_string(&cookie, ID_KEY_model_name, model_name, model_name_size);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+int omap3logic_extract_new_serial_number(u8 *serial_number, u32 *serial_number_size)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_serialization_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	/* Find serial_number */
+	ret = id_find_string(&cookie, ID_KEY_serial_number, serial_number, serial_number_size);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+int omap3logic_extract_new_nvs_data(u8 *nvs_data, u32 *nvs_data_size)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_serialization_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	/* Find serial_number */
+	ret = id_find_string(&cookie, ID_KEY_nvs, nvs_data, nvs_data_size);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+static int valid_product_id_lan_ethaddr;  // !0 if LAN ethaddr is good
+static int valid_product_id_wifi_ethaddr;  // !0 if LAN ethaddr is good
+static int valid_product_id_has_wifi_config_data;  // !0 if has Murata
+
+int omap3logic_extract_new_lan_ethaddr(u8 *ethaddr);
+int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr);
+
+
+int logic_dump_serialization_info(void)
+{
+	u8 ethaddr[6];
+	int ret;
+	struct id_cookie cookie;
+	int part_number;
+	u8 model_name[32];
+	u32 model_name_size;
+	u8 serial_number[10];
+	u32 serial_number_size;
+
+	ret = omap3logic_find_serialization_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	serial_number_size = sizeof(serial_number);
+	ret = omap3logic_extract_new_serial_number(serial_number, &serial_number_size);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	ret = omap3logic_extract_new_part_number(&part_number);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+
+	/* Find model name */
+	model_name_size = sizeof(model_name);
+	ret = omap3logic_extract_new_model_name(model_name, &model_name_size);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
+	if (omap3logic_wl12xx_exists()) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		valid_product_id_has_wifi_config_data = 1;
+	}
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
 
 	printk(KERN_INFO "Part Number  : %u\n", part_number);
 	printk(KERN_INFO "Model Name   : %.*s\n", model_name_size, model_name);
 	printk(KERN_INFO "Serial Number: %.*s\n", serial_number_size, serial_number);
+	ret = omap3logic_extract_new_lan_ethaddr(ethaddr);
+	if (ret == ID_EOK) {
+		printk(KERN_INFO "LAN ethaddr  : %02x:%02x:%02x:%02x:%02x:%02x\n",
+			ethaddr[0], ethaddr[1], ethaddr[2],
+			ethaddr[3], ethaddr[4], ethaddr[5]);
+		valid_product_id_lan_ethaddr = 1;
+	}
+	ret = omap3logic_extract_new_wifi_ethaddr(ethaddr);
+	if (ret == ID_EOK) {
+		printk(KERN_INFO "WLAN ethaddr : %02x:%02x:%02x:%02x:%02x:%02x\n",
+			ethaddr[0], ethaddr[1], ethaddr[2],
+			ethaddr[3], ethaddr[4], ethaddr[5]);
+		valid_product_id_wifi_ethaddr = 1;
+	}
 	return 0;
 }
 
@@ -981,9 +1132,238 @@ int omap3logic_fetch_sram_new_product_id_data(void)
 	return logic_dump_serialization_info();
 }
 
+/* Extract the Wired LAN ethaddr, and return !0 if its valid */
+int omap3logic_extract_new_lan_ethaddr(u8 *ethaddr)
+{
+	int ret;
+	struct id_cookie cookie;
+	int ethaddr_size;
+
+	if (!found_id_data) {
+		ret = -ENXIO;
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	ret = id_init_cookie(&id_data, &cookie);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	/* Find /serialization_group */
+	ret = id_find_dict(&cookie, ID_KEY_serialization_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	/* Find /lan_ethaddr1 */
+	ethaddr_size = 6;
+	ret = id_find_string(&cookie, ID_KEY_lan_ethaddr1, ethaddr, &ethaddr_size);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+	if (ethaddr_size != 6) {
+		ret = -E2BIG;
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+	ret = 0;
+done:
+	printk("%s: return %d\n", __FUNCTION__, ret);
+	return ret;
+}
+
 /* Extract the WiFi ethaddr, and return !0 if its valid */
 int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr)
 {
-	return 0;
+	int ret;
+	struct id_cookie cookie;
+	int ethaddr_size;
+
+	if (!found_id_data) {
+		ret = -ENXIO;
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	ret = id_init_cookie(&id_data, &cookie);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	/* Find /serialization_group */
+	ret = id_find_dict(&cookie, ID_KEY_serialization_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	/* Find /lan_ethaddr2 */
+	ethaddr_size = 6;
+	ret = id_find_string(&cookie, ID_KEY_lan_ethaddr2, ethaddr, &ethaddr_size);
+	if (ret != ID_EOK) {
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+	if (ethaddr_size != 6) {
+		ret = -E2BIG;
+		printk("%s:%d\n", __FUNCTION__, __LINE__);
+		goto done;
+	}
+
+	ret = 0;
+done:
+	printk("%s: return %d\n", __FUNCTION__, ret);
+	return ret;
 }
 
+
+static ssize_t product_id_show_wifi_macaddr(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u8 macaddr[6];
+	int ret;
+
+	ret = omap3logic_extract_new_wifi_ethaddr(macaddr);
+	if (!ret)
+		return sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x\n",
+			macaddr[0], macaddr[1], macaddr[2],
+			macaddr[3], macaddr[4], macaddr[5]);
+	return ret;
+}
+
+static ssize_t product_id_show_lan_macaddr(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u8 macaddr[6];
+	int ret;
+
+	ret = omap3logic_extract_new_lan_ethaddr(macaddr);
+	if (!ret)
+		return sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x\n",
+			macaddr[0], macaddr[1], macaddr[2],
+			macaddr[3], macaddr[4], macaddr[5]);
+	return ret;
+}
+
+static ssize_t product_id_show_part_number(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 part_number;
+	int len;
+	omap3logic_extract_new_part_number(&part_number);
+
+	len = sprintf(buf, "%d\n", part_number);
+	return len;
+}
+
+static ssize_t product_id_show_model_name(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 model_name_size = 128;
+	int ret;
+
+	ret = omap3logic_extract_new_model_name((u8 *)buf, &model_name_size);
+
+	buf[model_name_size] = '\n';
+	return model_name_size + 1;
+}
+
+static ssize_t product_id_show_serial_number(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 serial_number_size = 128;
+
+	omap3logic_extract_new_serial_number((u8 *)buf, &serial_number_size);
+	buf[serial_number_size] = '\n';
+	return serial_number_size + 1;
+}
+
+static ssize_t product_id_show_wifi_config_data(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 wifi_config_size = PAGE_SIZE;
+	int ret;
+
+	ret = omap3logic_extract_new_nvs_data(buf, &wifi_config_size);
+
+	if (ret == ID_EOK)
+		return wifi_config_size;
+
+	return ret;
+}
+
+
+
+#define DECLARE_CLASS_ATTR(_name,_mode,_show,_store)                  \
+{                                                               \
+	.attr   = { .name = __stringify(_name), .mode = _mode },	\
+		.show   = _show,                                        \
+		.store  = _store,				\
+}
+
+static struct {
+	struct class_attribute attr;
+	int *test_value;
+} product_id_class_attributes[] = {
+	{
+		__ATTR(lan_macaddr, S_IRUGO, product_id_show_lan_macaddr, NULL),
+		&valid_product_id_lan_ethaddr,
+	},
+	{
+		__ATTR(wifi_macaddr, S_IRUGO, product_id_show_wifi_macaddr, NULL),
+		&valid_product_id_wifi_ethaddr,
+	},
+	{
+		__ATTR(part_number, S_IRUGO, product_id_show_part_number, NULL),
+		NULL,
+	},
+	{
+		__ATTR(model_name, S_IRUGO, product_id_show_model_name, NULL),
+		NULL,
+	},
+	{
+		__ATTR(serial_number, S_IRUGO, product_id_show_serial_number, NULL),
+		NULL,
+	},
+	{
+		__ATTR(wifi_config_data, S_IRUGO, product_id_show_wifi_config_data, NULL),
+		&valid_product_id_has_wifi_config_data,
+	},
+};
+
+static void product_id_dev_release(struct device *dev)
+{
+}
+
+static struct class product_id_class = {
+	.name = "product_id",
+	.dev_release = product_id_dev_release,
+};
+
+int omap3logic_create_new_product_id_sysfs(void)
+{
+	int i, rc;
+
+	rc = class_register(&product_id_class);
+	if (rc != 0) {
+		printk("%s: failed to register product_id class\n", __FUNCTION__);
+		return rc;
+	}
+
+	for (i=0; i<ARRAY_SIZE(product_id_class_attributes); ++i) {
+		if (!product_id_class_attributes[i].test_value || *product_id_class_attributes[i].test_value) {
+			rc = class_create_file(&product_id_class, &product_id_class_attributes[i].attr);
+			if (unlikely(rc)) {
+				printk("%s: failed to create product_id class file\n", __FUNCTION__);
+				while (--i >= 0) { 
+					if (!product_id_class_attributes[i].test_value || *product_id_class_attributes[i].test_value) {
+						class_remove_file(&product_id_class, &product_id_class_attributes[i].attr);
+					}
+				}
+				class_unregister(&product_id_class);
+				return -EPERM;
+			}
+		}
+	}
+
+	return 0;
+}

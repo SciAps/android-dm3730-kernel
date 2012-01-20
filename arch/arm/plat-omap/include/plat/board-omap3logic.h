@@ -15,6 +15,7 @@ extern int __init omap3logic_nor_init(u32 nor_cs_mask, unsigned long nor_size);
 extern int __init omap3logic_nand_init(void);
 
 extern void omap3logic_init_twl_audio(void);
+extern int omap3logic_wl12xx_exists(void);
 
 #if 0
 extern void dm3730logic_init_twl_external_mute(void);

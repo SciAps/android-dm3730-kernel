@@ -189,6 +189,7 @@ obj-$(CONFIG_MACH_OMAP3530_LV_SOM)      += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
 					   board-omap3logic-productid.o \
+					   board-omap3logic-old-productid.o \
 					   board-omap3logic-new-productid.o \
 					   board-omap3logic-display.o \
 					   board-omap3logic-audio.o \
@@ -197,6 +198,7 @@ obj-$(CONFIG_MACH_OMAP3_TORPEDO)        += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
 					   board-omap3logic-productid.o \
+					   board-omap3logic-old-productid.o \
 					   board-omap3logic-new-productid.o \
 					   board-omap3logic-display.o \
 					   board-omap3logic-audio.o \
@@ -205,6 +207,7 @@ obj-$(CONFIG_MACH_DM3730_SOM_LV)        += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
 					   board-omap3logic-productid.o \
+					   board-omap3logic-old-productid.o \
 					   board-omap3logic-new-productid.o \
 					   board-omap3logic-display.o \
 					   board-omap3logic-audio.o \
@@ -213,6 +216,7 @@ obj-$(CONFIG_MACH_DM3730_TORPEDO)       += board-omap3logic.o \
 					   board-omap3logic-hang.o \
 					   board-omap3logic-flash.o \
 					   board-omap3logic-productid.o \
+					   board-omap3logic-old-productid.o \
 					   board-omap3logic-new-productid.o \
 					   board-omap3logic-display.o \
 					   board-omap3logic-audio.o \
