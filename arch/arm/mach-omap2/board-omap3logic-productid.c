@@ -12,6 +12,9 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 
+#include <asm/mach-types.h>
+
+#include <plat/board-omap3logic.h>
 #include <plat/omap3logic-productid.h>
 #include <plat/omap3logic-old-productid.h>
 #include <plat/omap3logic-new-productid.h>
@@ -33,9 +36,26 @@ int omap3logic_extract_wifi_ethaddr(u8 *macaddr)
 	return 0;
 }
 
-int omap3logic_extern_mute_gpio(void)
+/* DM37x Torpedo boards mute is gpio_17 since DSS uses 24 pins */
+#define TWL4030_DM37X_TORPEDO_EXTERNAL_AUDIO_MUTE_GPIO		17
+
+/* OMAP35x Torpedo boards mute is gpio_177 */
+#define TWL4030_OMAP35X_TORPEDO_EXTERNAL_AUDIO_MUTE_GPIO	177
+
+/* OMAP35x/DM37x SOM LV mute is GPIO_57 */
+#define TWL4030_SOM_LV_EXTERNAL_AUDIO_MUTE_GPIO			57
+
+int omap3logic_external_mute_gpio(void)
 {
-	printk("%s: return -EINVAL\n", __FUNCTION__);
+	if (machine_is_dm3730_torpedo())
+		return TWL4030_DM37X_TORPEDO_EXTERNAL_AUDIO_MUTE_GPIO;
+
+	if (machine_is_omap3_torpedo())
+		return TWL4030_OMAP35X_TORPEDO_EXTERNAL_AUDIO_MUTE_GPIO;
+
+	if (machine_is_dm3730_som_lv() || machine_is_omap3530_lv_som())
+		return TWL4030_SOM_LV_EXTERNAL_AUDIO_MUTE_GPIO;
+
 	return -EINVAL;
 }
 
@@ -59,13 +79,18 @@ int omap3logic_fetch_sram_product_id_data(void)
 	ret = omap3logic_fetch_sram_new_product_id_data();
 	if (!ret) {
 		omap3logic_new_product_id_valid = 1;
-		return ret;
+	} else {
+		ret = omap3logic_fetch_old_sram_product_id_data();
+		if (!ret)
+			omap3logic_old_product_id_valid = 1;
 	}
-	ret = omap3logic_fetch_old_sram_product_id_data();
-	if (!ret) {
-		omap3logic_old_product_id_valid = 1;
-		return ret;
-	}
+
+	/* If ret is zero, we *know* there's valid product_id data.
+	 * Therefore configure those bits that are specific to certain
+	 * types of module. */
+	if (!ret)
+		omap3logic_init_productid_specifics();
+
 	return ret;
 }
 

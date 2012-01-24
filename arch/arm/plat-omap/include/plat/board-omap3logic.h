@@ -17,10 +17,4 @@ extern int __init omap3logic_nand_init(void);
 extern void omap3logic_init_twl_audio(void);
 extern int omap3logic_wl12xx_exists(void);
 
-#if 0
-extern void dm3730logic_init_twl_external_mute(void);
-extern void twl4030_set_ext_mute(int mute);
-extern int twl4030_get_ext_mute(void);
-extern void twl4030_set_path_mute(int mute);
-#endif
-
+extern void omap3logic_init_productid_specifics(void);

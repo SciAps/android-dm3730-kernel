@@ -1039,44 +1039,6 @@ static int omap3logic_is_dash_11_module(void)
 	return 0;
 }
 
-
-// On the 1011880 boards (and newer), audio mute is on GPIO_177
-#define TWL4030_OLD_EXTERNAL_AUDIO_MUTE_GPIO	177
-// On the 1015061 boards, audio mute is on GPIO_57
-#define TWL4030_NEW_EXTERNAL_AUDIO_MUTE_GPIO	57
-
-/* Starting with the "B" rev (1011880) an external pair of FET's
- * controlled by GPIO177. On the -11 boards external mute is GPIO57 */
-int omap3logic_external_mute_gpio(void)
-{
-	u32 part_number;
-
-	/* No valid data, then no idea of the mute */
-	if (!omap3logic_is_product_data_valid())
-		return -EINVAL;
-
-	/* If we're a torpedo, we have the old external mute */
-	if (machine_is_omap3_torpedo())
-		return TWL4030_OLD_EXTERNAL_AUDIO_MUTE_GPIO;
-
-	/* If we're a -11 SOM, then we have the new external audio mute */
-	if (omap3logic_is_dash_11_module())
-		return TWL4030_NEW_EXTERNAL_AUDIO_MUTE_GPIO;
-
-	/* 101880 and later SOMs have the old external mute */
-	if (!omap3logic_get_product_id_part_number(&part_number)) {
-		if (part_number >= 101880)
-			return TWL4030_OLD_EXTERNAL_AUDIO_MUTE_GPIO;
-	}
-
-	/* If revision is "B" or later, we have the old external mute */
-	if (product_id_data.d.zone1.model_revision >= 'B')
-		return TWL4030_OLD_EXTERNAL_AUDIO_MUTE_GPIO;
-
-	/* Nope, this board doesn't have the external mute */
-	return -EINVAL;
-}
-
 #define OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO 3
 #define OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO 157
 

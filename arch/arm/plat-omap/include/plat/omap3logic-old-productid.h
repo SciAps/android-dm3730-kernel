@@ -148,7 +148,6 @@ int omap3logic_extract_product_id_part_number(struct product_id_data *p, char *b
 extern int omap3logic_extract_serial_number(struct product_id_data *p, char *buf, int buflen);
 
 extern int omap3logic_create_old_product_id_sysfs(void);
-extern int omap3logic_external_mute_gpio(void);
 
 extern void omap3logic_set_product_id_data(struct product_id_data *p);
 

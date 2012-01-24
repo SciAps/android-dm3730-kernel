@@ -672,7 +672,9 @@ static struct twl4030_power_data omap3logic_t2scripts_data __initdata = {
 	.resource_config = twl4030_rconfig,
 };
 
-static struct twl4030_codec_audio_data omap3logic_audio_data;
+static struct twl4030_codec_audio_data omap3logic_audio_data = {
+	.ramp_delay_value = 3,	/* 161 ms */
+};
 
 static struct twl4030_codec_data omap3logic_codec_data = {
 	.audio_mclk = 26000000,
@@ -1376,9 +1378,7 @@ static void __init omap3logic_init(void)
 
 	/* Assume NOR is only on CS2 (if its there) */
 	omap3logic_nor_init(1<<2, SZ_8M);
-	printk("%s:%d\n", __FUNCTION__, __LINE__);
 	omap3logic_nand_init();
-	printk("%s:%d\n", __FUNCTION__, __LINE__);
 
 	/* Initialixe EHCI port */
 	omap3logic_usb_init();

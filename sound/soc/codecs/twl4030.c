@@ -37,7 +37,7 @@
 #include <asm/mach-types.h>
 
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 #include <plat/board-omap3logic-audio.h>
 #endif
 
@@ -179,7 +179,7 @@ static inline unsigned int twl4030_read_reg_cache(struct snd_soc_codec *codec,
 		return -EIO;
 
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
 		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
 		if (reg == TWL4030_REG_EXT_MUTE)
@@ -204,7 +204,7 @@ static inline void twl4030_write_reg_cache(struct snd_soc_codec *codec,
 		return;
 
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
 		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
 		if (reg == TWL4030_REG_EXT_MUTE)
@@ -1239,7 +1239,7 @@ static const struct snd_kcontrol_new twl4030_snd_controls[] = {
 		TWL4030_REG_HS_GAIN_SET, 0, 2, 3, 0, output_tvl),
 
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 	SOC_SINGLE("Master Playback Switch",
 		TWL4030_REG_EXT_MUTE, 0, 1, 0),
 #endif
@@ -2289,7 +2289,7 @@ static int twl4030_soc_resume(struct snd_soc_codec *codec)
 	return 0;
 }
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 static int twl4030_mute(struct snd_soc_dai *dai, int mute)
 {
 	twl4030_set_path_mute(!mute);
@@ -2355,7 +2355,7 @@ static int __devinit twl4030_codec_probe(struct platform_device *pdev)
 	}
 
 #if defined(CONFIG_MACH_DM3730_SOM_LV) || defined(CONFIG_MACH_DM3730_TORPEDO) \
-	|| defined(CONFIG_MACH_OMPA3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
+	|| defined(CONFIG_MACH_OMAP3530_LV_SOM) || defined(CONFIG_MACH_OMAP3_TORPEDO)
 	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo()
 		|| machine_is_omap3530_lv_som() || machine_is_omap3_torpedo()) {
 

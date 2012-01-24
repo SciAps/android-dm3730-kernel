@@ -975,7 +975,6 @@ static int valid_product_id_has_wifi_config_data;  // !0 if has Murata
 int omap3logic_extract_new_lan_ethaddr(u8 *ethaddr);
 int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr);
 
-
 int logic_dump_serialization_info(void)
 {
 	u8 ethaddr[6];

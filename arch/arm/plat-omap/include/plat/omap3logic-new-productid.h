@@ -25,5 +25,4 @@
 extern int omap3logic_fetch_sram_new_product_id_data(void);
 extern int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr);
 extern int omap3logic_create_new_product_id_sysfs(void);
-
 #endif /* __OMAP3LOGIC_NEW_PRODUCT_ID_H__ */
