@@ -623,6 +623,8 @@ struct wl1271 {
 	unsigned int platform_quirks;
 };
 
+extern int overlay_wifi_config_data(struct wl1271 *wl);
+
 struct wl1271_station {
 	u8 hlid;
 };
@@ -664,4 +666,6 @@ int wl1271_plt_stop(struct wl1271 *wl);
 /* WL128X requires aggregated packets to be aligned to the SDIO block size */
 #define WL12XX_QUIRK_BLOCKSIZE_ALIGNMENT	BIT(2)
 
+/* If set, ignore product ID NVS data in favor of filesystem NVS data */
+#define WL12XX_QUIRK_IGNORE_PRODUCT_ID_NVS	BIT(3)
 #endif

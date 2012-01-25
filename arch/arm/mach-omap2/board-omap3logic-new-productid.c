@@ -754,6 +754,12 @@ static int id_find_string(struct id_cookie *cookie, id_keys_t key, unsigned char
 	if (err != ID_EOK)
 		return err;
 
+	/* If handed a NULL str_ptr, only set the size and return */
+	if (!str_ptr) {
+		*str_size = size;
+		return ID_EOK;
+	}
+
 	if (size > *str_size)
 		return -ID_ERANGE;
 
@@ -1125,9 +1131,6 @@ int logic_has_new_product_id(void)
 int omap3logic_fetch_sram_new_product_id_data(void)
 {
 	if (!logic_has_new_product_id()) {
-#if 0
-		printk(KERN_INFO "U-boot provided product_id data (new format) is invalid\n");
-#endif
 		return -ENOENT;
 	}
 

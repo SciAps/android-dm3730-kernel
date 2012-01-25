@@ -27,4 +27,5 @@ extern int omap3logic_fetch_sram_product_id_data(void);
 extern int omap3logic_extract_wifi_ethaddr(u8 *macaddr);
 extern int omap3logic_external_mute_gpio(void);
 extern int omap3logic_create_product_id_sysfs(void);
+extern int omap3logic_extract_nvs_data(u8 *nvs_data, u32 *nvs_data_size);
 #endif

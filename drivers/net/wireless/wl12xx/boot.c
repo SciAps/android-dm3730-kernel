@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/wl12xx.h>
 
+#include <plat/omap3logic-productid.h>
 #include "acx.h"
 #include "reg.h"
 #include "boot.h"
@@ -365,6 +366,54 @@ static int wl1271_boot_upload_nvs(struct wl1271 *wl)
 
 	kfree(nvs_aligned);
 	return 0;
+}
+
+/* Look in the product ID chip for wifi_config_data.  If found and same
+ * size as the expected NVS_SECTION_SIZE then overlay the product ID NVS
+ * data on top of the NVS data read from the nvs.bin file */
+int overlay_wifi_config_data(struct wl1271 *wl)
+{
+	u32 nvs_size;
+	int ret;
+
+	if (wl->platform_quirks & WL12XX_QUIRK_IGNORE_PRODUCT_ID_NVS) {
+		printk(KERN_WARNING "wl12xx: Ignoring NVS data from product ID chip\n");
+		return 0;
+	}
+
+	/* Extract size of NVS data in product ID chip */
+	nvs_size = 0;
+	ret = omap3logic_extract_nvs_data(NULL, &nvs_size);
+
+	if (ret < 0) {
+		printk(KERN_WARNING "No NVS data found in product ID chip; using nvs.bin data\n");
+		return ret;
+	}
+	if (wl->chip.id == CHIP_ID_1283_PG20) {
+		struct wl128x_nvs_file *nvs =
+			(struct wl128x_nvs_file *)wl->nvs;
+
+		if (nvs_size != WL1271_INI_NVS_SECTION_SIZE) {
+			ret = -EINVAL;
+			goto done;
+		}
+		ret = omap3logic_extract_nvs_data(nvs->nvs, &nvs_size);
+	} else {
+		struct wl1271_nvs_file *nvs = 
+			(struct wl1271_nvs_file *)wl->nvs;
+
+		if (nvs_size != WL1271_INI_NVS_SECTION_SIZE) {
+			ret = -EINVAL;
+			goto done;
+		}
+
+		ret = omap3logic_extract_nvs_data(nvs->nvs, &nvs_size);
+	}
+
+done:
+	if (ret < 0)
+		printk(KERN_WARNING "NVS data in product ID chip incompatible with wl12xx driver\n");
+	return ret;
 }
 
 static void wl1271_boot_enable_interrupts(struct wl1271 *wl)

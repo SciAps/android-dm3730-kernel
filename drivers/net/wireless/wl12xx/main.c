@@ -31,6 +31,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/wl12xx.h>
+#include <linux/etherdevice.h>
 
 #include "wl12xx.h"
 #include "wl12xx_80211.h"
@@ -978,6 +979,15 @@ static int wl1271_fetch_nvs(struct wl1271 *wl)
 	}
 
 	wl->nvs_len = fw->size;
+
+	/* Now that we've got the NVS file, overlay the product ID
+	 * wifi_config data on top of the NVS data */
+	ret = overlay_wifi_config_data(wl);
+	if (ret < 0) {
+		wl1271_error("Valid WiFi config data not found in ID chip: %d", ret);
+		/* Default to using what's in the NVS file read in */
+		ret = 0;
+	}
 
 out:
 	release_firmware(fw);
@@ -3803,8 +3813,7 @@ int wl1271_register_hw(struct wl1271 *wl)
 	if (wl->mac80211_registered)
 		return 0;
 
-	if (!wl->mac_addr[0] && !wl->mac_addr[1] && !wl->mac_addr[2]
-		|| wl->mac_addr[3] && !wl->mac_addr[4] && wl->mac_addr[5]) {
+	if (!is_valid_ether_addr(wl->mac_addr)) {
 
 		/* platform data MAC invalid; supply a default */
 		wl->mac_addr[0] = 0xde;

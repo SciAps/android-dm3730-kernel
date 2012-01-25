@@ -10,6 +10,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/errno.h>
 
 #include <asm/mach-types.h>
@@ -23,7 +24,7 @@
 static int omap3logic_old_product_id_valid;
 static int omap3logic_new_product_id_valid;
 
-/* Return zero if product ID data is not valid or if no wifi_macaddr */
+/* Return zero if product ID data is good. */
 int omap3logic_extract_wifi_ethaddr(u8 *macaddr)
 {
 	/* Extract the MAC addr from the productID data */
@@ -33,7 +34,7 @@ int omap3logic_extract_wifi_ethaddr(u8 *macaddr)
 	if (omap3logic_old_product_id_valid)
 		return omap3logic_extract_old_wifi_ethaddr(macaddr);
 
-	return 0;
+	return -ENOENT;
 }
 
 /* DM37x Torpedo boards mute is gpio_17 since DSS uses 24 pins */
@@ -94,4 +95,17 @@ int omap3logic_fetch_sram_product_id_data(void)
 	return ret;
 }
 
-/* Should we look for product ID data if its not already in the SRAM??? */
+/* Extract the NVS data for the wm12xx; if nvs_data is null then just set
+ * *nvs_data_size appropriately and return success.  Else if *nvs_data_size
+ * is large enough copy the data into nvs_data and update *nvs_data_size */
+int omap3logic_extract_nvs_data(u8 *nvs_data, u32 *nvs_data_size)
+{
+	if (omap3logic_new_product_id_valid)
+		return omap3logic_extract_new_nvs_data(nvs_data, nvs_data_size);
+
+	if (omap3logic_old_product_id_valid)
+		return omap3logic_extract_old_nvs_data(nvs_data, nvs_data_size);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(omap3logic_extract_nvs_data);

@@ -628,21 +628,21 @@ static int extract_product_id_mac_address(struct product_id_data *p, int positio
 	return -EINVAL;
 }
 
-/* Extract the ethaddr, and return !0 if its valid */
+/* Extract the wired LAN ethaddr, and return 0 if its valid */
 int omap3logic_extract_lan_ethaddr(u8 *ethaddr)
 {
 	int ret;
 	ret = extract_product_id_mac_address(&product_id_data, 0, ethaddr);
-	return !ret;
+	return ret;
 }
 EXPORT_SYMBOL(omap3logic_extract_lan_ethaddr);
 
-/* Extract the WiFi ethaddr, and return !0 if its valid */
+/* Extract the WiFi ethaddr, and return 0 if its valid */
 int omap3logic_extract_old_wifi_ethaddr(u8 *ethaddr)
 {
 	int ret;
 	ret = extract_product_id_mac_address(&product_id_data, 1, ethaddr);
-	return !ret;
+	return ret;
 }
 EXPORT_SYMBOL(omap3logic_extract_old_wifi_ethaddr);
 
@@ -909,15 +909,28 @@ static ssize_t product_id_show_zone2_data(struct class *class, struct class_attr
 	return len;
 }
 
-static ssize_t product_id_show_wifi_config_data(struct class *class, struct class_attribute *attr, char *buf)
+int omap3logic_extract_old_nvs_data(u8 *nvs_data, u32 *nvs_data_size)
 {
-	int len;
-
-	len = sizeof(product_id_data.d.wifi_config_data.data);
-	memcpy(buf, product_id_data.d.wifi_config_data.data, len);
-	return len;
+	if (!nvs_data) {
+		*nvs_data_size = sizeof(product_id_data.d.wifi_config_data.data);
+		return 0;
+	}
+	if (*nvs_data_size >= sizeof(product_id_data.d.wifi_config_data.data)) {
+		memcpy(nvs_data,
+			product_id_data.d.wifi_config_data.data,
+			sizeof(product_id_data.d.wifi_config_data.data));
+		return 0;
+	}
+	return -EINVAL;
 }
 
+static ssize_t product_id_show_wifi_config_data(struct class *class, struct class_attribute *attr, char *buf)
+{
+	int len = PAGE_SIZE;
+
+	omap3logic_extract_old_nvs_data(buf, &len);
+	return len;
+}
 
 #define DECLARE_CLASS_ATTR(_name,_mode,_show,_store)                  \
 {                                                               \
