@@ -140,8 +140,6 @@ __be32 ic_servaddr = NONE;	/* Boot server IP address */
 __be32 root_server_addr = NONE;	/* Address of NFS server */
 u8 root_server_path[256] = { 0, };	/* Path to mount as root */
 
-u32 ic_dev_xid;		/* Device under configuration */
-
 /* vendor class identifier */
 static char vendor_class_identifier[253] __initdata;
 
@@ -907,7 +905,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 {
 	struct bootp_pkt *b;
 	struct iphdr *h;
-	struct ic_device *d;
+	struct ic_device *d, *n;
 	int len, ext_len;
 
 	if (!net_eq(dev_net(dev), &init_net))
@@ -990,11 +988,17 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 		goto drop_unlock;
 	}
 
-	/* Is it a reply for the device we are configuring? */
-	if (b->xid != ic_dev_xid) {
-		if (net_ratelimit())
-			printk(KERN_ERR "DHCP/BOOTP: Ignoring delayed packet\n");
-		goto drop_unlock;
+	/* Is it a reply for a device we are configuring? */
+	n = ic_first_dev;
+	while (n) {
+		DBG(("n->dev %p(%s) dev %p(%s) n->xid %x b->xid %x\n",
+			n->dev, n->dev->name, dev, dev->name, n->xid, b->xid));
+		if (n->dev == dev && b->xid != n->xid)
+			if (net_ratelimit()) {
+				printk(KERN_ERR "DHCP/BOOTP: Ignoring delayed packet\n");
+				goto drop_unlock;
+			}
+		n = n->next;
 	}
 
 	/* Parse extensions */
@@ -1180,9 +1184,6 @@ static int __init ic_dynamic(void)
 	get_random_bytes(&timeout, sizeof(timeout));
 	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
 	for (;;) {
-		/* Track the device we are configuring */
-		ic_dev_xid = d->xid;
-
 #ifdef IPCONFIG_BOOTP
 		if (do_bootp && (d->able & IC_BOOTP))
 			ic_bootp_send_if(d, jiffies - start_jiffies);
