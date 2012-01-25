@@ -267,8 +267,6 @@ static int omap_hsmmc_235_set_power(struct device *dev, int slot, int power_on,
 		platform_get_drvdata(to_platform_device(dev));
 	int ret = 0;
 
-	printk("%s: power_on %d\n", __FUNCTION__, power_on);
-
 	/*
 	 * If we don't see a Vcc regulator, assume it's a fixed
 	 * voltage always-on regulator.
