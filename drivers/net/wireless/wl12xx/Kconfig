@@ -42,7 +42,7 @@ config WL127X_FIRMWARE_SOURCE
 
 config WL12XX_HT
         bool "TI wl12xx 802.11 HT support (EXPERIMENTAL)"
-        depends on WL12XX && EXPERIMENTAL
+        depends on WL12XX
         default n
         ---help---
           This will enable 802.11 HT support in the wl12xx module.
