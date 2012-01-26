@@ -113,6 +113,8 @@ static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 	int		retries = 1000;
 
 	csr = musb_readw(epio, MUSB_TXCSR);
+	if (! (csr & MUSB_TXCSR_TXPKTRDY))
+		return;
 	while (csr & MUSB_TXCSR_FIFONOTEMPTY) {
 		if (csr != lastcsr)
 			dev_dbg(musb->controller, "Host TX FIFONOTEMPTY csr: %02x\n", csr);
@@ -120,10 +122,11 @@ static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 		csr |= MUSB_TXCSR_FLUSHFIFO;
 		musb_writew(epio, MUSB_TXCSR, csr);
 		csr = musb_readw(epio, MUSB_TXCSR);
-		if (WARN(retries-- < 1,
-				"Could not flush host TX%d fifo: csr: %04x\n",
-				ep->epnum, csr))
+		retries--;
+		if (retries < 1) {
+			WARNING("Could not flush hist TX%d fifo: csr: %04x\n", ep->epnum, csr);
 			return;
+		}
 		mdelay(1);
 	}
 }
