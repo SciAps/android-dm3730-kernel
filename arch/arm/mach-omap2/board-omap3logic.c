@@ -31,6 +31,8 @@
 #include <linux/wl12xx.h>
 #include <linux/mmc/host.h>
 #include <linux/usb/isp1763.h>
+#include <linux/skbuff.h>
+#include <linux/ti_wilink_st.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -74,6 +76,27 @@
 
 static struct regulator_consumer_supply omap3logic_vmmc1_supply = {
 	.supply			= "vmmc",
+};
+
+/* wl128x BT, FM, GPS connectivity chip */
+static struct ti_st_plat_data omap3logic_wilink_pdata = {
+        .nshutdown_gpio = 162,
+        .dev_name = "/dev/ttyO1",
+        .flow_cntrl = 1,
+        .baud_rate = 115200,
+};
+
+static struct platform_device omap3logic_ti_st= {
+        .name           = "kim",
+        .id             = -1,
+	.dev = {
+        	.platform_data = &omap3logic_wilink_pdata,
+	},
+};
+
+static struct platform_device omap3logic_btwilink_device = {
+       .name = "btwilink",
+       .id = -1,
 };
 
 /* VMMC1 for MMC1 pins CMD, CLK, DAT0..DAT3 (20 mA, plus card == max 220 mA) */
@@ -920,8 +943,9 @@ static int __init board_wl12xx_init(void)
 
 		/* Pull BT_EN low */
 		omap_mux_init_gpio(162, OMAP_PIN_OUTPUT);
-		gpio_request_one(162, GPIOF_OUT_INIT_LOW, "bt_en");
-		gpio_export(162, 0);
+		//gpio_request_one(162, GPIOF_OUT_INIT_LOW, "bt_en");
+		//gpio_export(162, 0);
+
 		/* wl128x ref clock is 26 MHz; torpedo TXCO clock is 26Mhz */
 		omap3logic_wlan_data.board_ref_clock = WL12XX_REFCLOCK_26;
 		omap3logic_wlan_data.board_tcxo_clock = WL12XX_TCXOCLOCK_26;
@@ -939,6 +963,8 @@ static int __init board_wl12xx_init(void)
 	if (wl12xx_set_platform_data(&omap3logic_wlan_data))
 		pr_err("error setting wl12xx data\n");
 	platform_device_register(&omap3logic_vwlan_device);
+	platform_device_register(&omap3logic_ti_st);
+	platform_device_register(&omap3logic_btwilink_device);
 #endif
 
 	return 0;
