@@ -29,6 +29,19 @@ u32 yaffs2_find_refresh_block(struct yaffs_dev *dev);
 int yaffs2_checkpt_required(struct yaffs_dev *dev);
 int yaffs_calc_checkpt_blocks_required(struct yaffs_dev *dev);
 
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+int yaffs2_init_refresh_ring(struct yaffs_dev *dev);
+void yaffs2_destroy_refresh_ring(struct yaffs_dev *dev);
+void yaffs2_refresh_ring_add(struct yaffs_dev *dev, struct yaffs_block_info *bi);
+int yaffs2_refresh_ring_next(struct yaffs_dev *dev);
+int yaffs2_refresh_ring_not_empty(struct yaffs_dev *dev);
+#else
+static inline int yaffs2_refresh_ring_empty(struct yaffs_dev *dev)
+{
+	return !0;
+}
+#endif
+
 void yaffs2_checkpt_invalidate(struct yaffs_dev *dev);
 int yaffs2_checkpt_save(struct yaffs_dev *dev);
 int yaffs2_checkpt_restore(struct yaffs_dev *dev);

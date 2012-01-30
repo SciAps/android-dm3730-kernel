@@ -32,4 +32,11 @@ static inline struct yaffs_block_info *yaffs_get_block_info(struct yaffs_dev
 	return &dev->block_info[blk - dev->internal_start_block];
 }
 
+/* Convert from yaffs_block_info ptr back to a block number */
+static inline int yaffs_get_block_from_bi(struct yaffs_dev *dev,
+					struct yaffs_block_info *bi)
+{
+	return (bi - dev->block_info) + dev->internal_start_block;
+}
+
 #endif

@@ -241,8 +241,14 @@ void yaffs_handle_chunk_error(struct yaffs_dev *dev,
 		dev->has_pending_prioritised_gc = 1;
 
 		if (!counts_as_strike) {
-			/* This chunk is stale (MTD returned -ESTALE).
-			 * refresh block but don't increment strike count. */
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+			/* This chunk is in a stale block (MTD returned -ESTALE)
+			 * First stop allocating in the block and add it to
+			 * the refresh ring */
+			if (bi->block_state == YAFFS_BLOCK_STATE_ALLOCATING)
+				yaffs_skip_rest_of_block(dev);
+			yaffs2_refresh_ring_add(dev, bi);
+#endif
 			bi->chunk_stale_count++;
 			if (bi->chunk_stale_count > dev->n_max_block_stale)
 				dev->n_max_block_stale++;
@@ -2293,6 +2299,7 @@ static void yaffs_deinit_blocks(struct yaffs_dev *dev)
 static int yaffs_init_blocks(struct yaffs_dev *dev)
 {
 	int n_blocks = dev->internal_end_block - dev->internal_start_block + 1;
+	int i;
 
 	dev->block_info = NULL;
 	dev->chunk_bits = NULL;
@@ -2328,6 +2335,10 @@ static int yaffs_init_blocks(struct yaffs_dev *dev)
 
 
 	memset(dev->block_info, 0, n_blocks * sizeof(struct yaffs_block_info));
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+	for (i=0; i<n_blocks; ++i)
+		INIT_LIST_HEAD(&dev->block_info[i].estale_entry);
+#endif	
 	memset(dev->chunk_bits, 0, dev->chunk_bit_stride * n_blocks);
 	return YAFFS_OK;
 
@@ -2880,9 +2891,21 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 
 		dev->gc_skip = 5;
 
+
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+		/* If we don't already have a block being gc'd then see if
+		 * there's one that's marked for refresh by -ESTALE */
+		if (dev->gc_block < 1 && yaffs2_refresh_ring_not_empty(dev)) {
+			dev->gc_block = yaffs2_refresh_ring_next(dev);
+			if (dev->gc_block > 0) {
+				dev->gc_chunk = 0;
+				dev->n_clean_ups = 0;
+			}
+		}
+#endif
+
 		/* If we don't already have a block being gc'd then see if we
 		 * should start another */
-
 		if (dev->gc_block < 1 && !aggressive) {
 			dev->gc_block = yaffs2_find_refresh_block(dev);
 			dev->gc_chunk = 0;
@@ -2914,8 +2937,9 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 				dev->n_erased_blocks, max_tries,
 				dev->gc_block);
 		}
-	} while ((dev->n_erased_blocks < dev->param.n_reserved_blocks) &&
-		 (dev->gc_block > 0) && (max_tries < 2));
+	} while (yaffs2_refresh_ring_not_empty(dev)
+		|| ((dev->n_erased_blocks < dev->param.n_reserved_blocks) &&
+			(dev->gc_block > 0) && (max_tries < 2)));
 
 	return aggressive ? gc_ok : YAFFS_OK;
 }
@@ -4843,6 +4867,13 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	if (dev->param.is_yaffs2)
 		dev->param.use_header_file_size = 1;
 
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+	if (!dev->param.no_handle_estale) {
+		if (yaffs2_init_refresh_ring(dev) != YAFFS_OK)
+			init_failed = 1;
+	}
+#endif
+
 	if (!init_failed && !yaffs_init_blocks(dev))
 		init_failed = 1;
 
@@ -4942,6 +4973,10 @@ void yaffs_deinitialise(struct yaffs_dev *dev)
 		yaffs_deinit_blocks(dev);
 		yaffs_deinit_tnodes_and_objs(dev);
 		yaffs_summary_deinit(dev);
+
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+		yaffs2_destroy_refresh_ring(dev);
+#endif
 
 		if (dev->param.n_caches > 0 && dev->cache) {
 

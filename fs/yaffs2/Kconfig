@@ -90,6 +90,16 @@ config YAFFS_AUTO_YAFFS2
 
 	  If unsure, say Y.
 
+config YAFFS_HANDLE_ESTALE
+       	bool "Handle -ESTALE retruns from MTD"
+	depends on YAFFS_FS && YAFFS_YAFFS2
+	default n
+	help
+	  This defaults yaffs to tracking (vi MTD returning -ESTALE)
+	  blocks that require refreshing on reads.
+	  This behavior can also be overridden with track-estale-on and
+	  trace-estale-off mount options.
+
 config YAFFS_DISABLE_TAGS_ECC
 	bool "Disable yaffs from doing ECC on tags by default"
 	depends on YAFFS_FS && YAFFS_YAFFS2

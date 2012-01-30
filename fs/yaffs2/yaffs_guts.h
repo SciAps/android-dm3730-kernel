@@ -290,7 +290,11 @@ struct yaffs_block_info {
 	u32 has_shrink_hdr:1;	/* This block has at least one shrink header */
 	u32 seq_number;		/* block sequence number for yaffs2 */
 	u32 chunk_stale_count;	/* How many times read returned -ESTALE */
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+	struct list_head estale_entry;
+#endif
 };
+
 
 /* -------------------------- Object structure -------------------------------*/
 /* This is the object structure as stored on NAND */
@@ -526,7 +530,7 @@ struct yaffs_param {
         int tags_9bytes;	/* Use 9 byte tags */
 	int no_tags_ecc;	/* Flag to decide whether or not to do ECC
 				 * on packed tags (yaffs2) */
-
+	
 	int is_yaffs2;		/* Use yaffs2 mode on this device */
 
 	int empty_lost_n_found;	/* Auto-empty lost+found directory on mount */
@@ -538,6 +542,9 @@ struct yaffs_param {
 	u8 skip_checkpt_wr;
 
 	int enable_xattr;	/* Enable xattribs */
+
+	/* Handle -ESTALE returns from MTD by forcing the block to refresh */
+	int no_handle_estale;
 
 	/* NAND access functions (Must be set before calling YAFFS) */
 
@@ -683,6 +690,12 @@ struct yaffs_dev {
 	/* Garbage collection control */
 	u32 *gc_cleanup_list;	/* objects to delete at the end of a GC. */
 	u32 n_clean_ups;
+
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+	/* list of blocks that returned -ESTALE from MTD; GC thread
+	 * forcibly garbage collects them */
+	struct list_head estale_head;
+#endif
 
 	unsigned has_pending_prioritised_gc;	/* We think this device might
 						have pending prioritised gcs */

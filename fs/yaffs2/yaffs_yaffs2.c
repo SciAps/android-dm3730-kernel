@@ -192,6 +192,46 @@ u32 yaffs2_find_refresh_block(struct yaffs_dev *dev)
 	return oldest;
 }
 
+#ifdef CONFIG_YAFFS_HANDLE_ESTALE
+/*
+ * yaffs2_refresh_ring_add()
+ * Add a block to the refresh ring; complain if too many.
+ * Only for yaffs2.
+ */
+int yaffs2_init_refresh_ring(struct yaffs_dev *dev)
+{
+	INIT_LIST_HEAD(&dev->estale_head);
+	return YAFFS_OK;
+}
+
+void yaffs2_destroy_refresh_ring(struct yaffs_dev *dev)
+{
+}
+
+void yaffs2_refresh_ring_add(struct yaffs_dev *dev, struct yaffs_block_info *bi)
+{
+	if (list_empty(&bi->estale_entry))
+		list_add(&bi->estale_entry, &dev->estale_head);
+}
+
+int yaffs2_refresh_ring_next(struct yaffs_dev *dev)
+{
+	struct yaffs_block_info *bi;
+
+	if (list_empty(&dev->estale_head))
+		return 0;
+
+	bi = list_entry(dev->estale_head.next, struct yaffs_block_info, estale_entry);
+	list_del_init(dev->estale_head.next);
+	return yaffs_get_block_from_bi(dev, bi);
+}
+
+int yaffs2_refresh_ring_not_empty(struct yaffs_dev *dev)
+{
+	return !list_empty(&dev->estale_head);
+}
+#endif
+
 int yaffs2_checkpt_required(struct yaffs_dev *dev)
 {
 	int nblocks;

@@ -2522,6 +2522,8 @@ struct yaffs_options {
 	int no_cache;
 	int tags_ecc_on;
 	int tags_ecc_overridden;
+	int handle_estale_on;
+	int handle_estale_overridden;
 	int lazy_loading_enabled;
 	int lazy_loading_overridden;
 	int empty_lost_and_found;
@@ -2564,6 +2566,12 @@ static int yaffs_parse_options(struct yaffs_options *options,
 		} else if (!strcmp(cur_opt, "tags-ecc-on")) {
 			options->tags_ecc_on = 1;
 			options->tags_ecc_overridden = 1;
+		} else if (!strcmp(cur_opt, "handle-estale-off")) {
+			options->handle_estale_on = 0;
+			options->handle_estale_overridden = 1;
+		} else if (!strcmp(cur_opt, "handle-estale-on")) {
+			options->handle_estale_on = 1;
+			options->handle_estale_overridden = 1;
 		} else if (!strcmp(cur_opt, "lazy-loading-off")) {
 			options->lazy_loading_enabled = 0;
 			options->lazy_loading_overridden = 1;
@@ -2846,6 +2854,9 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 
 	if (options.tags_ecc_overridden)
 		param->no_tags_ecc = !options.tags_ecc_on;
+
+	if (options.handle_estale_overridden)
+		param->no_handle_estale = !options.handle_estale_on;
 
 	ecc = mtd->ecclayout;
 	if (ecc && (ecc->oobavail <= 16)) {
