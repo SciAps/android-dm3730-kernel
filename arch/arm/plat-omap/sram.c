@@ -192,7 +192,7 @@ static void __init omap_detect_sram(void)
 	omap_sram_ceil = omap_sram_base + omap_sram_size;
 }
 
-static struct map_desc omap_sram_io_desc[] __initdata = {
+static struct map_desc omap_sram_io_desc[] /* __initdata */ = {
 	{	/* .length gets filled in at runtime */
 		.virtual	= OMAP1_SRAM_VA,
 		.pfn		= __phys_to_pfn(OMAP1_SRAM_PA),
