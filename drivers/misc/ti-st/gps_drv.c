@@ -421,6 +421,7 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 			loff_t *offset)
 {
 	int len = 0;
+	int ret;
 	struct sk_buff *skb = NULL;
 	unsigned long timeout = GPSDRV_READ_TIMEOUT;
 	struct gpsdrv_data *hgps;
@@ -463,7 +464,9 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 		GPSDRV_DBG("SKB length is Greater than requested size \
 				Returning the available length of SKB");
 
-		copy_to_user(data, skb->data, size);
+		ret = copy_to_user(data, skb->data, size);
+		if (ret < 0)
+			return ret;
 
 		skb_pull(skb, size);
 
