@@ -99,6 +99,28 @@ static struct platform_device omap3logic_btwilink_device = {
        .id = -1,
 };
 
+/* VPLL2 for wl1283 GPS antenna supply */
+static struct regulator_consumer_supply omap3logic_vmmc2_supplies[] = {
+	REGULATOR_SUPPLY("wl1283-gps", "tigps"),
+};
+
+static struct regulator_init_data omap3logic_vmmc2 = {
+	.constraints = {
+		.name			= "VMMC2",
+		.min_uV			= 1850000,
+		.max_uV			= 3150000,
+		.apply_uV		= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_VOLTAGE
+					| REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= ARRAY_SIZE(omap3logic_vmmc2_supplies),
+	.consumer_supplies	= omap3logic_vmmc2_supplies,
+};
+
+
 /* VMMC1 for MMC1 pins CMD, CLK, DAT0..DAT3 (20 mA, plus card == max 220 mA) */
 static struct regulator_init_data omap3logic_vmmc1 = {
 	.constraints = {
@@ -714,6 +736,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.power		= &omap3logic_t2scripts_data,
 	.codec		= &omap3logic_codec_data,
 	.vmmc1		= &omap3logic_vmmc1,
+	.vmmc2		= &omap3logic_vmmc2,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
 #if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)

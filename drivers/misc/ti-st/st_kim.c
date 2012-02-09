@@ -716,7 +716,7 @@ static int kim_probe(struct platform_device *pdev)
 				kim_gdata, &version_debugfs_fops);
 	debugfs_create_file("protocols", S_IRUGO, kim_debugfs_dir,
 				kim_gdata, &list_debugfs_fops);
-	pr_info(" debugfs entries created ");
+	pr_info(" debugfs entries created\n");
 	return 0;
 }
 

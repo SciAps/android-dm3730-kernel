@@ -32,23 +32,35 @@
 #include <linux/interrupt.h>
 
 #include <linux/ti_wilink_st.h>
+#include <linux/regulator/consumer.h>
+
 
 //#define VERBOSE
 //#define DEBUG
 
 /* Debug macros*/
 #if defined(DEBUG)		/* limited debug messages */
+#define GPSDRV_ERR(fmt, arg...)  printk(KERN_ERR "(gpsdrv):"fmt"\n" , ## arg)
 #define GPSDRV_DBG(fmt, arg...)  printk(KERN_INFO "(gpsdrv):"fmt"\n" , ## arg)
 #define GPSDRV_VER(fmt, arg...)
+#define GPSDRV_REG(fmt, arg...)
 #elif defined(VERBOSE)		/* very verbose */
 #define GPSDRV_DBG(fmt, arg...)  printk(KERN_INFO "(gpsdrv):"fmt"\n" , ## arg)
 #define GPSDRV_VER(fmt, arg...)  printk(KERN_INFO "(gpsdrv):"fmt"\n" , ## arg)
 #define GPSDRV_ERR(fmt, arg...)  printk(KERN_ERR "(gpsdrv):"fmt"\n" , ## arg)
+#define GPSDRV_REG(fmt, arg...)  printk(KERN_ERR "(gpsdrv-regulator):"fmt"\n" , ## arg)
 #else /* Error msgs only */
 #define GPSDRV_ERR(fmt, arg...)  printk(KERN_ERR "(gpsdrv):"fmt"\n" , ## arg)
 #define GPSDRV_VER(fmt, arg...)
 #define GPSDRV_DBG(fmt, arg...)
+#define GPSDRV_REG(fmt, arg...)
 #endif
+
+/*********Functions called during insmod and delmod****************************/
+
+static int gpsdrv_major;		/* GPS major number */
+static struct class *gpsdrv_class;	/* GPS class during class_create */
+static struct device *gpsdrv_dev;	/* GPS dev during device_create */
 
 static void gpsdrv_tsklet_write(unsigned long data);
 
@@ -263,6 +275,24 @@ void gpsdrv_tsklet_write(unsigned long data)
 	return;
 }
 
+struct regulator		*wl1283_reg;
+#define REGULATOR_NAME		"wl1283-gps"
+#define REGULATOR_VOLTAGE	3150000		/* 3.15V, max VMMC2 voltage */
+
+static void wl1283_regulator_put(void)
+{
+	int ret;
+
+	if (wl1283_reg) {
+		ret = regulator_is_enabled(wl1283_reg);
+		if (ret) {
+			ret = regulator_disable(wl1283_reg);
+		}
+		regulator_put(wl1283_reg);
+		wl1283_reg = NULL;
+	}
+}
+
 /*********Functions Called from GPS host***************************************/
 
 /** gpsdrv_open Function
@@ -279,13 +309,52 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 	int ret = 0;
 	unsigned long timeout = GPSDRV_REG_TIMEOUT;
 	struct gpsdrv_data *hgps;
+	int voltage;
 
 	GPSDRV_DBG(" Inside %s", __func__);
+
+	if (wl1283_reg) {
+		GPSDRV_ERR("%s: wl1283 regulator is already set!", __FUNCTION__);
+		return -EMFILE; /* return too many files open */
+	}
+
+	wl1283_reg = regulator_get(gpsdrv_dev, REGULATOR_NAME);
+	if (IS_ERR(wl1283_reg)) {
+		GPSDRV_ERR("%s: Couldn't get regulator %s, returned %ld", __FUNCTION__, REGULATOR_NAME, PTR_ERR(wl1283_reg));
+		ret = PTR_ERR(wl1283_reg);
+		wl1283_reg = NULL;
+		return ret;
+	}
+
+	/* Crank up the regulator to its max */
+	voltage = regulator_get_voltage(wl1283_reg);
+	if (voltage < 0) {
+		GPSDRV_ERR("%s: regulator_get_voltage returned %d", __FUNCTION__, voltage);
+		wl1283_regulator_put();
+		return voltage;
+	}
+	if (voltage != REGULATOR_VOLTAGE) {
+		GPSDRV_DBG("%s: wl1283 antenna voltage %d.%d, need %d.%d", __FUNCTION__, voltage/1000000, (voltage % 1000000)/10000, REGULATOR_VOLTAGE/1000000, (REGULATOR_VOLTAGE % 1000000)/10000);
+		ret = regulator_set_voltage(wl1283_reg, REGULATOR_VOLTAGE, REGULATOR_VOLTAGE);
+		if (ret < 0) {
+			GPSDRV_ERR("%s: regulator_set_voltage returned %d!", __FUNCTION__, ret);
+			return ret;
+		}
+	}
+	if (1 || !voltage) {
+		ret = regulator_enable(wl1283_reg);
+		if (ret < 0) {
+			GPSDRV_ERR("%s: regulator_enable returned %d!", __FUNCTION__, ret);
+			wl1283_regulator_put();
+			return ret;
+		}
+	}
 
 	/* Allocate local resource memory */
 	hgps = kzalloc(sizeof(struct gpsdrv_data), GFP_KERNEL);
 	if (!(hgps)) {
 		GPSDRV_ERR("Can't allocate GPS data structure");
+		wl1283_regulator_put();
 		return -ENOMEM;
 	}
 
@@ -303,6 +372,7 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 		GPSDRV_ERR("GPS Registered/Registration in progress with ST"
 				" ,open called again?");
 		kfree(hgps);
+		wl1283_regulator_put();
 		return -EAGAIN;
 	}
 
@@ -323,6 +393,7 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 	if (ret < 0 && ret != -EINPROGRESS) {
 		GPSDRV_ERR(" st_register failed");
 		clear_bit(GPS_ST_REGISTERED, &hgps->state);
+		wl1283_regulator_put();
 		if (ret == -EINPROGRESS)
 			return -EAGAIN;
 		return GPS_ERR_FAILURE;
@@ -338,12 +409,14 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 			GPSDRV_ERR("st_register failed-GPS Device \
 						Registration timed out");
 			clear_bit(GPS_ST_REGISTERED, &hgps->state);
+			wl1283_regulator_put();
 			return -ETIMEDOUT;
 		} else if (0 > hgps->streg_cbdata) {
 			GPSDRV_ERR("GPS Device Registration Failed-ST \
 								Reg CB called"
 				   "with ivalid value %d", hgps->streg_cbdata);
 			clear_bit(GPS_ST_REGISTERED, &hgps->state);
+			wl1283_regulator_put();
 			return -EAGAIN;
 		}
 	}
@@ -374,6 +447,8 @@ int gpsdrv_release(struct inode *inod, struct file *file)
 	struct gpsdrv_data *hgps = file->private_data;
 
 	GPSDRV_DBG(" Inside %s", __func__);
+
+	wl1283_regulator_put();
 
 	/* Disabling task-let 1st & then un-reg to avoid
 	 * tasklet getting scheduled
@@ -742,11 +817,6 @@ const struct file_operations gpsdrv_chrdev_ops = {
 	.release = gpsdrv_release,
 };
 
-/*********Functions called during insmod and delmod****************************/
-
-static int gpsdrv_major;		/* GPS major number */
-static struct class *gpsdrv_class;	/* GPS class during class_create */
-static struct device *gpsdrv_dev;	/* GPS dev during device_create */
 /** gpsdrv_init Function
  *  This function Initializes the gps driver parametes and exposes
  *  /dev/gps node to user space
