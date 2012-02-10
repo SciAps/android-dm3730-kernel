@@ -100,6 +100,8 @@ int st_int_write(struct st_data_s *st_gdata,
  * push the skb received to relevant
  * protocol stacks
  */
+static int had_success = 1;
+
 void st_send_frame(unsigned char chnl_id, struct st_data_s *st_gdata)
 {
 	pr_debug(" %s(prot:%d) ", __func__, chnl_id);
@@ -107,11 +109,17 @@ void st_send_frame(unsigned char chnl_id, struct st_data_s *st_gdata)
 	if (unlikely
 	    (st_gdata == NULL || st_gdata->rx_skb == NULL
 	     || st_gdata->is_registered[chnl_id] == false)) {
-		pr_err("chnl_id %d not registered, no data to send?",
-			   chnl_id);
+		/* Only print the error message once until data
+		 * get's through */
+		if (had_success)
+			pr_err("chnl_id %d not registered, no data to send?\n",
+				chnl_id);
+		had_success = 0;
 		kfree_skb(st_gdata->rx_skb);
 		return;
 	}
+	had_success = 1;
+
 	/* this cannot fail
 	 * this shouldn't take long
 	 * - should be just skb_queue_tail for the
