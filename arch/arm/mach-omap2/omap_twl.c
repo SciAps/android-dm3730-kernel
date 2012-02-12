@@ -36,7 +36,7 @@
 #define OMAP3430_VP2_VLIMITTO_VDDMAX	0x2c
 
 #define OMAP3630_VP1_VLIMITTO_VDDMIN	0x18
-#define OMAP3630_VP1_VLIMITTO_VDDMAX	0x3c
+#define OMAP3630_VP1_VLIMITTO_VDDMAX	0x40
 #define OMAP3630_VP2_VLIMITTO_VDDMIN	0x18
 #define OMAP3630_VP2_VLIMITTO_VDDMAX	0x30
 
@@ -242,6 +242,37 @@ static struct omap_volt_pmic_info omap4_core_volt_info = {
 	.vsel_to_uv		= twl6030_vsel_to_uv,
 	.uv_to_vsel		= twl6030_uv_to_vsel,
 };
+
+#include "smartreflex.h"
+
+#define PHY_TO_OFF_PM_RECEIVER(p)	(p - 0x5b)
+/* Smartreflex Control */
+#define R_DCDC_GLOBAL_CFG	PHY_TO_OFF_PM_RECEIVER(0x61)
+#define CFG_ENABLE_SRFLX	0x08
+
+/* API to enable smrtreflex on Triton side */
+static void twl4030_smartreflex_init(void)
+{
+	int ret = 0;
+	u8 read_val;
+
+	ret = twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &read_val,
+			R_DCDC_GLOBAL_CFG);
+	read_val |= CFG_ENABLE_SRFLX;
+	ret |= twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, read_val,
+			R_DCDC_GLOBAL_CFG);
+}
+
+struct omap_sr_pmic_data twl4030_sr_data = {
+	.sr_pmic_init   = twl4030_smartreflex_init,
+};
+
+void __init twl4030_power_sr_init()
+{
+	/* Register the SR init API with the Smartreflex driver */
+	omap_sr_register_pmic(&twl4030_sr_data);
+}
+EXPORT_SYMBOL_GPL(twl4030_remove_script);
 
 int __init omap4_twl_init(void)
 {

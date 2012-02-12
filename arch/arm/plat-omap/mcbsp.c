@@ -728,7 +728,7 @@ static inline void omap34xx_mcbsp_request(struct omap_mcbsp *mcbsp)
 	 * REVISIT: some wakeups may be unnecessary
 	 */
 	if (cpu_is_omap34xx() || cpu_is_omap44xx()) {
-		MCBSP_WRITE(mcbsp, WAKEUPEN, XRDYEN | RRDYEN);
+		MCBSP_WRITE(mcbsp, WAKEUPEN, 0 /*XRDYEN | RRDYEN*/);
 	}
 }
 

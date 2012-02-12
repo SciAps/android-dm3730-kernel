@@ -1238,8 +1238,11 @@ twl_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	/* load power event scripts */
-	if (twl_has_power() && pdata->power)
-		twl4030_power_init(pdata->power);
+	if (twl_has_power()) {
+		twl4030_power_sr_init();
+		if (pdata->power)
+			twl4030_power_init(pdata->power);
+	}
 
 	/* Maybe init the T2 Interrupt subsystem */
 	if (client->irq

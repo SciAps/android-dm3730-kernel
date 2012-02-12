@@ -560,7 +560,7 @@ static struct clk emu_core_alwon_ck = {
 /* Type: DPLL */
 static struct dpll_data dpll4_dd;
 
-static struct dpll_data dpll4_dd_34xx __initdata = {
+static struct dpll_data dpll4_dd_34xx = {
 	.mult_div1_reg	= OMAP_CM_REGADDR(PLL_MOD, CM_CLKSEL2),
 	.mult_mask	= OMAP3430_PERIPH_DPLL_MULT_MASK,
 	.div1_mask	= OMAP3430_PERIPH_DPLL_DIV_MASK,
@@ -582,7 +582,7 @@ static struct dpll_data dpll4_dd_34xx __initdata = {
 	.max_divider	= OMAP3_MAX_DPLL_DIV,
 };
 
-static struct dpll_data dpll4_dd_3630 __initdata = {
+static struct dpll_data dpll4_dd_3630 = {
 	.mult_div1_reg	= OMAP_CM_REGADDR(PLL_MOD, CM_CLKSEL2),
 	.mult_mask	= OMAP3630_PERIPH_DPLL_MULT_MASK,
 	.div1_mask	= OMAP3430_PERIPH_DPLL_DIV_MASK,
@@ -2469,7 +2469,7 @@ static struct clk uart3_fck = {
 	.clkdm_name	= "per_clkdm",
 	.recalc		= &followparent_recalc,
 };
-
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 static struct clk uart4_fck = {
 	.name		= "uart4_fck",
 	.ops		= &clkops_omap2_dflt_wait,
@@ -2479,7 +2479,7 @@ static struct clk uart4_fck = {
 	.clkdm_name	= "per_clkdm",
 	.recalc		= &followparent_recalc,
 };
-
+#endif
 static struct clk gpt2_fck = {
 	.name		= "gpt2_fck",
 	.ops		= &clkops_omap2_dflt_wait,
@@ -2729,7 +2729,7 @@ static struct clk uart3_ick = {
 	.clkdm_name	= "per_clkdm",
 	.recalc		= &followparent_recalc,
 };
-
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 static struct clk uart4_ick = {
 	.name		= "uart4_ick",
 	.ops		= &clkops_omap2_iclk_dflt_wait,
@@ -2739,7 +2739,7 @@ static struct clk uart4_ick = {
 	.clkdm_name	= "per_clkdm",
 	.recalc		= &followparent_recalc,
 };
-
+#endif
 static struct clk gpt9_ick = {
 	.name		= "gpt9_ick",
 	.ops		= &clkops_omap2_iclk_dflt_wait,
@@ -3178,7 +3178,7 @@ static struct clk vpfe_fck = {
 	.enable_bit	= AM35XX_VPFE_FCLK_SHIFT,
 	.recalc		= &followparent_recalc,
 };
-
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 /*
  * The UART1/2 functional clock acts as the functional
  * clock for UART4. No separate fclk control available.
@@ -3192,7 +3192,7 @@ static struct clk uart4_ick_am35xx = {
 	.clkdm_name	= "core_l4_clkdm",
 	.recalc		= &followparent_recalc,
 };
-
+#endif
 static struct clk dummy_apb_pclk = {
 	.name		= "apb_pclk",
 	.ops		= &clkops_null,
@@ -3400,7 +3400,9 @@ static struct omap_clk omap3xxx_clks[] = {
 	CLK(NULL,	"per_96m_fck",	&per_96m_fck,	CK_3XXX),
 	CLK(NULL,	"per_48m_fck",	&per_48m_fck,	CK_3XXX),
 	CLK(NULL,	"uart3_fck",	&uart3_fck,	CK_3XXX),
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 	CLK(NULL,	"uart4_fck",	&uart4_fck,	CK_36XX),
+#endif
 	CLK(NULL,	"gpt2_fck",	&gpt2_fck,	CK_3XXX),
 	CLK(NULL,	"gpt3_fck",	&gpt3_fck,	CK_3XXX),
 	CLK(NULL,	"gpt4_fck",	&gpt4_fck,	CK_3XXX),
@@ -3424,7 +3426,9 @@ static struct omap_clk omap3xxx_clks[] = {
 	CLK(NULL,	"gpio2_ick",	&gpio2_ick,	CK_3XXX),
 	CLK(NULL,	"wdt3_ick",	&wdt3_ick,	CK_3XXX),
 	CLK(NULL,	"uart3_ick",	&uart3_ick,	CK_3XXX),
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 	CLK(NULL,	"uart4_ick",	&uart4_ick,	CK_36XX),
+#endif
 	CLK(NULL,	"gpt9_ick",	&gpt9_ick,	CK_3XXX),
 	CLK(NULL,	"gpt8_ick",	&gpt8_ick,	CK_3XXX),
 	CLK(NULL,	"gpt7_ick",	&gpt7_ick,	CK_3XXX),
@@ -3461,7 +3465,9 @@ static struct omap_clk omap3xxx_clks[] = {
 	CLK("musb-am35x",	"ick",		&hsotgusb_ick_am35xx,	CK_AM35XX),
 	CLK("musb-am35x",	"fck",		&hsotgusb_fck_am35xx,	CK_AM35XX),
 	CLK(NULL,	"hecc_ck",	&hecc_ck,	CK_AM35XX),
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 	CLK(NULL,	"uart4_ick",	&uart4_ick_am35xx,	CK_AM35XX),
+#endif
 };
 
 

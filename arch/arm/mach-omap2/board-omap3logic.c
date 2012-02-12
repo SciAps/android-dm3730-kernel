@@ -711,7 +711,7 @@ static struct twl4030_resconfig twl4030_rconfig[] = {
 	{ 0, 0},
 };
 
-static struct twl4030_power_data omap3logic_t2scripts_data __initdata = {
+static struct twl4030_power_data omap3logic_t2scripts_data = {
 	.scripts        = twl4030_scripts,
 	.num = ARRAY_SIZE(twl4030_scripts),
 	.resource_config = twl4030_rconfig,

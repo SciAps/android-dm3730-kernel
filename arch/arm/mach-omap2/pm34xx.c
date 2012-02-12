@@ -170,7 +170,7 @@ static void omap3_core_restore_context(void)
  * once during boot sequence, but this works as we are not using secure
  * services.
  */
-static void omap3_save_secure_ram_context(void)
+static void omap3_save_secure_ram_context(u32 target_mpu_state)
 {
 	u32 ret;
 	int mpu_next_state = pwrdm_read_next_pwrst(mpu_pwrdm);
@@ -181,7 +181,7 @@ static void omap3_save_secure_ram_context(void)
 		 * otherwise the WFI executed inside the ROM code
 		 * will hang the system.
 		 */
-		pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_ON);
+		pwrdm_set_next_pwrst(mpu_pwrdm, target_mpu_state);
 		ret = _omap_save_secure_sram((u32 *)
 				__pa(omap3_secure_ram_storage));
 		pwrdm_set_next_pwrst(mpu_pwrdm, mpu_next_state);
@@ -691,11 +691,15 @@ static void __init omap3_d2d_idle(void)
 
 static void __init prcm_setup_regs(void)
 {
+#ifdef CONFIG_OMAP3LOGIC_UART_D
 	u32 omap3630_en_uart4_mask = cpu_is_omap3630() ?
 					OMAP3630_EN_UART4_MASK : 0;
 	u32 omap3630_grpsel_uart4_mask = cpu_is_omap3630() ?
 					OMAP3630_GRPSEL_UART4_MASK : 0;
-
+#else
+	u32 omap3630_en_uart4_mask = 0;
+	u32 omap3630_grpsel_uart4_mask = 0;
+#endif
 	/* XXX This should be handled by hwmod code or SCM init code */
 	omap_ctrl_writel(OMAP3430_AUTOIDLE_MASK, OMAP2_CONTROL_SYSCONFIG);
 
@@ -957,7 +961,7 @@ static int __init omap3_pm_init(void)
 		local_fiq_disable();
 
 		omap_dma_global_context_save();
-		omap3_save_secure_ram_context();
+		omap3_save_secure_ram_context(PWRDM_POWER_ON);
 		omap_dma_global_context_restore();
 
 		local_irq_enable();
