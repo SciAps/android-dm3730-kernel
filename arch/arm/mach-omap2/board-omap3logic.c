@@ -1367,7 +1367,6 @@ static int __init printk_debug_setup(char *str)
 	/* printk debug buffer is in start of DRAM; u-boot will look
 	 * there for printk_buffer information */
 	printk_debug = (void *)PAGE_OFFSET;
-	printk_debug->tag = PRINTK_DEBUG_COOKIE;
 	return 1;
 }
 __setup("printk-debug", printk_debug_setup);

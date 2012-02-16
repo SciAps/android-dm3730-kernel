@@ -845,6 +845,7 @@ void printk_flush_log(unsigned old_log_end)
 			/* flush from old_log_end to log_end */
 			clean_dcache_area(&log_buf[old_log_end & LOG_BUF_MASK], (log_end & LOG_BUF_MASK) - (old_log_end & LOG_BUF_MASK));
 		}
+		printk_debug->tag = PRINTK_DEBUG_COOKIE;
 		printk_debug->log_buf_phys = (char *)virt_to_phys(log_buf);
 		printk_debug->log_size = log_buf_len;
 		printk_debug->log_start = log_start;
