@@ -79,11 +79,25 @@ static struct regulator_consumer_supply omap3logic_vmmc1_supply = {
 };
 
 /* wl128x BT, FM, GPS connectivity chip */
+static int kim_suspend(struct platform_device *plat, pm_message_t msg)
+{
+	printk("%s:\n", __FUNCTION__);
+	return 0;
+}
+
+static int kim_resume(struct platform_device *plat)
+{
+	printk("%s:\n", __FUNCTION__);
+	return 0;
+}
+
 static struct ti_st_plat_data omap3logic_wilink_pdata = {
         .nshutdown_gpio = 162,
         .dev_name = "/dev/ttyO1",
         .flow_cntrl = 1,
         .baud_rate = 115200,
+	.suspend = kim_suspend,
+	.resume = kim_resume,
 };
 
 static struct platform_device omap3logic_ti_st= {
@@ -373,8 +387,8 @@ static struct twl4030_usb_data omap3logic_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
-#define STANDARD_OMAP	0
-#define TEST_LOGIC	1
+#define STANDARD_OMAP	1
+#define TEST_LOGIC	0
 
 //#define TEST_GROUP	DEV_GRP_P1
 #define TEST_GROUP	DEV_GRP_NULL
