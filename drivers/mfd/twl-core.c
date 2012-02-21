@@ -43,6 +43,11 @@
 #include <plat/cpu.h>
 #endif
 
+#ifdef CONFIG_TWL4030_DEBUG
+/* Define the maximum message length dumped out during I2C snd/rcv */
+#define TWL_MAX_MESSAGE_LEN	10
+#endif
+
 /*
  * The TWL4030 "Triton 2" is one of a family of a multi-function "Power
  * Management and System Companion Device" chips originally designed for
@@ -381,6 +386,24 @@ int twl_i2c_write(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes)
 	msg->buf = value;
 	/* over write the first byte of buffer with the register address */
 	*value = twl_map[mod_no].base + reg;
+
+#ifdef CONFIG_TWL4030_DEBUG
+	{
+		char buf[TWL_MAX_MESSAGE_LEN * 3 + 1];
+		int i, offset, nbytes;
+		nbytes = TWL_MAX_MESSAGE_LEN-1;
+		if (nbytes > num_bytes)
+			nbytes = num_bytes;
+		/* First byte of message is address; skip */
+		for (i=1, offset=0; i<=nbytes; ++i)
+			offset += sprintf(buf+offset, " %02x", value[i]);
+
+		printk(KERN_DEBUG "%s: I2C-addr %02x reg %02x (addr %x) num_bytes %d:%s\n",
+			"W", twl->address, reg, reg+twl_map[mod_no].base, num_bytes, buf);
+
+	}
+#endif
+
 	ret = i2c_transfer(twl->client->adapter, twl->xfer_msg, 1);
 	mutex_unlock(&twl->xfer_lock);
 
@@ -426,6 +449,7 @@ int twl_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes)
 		pr_err("%s: client %d is not initialized\n", DRIVER_NAME, sid);
 		return -EPERM;
 	}
+
 	mutex_lock(&twl->xfer_lock);
 	/* [MSG1] fill the register address data */
 	msg = &twl->xfer_msg[0];
@@ -442,6 +466,22 @@ int twl_i2c_read(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes)
 	msg->buf = value;
 	ret = i2c_transfer(twl->client->adapter, twl->xfer_msg, 2);
 	mutex_unlock(&twl->xfer_lock);
+
+#ifdef CONFIG_TWL4030_DEBUG
+	{
+		char buf[TWL_MAX_MESSAGE_LEN * 3 + 1];
+		int i, offset, nbytes;
+		nbytes = TWL_MAX_MESSAGE_LEN;
+		if (nbytes > num_bytes)
+			nbytes = num_bytes;
+		for (i=0, offset=0; i<nbytes; ++i)
+			offset += sprintf(buf+offset, " %02x", value[i]);
+
+		printk(KERN_DEBUG "%s: I2C-addr %02x reg %02x (addr %x) num_bytes %d:%s\n",
+			"R", twl->address, reg, reg+twl_map[mod_no].base, num_bytes, buf);
+
+	}
+#endif
 
 	/* i2c_transfer returns number of messages transferred */
 	if (ret != 2) {

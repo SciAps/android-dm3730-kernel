@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux/arm 3.0.0 Kernel Configuration
+# Linux/arm 3.0.0-BSP-dm37x-2.0-trunk Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1565,6 +1565,7 @@ CONFIG_MFD_CORE=y
 # CONFIG_TPS6507X is not set
 # CONFIG_MFD_TPS6586X is not set
 CONFIG_TWL4030_CORE=y
+# CONFIG_TWL4030_DEBUG is not set
 # CONFIG_TWL4030_MADC is not set
 CONFIG_TWL4030_POWER=y
 CONFIG_TWL4030_CODEC=y

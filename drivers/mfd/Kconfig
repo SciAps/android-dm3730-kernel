@@ -195,6 +195,13 @@ config TWL4030_CORE
 	  high speed USB OTG transceiver, an audio codec (on most
 	  versions) and many other features.
 
+config TWL4030_DEBUG
+        bool "Enable I2C debug of messages to/from TWL PMIC"
+	depends on TWL4030_CORE
+	help
+	Enable this to see in the log the I2C messages sent and received
+	by the TWL PMIC.
+
 config TWL4030_MADC
 	tristate "Texas Instruments TWL4030 MADC"
 	depends on TWL4030_CORE
