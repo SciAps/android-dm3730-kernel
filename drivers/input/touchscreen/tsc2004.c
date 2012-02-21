@@ -251,10 +251,12 @@ static void tsc2004_read_values(struct tsc2004 *tsc, struct ts_event *tc)
 	tc->z1 &= MEAS_MASK;
 	tc->z2 &= MEAS_MASK;
 
+#if 0
 	/* Prepare for touch readings */
 	if (tsc2004_prepare_for_reading(tsc) < 0)
 		dev_dbg(&tsc->client->dev, "Failed to prepare TSC for next"
 				"reading\n");
+#endif
 }
 
 static u32 tsc2004_calculate_pressure(struct tsc2004 *tsc, struct ts_event *tc)
