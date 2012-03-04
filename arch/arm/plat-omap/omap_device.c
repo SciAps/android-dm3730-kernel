@@ -293,6 +293,49 @@ static void _add_optional_clock_clkdev(struct omap_device *od,
 	}
 }
 
+/**
+ * omap_device_get_by_hwmod_name() - convert a hwmod name to
+ * device pointer.
+ * @oh_name: name of the hwmod device
+ *
+ * Returns back a struct device * pointer associated with a hwmod
+ * device represented by a hwmod_name
+ */
+struct device *omap_device_get_by_hwmod_name(const char *oh_name)
+{
+	struct omap_hwmod *oh;
+
+	if (!oh_name) {
+		WARN(1, "%s: no hwmod name!\n", __func__);
+		return ERR_PTR(-EINVAL);
+	}
+
+	oh = omap_hwmod_lookup(oh_name);
+	if (IS_ERR_OR_NULL(oh)) {
+		WARN(1, "%s: no hwmod for %s\n", __func__,
+			oh_name);
+		return ERR_PTR(oh ? PTR_ERR(oh) : -ENODEV);
+	}
+	if (IS_ERR_OR_NULL(oh->od)) {
+		WARN(1, "%s: no omap_device for %s\n", __func__,
+			oh_name);
+		return ERR_PTR(oh->od ? PTR_ERR(oh->od) : -ENODEV);
+	}
+
+#if 0
+	/* Note - this is commented out due to pdev being a member of od, not
+	 * a pointer; hence "od->pdev" is wrong.  I felt it easier not to
+	 * include the changes to disconect the platform device from the
+	 * omap_device (changes in 3.2) to get cpufreq-set to work.
+	 * Hopefully this won't affect things (i.e. memm leaks, etc) */
+	if (IS_ERR_OR_NULL(oh->od->pdev))
+		return ERR_PTR(oh->od->pdev ? PTR_ERR(oh->od->pdev) : -ENODEV);
+#endif
+
+	return &oh->od->pdev.dev;
+}
+EXPORT_SYMBOL(omap_device_get_by_hwmod_name);
+
 
 /* Public functions for use by core code */
 

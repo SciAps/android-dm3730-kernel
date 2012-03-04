@@ -102,6 +102,7 @@ int omap_device_register(struct omap_device *od);
 int omap_early_device_register(struct omap_device *od);
 
 void __iomem *omap_device_get_rt_va(struct omap_device *od);
+struct device *omap_device_get_by_hwmod_name(const char *oh_name);
 
 /* OMAP PM interface */
 int omap_device_align_pm_lat(struct platform_device *pdev,

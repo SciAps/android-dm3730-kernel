@@ -22,6 +22,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/opp.h>
 
 #include <linux/regulator/machine.h>
 #include <linux/regulator/fixed.h>
@@ -53,6 +54,9 @@
 #include <plat/gpmc-smsc911x.h>
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
+#include <plat/omap_device.h>
+
+#include "pm.h"
 
 #include <plat/board-omap3logic.h>
 #include <plat/board-omap3logic-display.h>
@@ -1386,6 +1390,49 @@ static int __init printk_debug_setup(char *str)
 __setup("printk-debug", printk_debug_setup);
 #endif
 
+static void __init omap3logic_opp_init(void)
+{
+	int ret = 0;
+
+	if (omap3_opp_init()) {
+		pr_err("%s: opp default init failed\n", __func__);
+		return;
+	}
+
+	/* Custom OPP enabled for DM37x versions */
+	if (cpu_is_omap3630()) {
+		struct device *mpu_dev, *iva_dev;
+
+		mpu_dev = omap_device_get_by_hwmod_name("mpu");
+		iva_dev = omap_device_get_by_hwmod_name("iva");
+
+		if (!mpu_dev || !iva_dev) {
+			pr_err("%s: Aiee.. no mpu/dsp devices? %p %p\n",
+				__func__, mpu_dev, iva_dev);
+			return;
+		}
+
+		/* Enable MPU 1GHz and lower opps */
+		ret |= opp_enable(mpu_dev, 800000000);
+		ret |= opp_enable(mpu_dev, 1000000000);
+		/* TODO: MPU 1GHz needs SR and ABB */
+
+		/* Enable IVA 800Mhz and lower opps */
+		ret |= opp_enable(iva_dev, 660000000);
+		ret |= opp_enable(iva_dev, 800000000);
+		/* TODO: DSP 800Mhz needs SR and ABB */
+		if (ret) {
+			pr_err("%s: failed to enable higher opp %d\n",
+				__func__, ret);
+
+			/* Cleanup - disable the higher freqs - we don't care
+			   about the results */
+			opp_disable(mpu_dev, 800000000);
+			opp_disable(iva_dev, 660000000);
+		}
+	}
+}
+
 static void __init omap3logic_init(void)
 {
 	struct omap_board_data bdata;
@@ -1468,6 +1515,8 @@ static void __init omap3logic_init(void)
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
+
+	omap3logic_opp_init();
 }
 
 MACHINE_START(OMAP3_TORPEDO, "Logic OMAP35x Torpedo board")

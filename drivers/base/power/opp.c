@@ -626,3 +626,20 @@ int opp_init_cpufreq_table(struct device *dev,
 	return 0;
 }
 #endif		/* CONFIG_CPU_FREQ */
+
+/**
+ * opp_free_cpufreq_table() - free the cpufreq table
+ * @dev:	device for which we do this operation
+ * @table:	table to free
+ *
+ * Free up the table allocated by opp_init_cpufreq_table
+ */
+void opp_free_cpufreq_table(struct device *dev,
+				struct cpufreq_frequency_table **table)
+{
+	if (!table)
+		return;
+
+	kfree(*table);
+	*table = NULL;
+}
