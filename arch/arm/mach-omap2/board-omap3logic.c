@@ -56,6 +56,7 @@
 #include <plat/sdrc.h>
 #include <plat/omap_device.h>
 
+#include "smartreflex.h"
 #include "pm.h"
 
 #include <plat/board-omap3logic.h>
@@ -1398,6 +1399,9 @@ static void __init omap3logic_opp_init(void)
 		pr_err("%s: opp default init failed\n", __func__);
 		return;
 	}
+
+	/* Smart reflex must be enabled for higher OPP levels! */
+	omap_enable_smartreflex_on_init();
 
 	/* Custom OPP enabled for DM37x versions */
 	if (cpu_is_omap3630()) {

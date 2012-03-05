@@ -15,6 +15,8 @@
  *
  */
 
+// #define DEBUG
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -1881,6 +1883,8 @@ EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 static int __init cpufreq_core_init(void)
 {
 	int cpu;
+
+	printk("%s:%d\n", __FUNCTION__, __LINE__);
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_policy_cpu, cpu) = -1;

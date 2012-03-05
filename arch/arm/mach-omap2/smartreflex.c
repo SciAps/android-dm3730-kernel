@@ -214,6 +214,7 @@ static void sr_set_regfields(struct omap_sr *sr)
 
 static void sr_start_vddautocomp(struct omap_sr *sr)
 {
+	printk("%s: sr->srid %d\n", __FUNCTION__, sr->srid);
 	if (!sr_class || !(sr_class->enable) || !(sr_class->configure)) {
 		dev_warn(&sr->pdev->dev,
 			"%s: smartreflex class driver not registered\n",
