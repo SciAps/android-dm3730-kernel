@@ -184,7 +184,14 @@ static irqreturn_t omap3_l3_app_irq(int irq, void *_l3)
 		 * of such errors and handle the others. timeout error
 		 * is severe and not expected to occur.
 		 */
+#if 1
+		if (status & L3_STATUS_0_TIMEOUT_MASK) {
+			printk("%s: L3_STATUS_0: %16llx\n", __FUNCTION__, status);
+			BUG();
+		}
+#else
 		BUG_ON(status & L3_STATUS_0_TIMEOUT_MASK);
+#endif
 	} else {
 		status = omap3_l3_readll(l3->rt, L3_SI_FLAG_STATUS_1);
 		/* No timeout error for debug sources */
