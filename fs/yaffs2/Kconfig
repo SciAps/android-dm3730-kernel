@@ -33,7 +33,7 @@ config YAFFS_OLD_VERSION
 	  Build to older version of YAFFS.
 
 config YAFFS_NEW_VERSION    
-       bool "Old version of YAFFS code"
+       bool "New version of YAFFS code (2012-03-09)"
        help
 	  Build YAFFS from git clone on 2012-03-09, commit ID 7862c13.
 
