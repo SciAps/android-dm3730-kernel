@@ -126,5 +126,9 @@ obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 
 # Patched by YAFFS
+ifneq ($(CONFIG_YAFFS_NEW_VERSION),)
+obj-$(CONFIG_YAFFS_FS)		+= yaffs2-new/
+endif
+ifneq ($(CONFIG_YAFFS_OLD_VERSION),)
 obj-$(CONFIG_YAFFS_FS)		+= yaffs2/
-obj-$(CONFIG_YAFFS_FS)		+= yaffs2/
+endif
