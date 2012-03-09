@@ -1520,7 +1520,9 @@ static void __init omap3logic_init(void)
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 
+#if 0
 	omap3logic_opp_init();
+#endif
 }
 
 MACHINE_START(OMAP3_TORPEDO, "Logic OMAP35x Torpedo board")
