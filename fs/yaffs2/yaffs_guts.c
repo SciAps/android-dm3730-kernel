@@ -4952,13 +4952,15 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	}
 
 	/* Zero out stats */
-	dev->n_page_reads = 0;
-	dev->n_page_writes = 0;
-	dev->n_erasures = 0;
-	dev->n_gc_copies = 0;
-	dev->n_retired_writes = 0;
+	if (dev->param.clear_mount_stats) {
+		dev->n_page_reads = 0;
+		dev->n_page_writes = 0;
+		dev->n_erasures = 0;
+		dev->n_gc_copies = 0;
+		dev->n_retired_writes = 0;
 
-	dev->n_retired_blocks = 0;
+		dev->n_retired_blocks = 0;
+	}
 
 	yaffs_verify_free_chunks(dev);
 	yaffs_verify_blocks(dev);

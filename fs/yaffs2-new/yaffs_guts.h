@@ -537,7 +537,8 @@ struct yaffs_param {
         int tags_9bytes;	/* Use 9 byte tags */
 	int no_tags_ecc;	/* Flag to decide whether or not to do ECC
 				 * on packed tags (yaffs2) */
-
+	int clear_mount_stats;	/* Flag to decide whether or not to clear
+				 * statitics on mount */
 	int is_yaffs2;		/* Use yaffs2 mode on this device */
 
 	int empty_lost_n_found;	/* Auto-empty lost+found directory on mount */

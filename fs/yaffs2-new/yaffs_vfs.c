@@ -2534,6 +2534,7 @@ struct yaffs_options {
 	int no_cache;
 	int tags_ecc_on;
 	int tags_ecc_overridden;
+	int clear_mount_stats;
 	int lazy_loading_enabled;
 	int lazy_loading_overridden;
 	int empty_lost_and_found;
@@ -2574,6 +2575,8 @@ static int yaffs_parse_options(struct yaffs_options *options,
 		} else if (!strcmp(cur_opt, "tags-ecc-on")) {
 			options->tags_ecc_on = 1;
 			options->tags_ecc_overridden = 1;
+		} else if (!strcmp(cur_opt, "clear-mount-stats")) {
+			options->clear_mount_stats = 1;
 		} else if (!strcmp(cur_opt, "lazy-loading-off")) {
 			options->lazy_loading_enabled = 0;
 			options->lazy_loading_overridden = 1;
@@ -2850,6 +2853,8 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 		param->disable_lazy_load = !options.lazy_loading_enabled;
 
 	param->defered_dir_update = 1;
+
+	param->clear_mount_stats = options.clear_mount_stats;
 
 	if (options.tags_ecc_overridden)
 		param->no_tags_ecc = !options.tags_ecc_on;
