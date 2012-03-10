@@ -166,6 +166,7 @@ static uint32_t YCALCBLOCKS(uint64_t partition_size, uint32_t block_size)
 #include "yaffs_trace.h"
 #include "yaffs_guts.h"
 #include "yaffs_attribs.h"
+#include "yaffs_packedtags2.h"
 
 #include "yaffs_linux.h"
 
@@ -2859,9 +2860,10 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 		param->no_handle_estale = !options.handle_estale_on;
 
 	ecc = mtd->ecclayout;
-	if (ecc && (ecc->oobavail <= 16)) {
+	if (ecc && (ecc->oobavail <= sizeof(struct yaffs_packed_tags2))) {
 		printk(KERN_INFO
-			"yaffs: oobavail <= 16; forcing \"tags-ecc-off\"\n");
+			"yaffs: oobavail(%u) <= %u; forcing \"tags-ecc-off\"\n", 
+			ecc->oobavail, sizeof(struct yaffs_packed_tags2));
 		param->no_tags_ecc = 1;
 	}
 

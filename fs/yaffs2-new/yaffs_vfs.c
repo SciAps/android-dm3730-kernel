@@ -172,6 +172,7 @@ static uint32_t YCALCBLOCKS(uint64_t partition_size, uint32_t block_size)
 #include "yaffs_trace.h"
 #include "yaffs_guts.h"
 #include "yaffs_attribs.h"
+#include "yaffs_packedtags2.h"
 
 #include "yaffs_linux.h"
 
@@ -245,7 +246,7 @@ static int yaffs_file_flush(struct file *file, fl_owner_t id);
 static int yaffs_file_flush(struct file *file);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+#if 0 && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
 static int yaffs_sync_object(struct file *file, loff_t start, loff_t end, int datasync);
 #elif (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 34))
 static int yaffs_sync_object(struct file *file, int datasync);
@@ -1838,7 +1839,7 @@ static int yaffs_symlink(struct inode *dir, struct dentry *dentry,
 	return -ENOMEM;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+#if 0 && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
 static int yaffs_sync_object(struct file *file, loff_t start, loff_t end, int datasync)
 #elif (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 34))
 static int yaffs_sync_object(struct file *file, int datasync)
@@ -2616,6 +2617,7 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 	struct yaffs_dev *dev = 0;
 	char devname_buf[BDEVNAME_SIZE + 1];
 	struct mtd_info *mtd;
+	struct nand_ecclayout *ecc;
 	int err;
 	char *data_str = (char *)data;
 	struct yaffs_linux_context *context = NULL;
@@ -2851,6 +2853,24 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 
 	if (options.tags_ecc_overridden)
 		param->no_tags_ecc = !options.tags_ecc_on;
+
+	/* Check the OOB availble size; if too little to hold the tag
+	 * the abort.  If too little to hold the tag w/ecc, then disable
+	 * tags ECC. */
+	ecc = mtd->ecclayout;
+	if (ecc && (ecc->oobavail < sizeof(struct yaffs_packed_tags2_tags_only))) {
+		printk(KERN_ERR "yaffs: oobavail(%u) not enough to hold tag!\n",
+			ecc->oobavail);
+		return NULL;
+	}
+
+	if (ecc && !param->no_tags_ecc
+		&& (ecc->oobavail < sizeof(struct yaffs_packed_tags2))) {
+		printk(KERN_INFO
+			"yaffs: oobavail(%u) <= %u; forcing \"tags-ecc-off\"\n", 
+			ecc->oobavail, sizeof(struct yaffs_packed_tags2));
+		param->no_tags_ecc = 1;
+	}
 
 	param->empty_lost_n_found = 1;
 	param->refresh_period = 500;
