@@ -398,7 +398,7 @@ int twl_i2c_write(u8 mod_no, u8 *value, u8 reg, unsigned num_bytes)
 		for (i=1, offset=0; i<=nbytes; ++i)
 			offset += sprintf(buf+offset, " %02x", value[i]);
 
-		printk(KERN_DEBUG "%s: I2C-addr %02x reg %02x (addr %x) num_bytes %d:%s\n",
+		printk(KERN_DEBUG "%s: I2C-addr %02x reg %02x (addr %02x) num_bytes %d:%s\n",
 			"W", twl->address, reg, reg+twl_map[mod_no].base, num_bytes, buf);
 
 	}
