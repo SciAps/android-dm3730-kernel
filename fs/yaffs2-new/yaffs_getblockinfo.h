@@ -32,4 +32,21 @@ static inline struct yaffs_block_info *yaffs_get_block_info(struct yaffs_dev
 	return &dev->block_info[blk - dev->internal_start_block];
 }
 
+/* Function to manipulate block info */
+static inline int yaffs_get_block_from_info(struct yaffs_dev *dev,
+					struct yaffs_block_info *bi)
+{
+	int blk;
+
+	blk = bi - dev->block_info;
+	if (bi != &dev->block_info[blk] ||
+		blk < dev->internal_start_block || blk > dev->internal_end_block) {
+		yaffs_trace(YAFFS_TRACE_ERROR,
+			"**>> yaffs: get_block_info_block %p -> block %d is not valid",
+			bi, blk);
+		BUG();
+	}
+	return blk;
+}
+
 #endif

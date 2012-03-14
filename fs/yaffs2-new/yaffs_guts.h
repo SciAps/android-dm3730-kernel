@@ -159,7 +159,8 @@ union yaffs_tags_union {
 enum yaffs_ecc_result {
 	YAFFS_ECC_RESULT_UNKNOWN,
 	YAFFS_ECC_RESULT_NO_ERROR,
-	YAFFS_ECC_RESULT_FIXED,
+	YAFFS_ECC_RESULT_STALE,		/* MTD returned -ESTALE; not a strike */
+	YAFFS_ECC_RESULT_FIXED,		/* ECC required; counts as strike */
 	YAFFS_ECC_RESULT_UNFIXED
 };
 
@@ -298,6 +299,8 @@ struct yaffs_block_info {
 	u32 has_summary:1;	/* The block has a summary */
 
 	u32 has_shrink_hdr:1;	/* This block has at least one shrink header */
+	u32 is_stale:1;		/* Block is stale, requires garbage collection
+				 * due to -ESTALE return from MTD */
 	u32 seq_number;		/* block sequence number for yaffs2 */
 
 };
@@ -551,6 +554,9 @@ struct yaffs_param {
 
 	int enable_xattr;	/* Enable xattribs */
 
+	/* Handle -ESTALE returns from MTD by forcing the block to refresh */
+	int no_handle_estale;
+
 	/* NAND access functions (Must be set before calling YAFFS) */
 
 	int (*write_chunk_fn) (struct yaffs_dev *dev,
@@ -768,6 +774,7 @@ struct yaffs_dev {
 	u32 bg_gcs;
 	u32 n_retried_writes;
 	u32 n_retired_blocks;
+	u32 n_ecc_stale;
 	u32 n_ecc_fixed;
 	u32 n_ecc_unfixed;
 	u32 n_tags_ecc_fixed;
@@ -779,6 +786,9 @@ struct yaffs_dev {
 	u32 tags_used;
 	u32 summary_used;
 
+	/* Count of blocks that need refreshing due to -ESTALE
+	 * return values from MTD */
+	u32 n_stale_blocks;
 };
 
 /* The CheckpointDevice structure holds the device information that changes
@@ -913,7 +923,8 @@ void yaffs_chunk_del(struct yaffs_dev *dev, int chunk_id, int mark_flash,
 		     int lyn);
 int yaffs_check_ff(u8 *buffer, int n_bytes);
 void yaffs_handle_chunk_error(struct yaffs_dev *dev,
-			      struct yaffs_block_info *bi);
+			      struct yaffs_block_info *bi,
+			      int counts_as_strike);
 
 u8 *yaffs_get_temp_buffer(struct yaffs_dev *dev);
 void yaffs_release_temp_buffer(struct yaffs_dev *dev, u8 *buffer);

@@ -12,10 +12,13 @@
 #define __NAND_DISTURB_H__
 
 struct nand_disturb {
-	uint32_t erase_count;
-	uint32_t read_count;
-	uint32_t max_read_count;
+	uint32_t erase_count;		/* number of erasures */
+	uint32_t read_count;		/* reads since erase */
+	uint32_t max_read_count;	/* maximum reads since erase */
+	uint32_t total_read_count;	/* Total number of reads in block */
+	uint32_t updated;		/* !0 -> data is updated */
 };
+
 struct nand_disturb_stats {
 	uint32_t erase_limit;
 	uint32_t read_limit;

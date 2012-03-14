@@ -233,18 +233,37 @@ static void yaffs_handle_chunk_update(struct yaffs_dev *dev, int nand_chunk,
 }
 
 void yaffs_handle_chunk_error(struct yaffs_dev *dev,
-			      struct yaffs_block_info *bi)
+			struct yaffs_block_info *bi,
+			int counts_as_strike)
 {
 	if (!bi->gc_prioritise) {
 		bi->gc_prioritise = 1;
 		dev->has_pending_prioritised_gc = 1;
-		bi->chunk_error_strikes++;
 
-		if (bi->chunk_error_strikes > 3) {
-			bi->needs_retiring = 1;	/* Too many stikes, so retire */
-			yaffs_trace(YAFFS_TRACE_ALWAYS,
-				"yaffs: Block struck out");
+		if (!counts_as_strike) {
+			if (yaffs_trace_enabled(YAFFS_TRACE_STALE)) {
+				int block;
 
+				block = yaffs_get_block_from_info(dev, bi);
+				yaffs_trace(YAFFS_TRACE_STALE,
+					"%s: block %d is stale\n",
+					__FUNCTION__, block);
+			}
+			if (!bi->is_stale) {
+				/* Block is now stale */
+				if (bi->block_state == YAFFS_BLOCK_STATE_ALLOCATING)
+					yaffs_skip_rest_of_block(dev);
+				bi->is_stale = 1;
+				dev->n_stale_blocks++;
+			}
+		} else {
+			bi->chunk_error_strikes++;
+
+			if (bi->chunk_error_strikes > 3) {
+				bi->needs_retiring = 1;	/* Too many stikes, so retire */
+				yaffs_trace(YAFFS_TRACE_ALWAYS,
+					"yaffs: Block struck out");
+			}
 		}
 	}
 }
@@ -255,7 +274,7 @@ static void yaffs_handle_chunk_wr_error(struct yaffs_dev *dev, int nand_chunk,
 	int flash_block = nand_chunk / dev->param.chunks_per_block;
 	struct yaffs_block_info *bi = yaffs_get_block_info(dev, flash_block);
 
-	yaffs_handle_chunk_error(dev, bi);
+	yaffs_handle_chunk_error(dev, bi, 1);
 
 	if (erased_ok) {
 		/* Was an actual write failure,
@@ -2632,6 +2651,16 @@ static int yaffs_gc_block(struct yaffs_dev *dev, int block, int whole_block)
 		dev->gc_block = 0;
 		dev->gc_chunk = 0;
 		dev->n_clean_ups = 0;
+
+		/* If block was stale then update stale status to reflect
+		 * that it was collected */
+		if (bi->is_stale) {
+			yaffs_trace(YAFFS_TRACE_STALE,
+				"%s: gc block %d due to stale", __FUNCTION__, block);
+			BUG_ON(!dev->n_stale_blocks);
+			bi->is_stale = 0;
+			dev->n_stale_blocks--;
+		}
 	}
 
 	dev->gc_disable = 0;
@@ -2813,9 +2842,13 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 	int aggressive = 0;
 	int gc_ok = YAFFS_OK;
 	int max_tries = 0;
+	int iterations = 0;
 	int min_erased;
 	int erased_chunks;
 	int checkpt_block_adjust;
+	struct yaffs_block_info *bi;
+	int stale_start_block;
+	int num_stale_blocks;
 
 	if (dev->param.gc_control && (dev->param.gc_control(dev) & 1) == 0)
 		return YAFFS_OK;
@@ -2827,8 +2860,11 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 	/* This loop should pass the first time.
 	 * Only loops here if the collection does not increase space.
 	 */
-
+	stale_start_block = dev->internal_start_block;
 	do {
+		num_stale_blocks = dev->n_stale_blocks;
+
+		iterations++;
 		max_tries++;
 
 		checkpt_block_adjust = yaffs_calc_checkpt_blocks_required(dev);
@@ -2858,6 +2894,31 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 		}
 
 		dev->gc_skip = 5;
+
+		/* If we don't already have a block being gc'd then see if
+		 * there's one that's marked for refresh by -ESTALE */
+		if (dev->gc_block < 1 && dev->n_stale_blocks) {
+			while (stale_start_block <= dev->internal_end_block) {
+				bi = yaffs_get_block_info(dev, stale_start_block);
+				if (bi->is_stale) {
+					yaffs_trace(YAFFS_TRACE_STALE,
+						"%s: stale_start_block %d",
+						__FUNCTION__, stale_start_block);
+					/* Pick the block, but step over it
+					 * so next time through we'll skip it */
+					dev->gc_block = stale_start_block++;
+					dev->gc_chunk = 0;
+					dev->n_clean_ups = 0;
+					break;
+				}
+				stale_start_block++;
+			}
+		} else {
+			if (dev->n_stale_blocks)
+				yaffs_trace(YAFFS_TRACE_STALE,
+					"%s: already have block %d, n_stale_blocks %d",
+					__FUNCTION__, dev->gc_block, dev->n_stale_blocks);
+		}
 
 		/* If we don't already have a block being gc'd then see if we
 		 * should start another */
@@ -2893,8 +2954,25 @@ static int yaffs_check_gc(struct yaffs_dev *dev, int background)
 				dev->n_erased_blocks, max_tries,
 				dev->gc_block);
 		}
-	} while ((dev->n_erased_blocks < dev->param.n_reserved_blocks) &&
-		 (dev->gc_block > 0) && (max_tries < 2));
+
+		/* If we collected a block due to it being stale,
+		 * then decrement max_tries since we want to try to clean
+		 * up some space after we get done with the stale blocks */
+		if (num_stale_blocks != dev->n_stale_blocks)
+			max_tries--;
+
+		if (num_stale_blocks)
+			yaffs_trace(YAFFS_TRACE_STALE,
+				"iterations %d max_tries %d stale_start_block %d n_stale_blocks %d num_stale_blocks %d",
+				iterations, max_tries, stale_start_block, dev->n_stale_blocks, num_stale_blocks);
+	} while ((num_stale_blocks && (stale_start_block <= dev->internal_end_block))
+		|| ((dev->n_erased_blocks < dev->param.n_reserved_blocks)
+				&& (dev->gc_block > 0) && (max_tries < 2)));
+
+	if (dev->n_stale_blocks)
+		yaffs_trace(YAFFS_TRACE_STALE,
+			"%s: n_stale_blocks after gc %d (was %d)",
+			__FUNCTION__, dev->n_stale_blocks, num_stale_blocks);
 
 	return aggressive ? gc_ok : YAFFS_OK;
 }
@@ -4751,6 +4829,7 @@ int yaffs_guts_initialise(struct yaffs_dev *dev)
 	dev->n_deleted_files = 0;
 	dev->n_bg_deletions = 0;
 	dev->n_unlinked_files = 0;
+	dev->n_ecc_stale = 0;
 	dev->n_ecc_fixed = 0;
 	dev->n_ecc_unfixed = 0;
 	dev->n_tags_ecc_fixed = 0;

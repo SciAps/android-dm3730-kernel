@@ -128,8 +128,10 @@ int nand_onchip_correct_ecc(struct mtd_info *mtd, u_char *dat,
 	 */
 	if (chip->ecc.status & 0x01)
 		return -1;
+#if 0
 	if (chip->ecc.status & 0x08)
 		return 4;
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(nand_onchip_correct_ecc);

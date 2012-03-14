@@ -78,5 +78,6 @@
 		printk(KERN_DEBUG "yaffs: " fmt "\n", ##__VA_ARGS__); \
 } while (0)
 
+#define yaffs_trace_enabled(msk) (yaffs_trace_mask & (msk))
 
 #endif

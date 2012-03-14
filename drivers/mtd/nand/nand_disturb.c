@@ -39,16 +39,55 @@ static int nand_disturb_dbg_show(struct seq_file *s, void *unused)
 		seq_printf(s, "chip->disturb: %p\n", p);
 		seq_printf(s, "num_blocks: %u read_limit %u erase_limit %u\n",
 			p->num_blocks, p->read_limit, p->erase_limit);
-		seq_printf(s, "Following are block: Erase count, Read count, Max read count\n");
+		seq_printf(s, "Block Erases Reads Max_reads Total_Reads\n");
 		for (i=0, q=p->stats; i<p->num_blocks; ++i, ++q)
-			if (q->read_count || q->erase_count)
-				seq_printf(s, "%4u: %6u %5u %5u]\n", i,
-					q->read_count, q->erase_count, q->max_read_count);
+			if (q->updated && (q->read_count || q->erase_count))
+				seq_printf(s, "%4u %6u %5u %5u %6u\n", i,
+					q->erase_count, q->read_count, q->max_read_count, q->total_read_count);
 	}
 	return 0;
 }
 
 static ssize_t nand_disturb_dbg_write(struct file *file,
+					 const char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct seq_file *seqf = file->private_data;
+	struct nand_chip *chip = seqf->private;
+	struct nand_disturb_stats *p;
+	struct nand_disturb *q;
+	int i;
+
+	if (chip) {
+		p = chip->disturb;
+		if (p) {
+			for (i=0, q=p->stats; i<p->num_blocks; ++i, ++q)
+				q->updated = 0;
+		}
+	}
+	return count;
+}
+
+static int nand_disturb_dbg_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, nand_disturb_dbg_show, inode->i_private);
+}
+
+static const struct file_operations nand_disturb_dbg_fops = {
+	.open		= nand_disturb_dbg_open,
+	.read		= seq_read,
+	.write		= nand_disturb_dbg_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static int nand_disturb_debug_dbg_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "%d\n", nand_disturb_debug);
+	return 0;
+}
+
+static ssize_t nand_disturb_debug_dbg_write(struct file *file,
 					 const char __user *user_buf,
 					 size_t count, loff_t *ppos)
 {
@@ -71,23 +110,26 @@ static ssize_t nand_disturb_dbg_write(struct file *file,
 	return count;
 }
 
-static int nand_disturb_dbg_open(struct inode *inode, struct file *file)
+
+static int nand_disturb_debug_dbg_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, nand_disturb_dbg_show, inode->i_private);
+	return single_open(file, nand_disturb_debug_dbg_show, inode->i_private);
 }
 
-static const struct file_operations nand_disturb_dbg_fops = {
-	.open		= nand_disturb_dbg_open,
-	.read		= seq_read,
-	.write		= nand_disturb_dbg_write,
+
+static const struct file_operations nand_disturb_debug_dbg_fops = {
+	.open		= nand_disturb_debug_dbg_open,
+	.write		= nand_disturb_debug_dbg_write,
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
 
 
+
 static void nand_disturb_files(struct nand_chip *chip)
 {
 	(void)debugfs_create_file("nand-disturb", S_IWUSR, NULL, chip, &nand_disturb_dbg_fops);
+	(void)debugfs_create_file("nand-disturb-debug", S_IWUSR, NULL, chip, &nand_disturb_debug_dbg_fops);
 }
 #else
 static void nand_disturb_files(struct nand chip *chip)
@@ -125,8 +167,10 @@ int nand_disturb_incr_read_cnt(struct nand_chip *chip, uint32_t page)
 		WARN_ON(block > p->num_blocks);
 		if (nand_disturb_debug)
 			printk("%s: block %u read_count %d\n", __FUNCTION__, block, p->stats[block].read_count);
+		p->stats[block].updated = 1;
 		if (++p->stats[block].read_count > p->stats[block].max_read_count)
 			p->stats[block].max_read_count = p->stats[block].read_count;
+		p->stats[block].total_read_count++;
 		if (p->stats[block].read_count > p->read_limit) {
 			if (nand_disturb_debug)
 				printk("block %d has %d reads, returning -ESTALE\n", block, p->stats[block].read_count);
@@ -149,6 +193,7 @@ int nand_disturb_incr_erase_cnt(struct nand_chip *chip, uint32_t page)
 		WARN_ON(block > p->num_blocks);
 		if (nand_disturb_debug)
 			printk("%s: block %u erase_count %d\n", __FUNCTION__, block, p->stats[block].erase_count);
+		p->stats[block].updated = 1;
 		p->stats[block].erase_count++;
 		p->stats[block].read_count = 0;
 		if (p->stats[block].erase_count > p->erase_limit)

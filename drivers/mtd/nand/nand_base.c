@@ -400,6 +400,9 @@ static int nand_block_bad(struct mtd_info *mtd, loff_t ofs, int getchip)
 	if (getchip)
 		nand_release_device(mtd);
 
+	nand_disturb_incr_read_cnt(chip, page);
+	
+
 	return res;
 }
 
@@ -781,8 +784,8 @@ ready_exit:
 	 * determine if there's an ECC error - capture it for handling by
 	 * nand_onchip_correct_ecc() later.
 	 */
-	if (command == NAND_CMD_READ0) {
-		if (chip->ecc.mode == NAND_ECC_HW_CHIP) {
+	if (chip->ecc.mode == NAND_ECC_HW_CHIP) {
+		if (command == NAND_CMD_READ0 || command == NAND_CMD_READOOB) {
 			/* Send the status command */
 			chip->cmd_ctrl(mtd, NAND_CMD_STATUS,
 				NAND_NCE | NAND_CLE | NAND_CTRL_CHANGE);
@@ -790,6 +793,15 @@ ready_exit:
 			chip->cmd_ctrl(mtd, NAND_CMD_NONE,
 				NAND_NCE | NAND_CTRL_CHANGE);
 			chip->ecc.status = chip->read_byte(mtd);
+#if 1
+			if (chip->ecc.status & (0x1))
+				printk("%s: %s, page %d, column %d, "
+					"status %02x, UNCORRECTABLE\n",
+					__func__,
+					mtd->name,
+					page_addr, column,
+					chip->ecc.status);
+#else
 			if (chip->ecc.status & (0x8|0x1))
 				printk("%s: %s, page %d, column %d, "
 					"status %02x, %s\n",
@@ -800,6 +812,7 @@ ready_exit:
 					(chip->ecc.status & 0x8)
 						? "correctable"
 						: "UNCORRECTABLE");
+#endif
 			/* Send the read prefix */
 			chip->cmd_ctrl(mtd, NAND_CMD_READ0,
 				NAND_NCE | NAND_CLE | NAND_CTRL_CHANGE);
@@ -3246,7 +3259,9 @@ ident_done:
 			uint64_t chipsize = chip->chipsize;
 			uint32_t erasesize = mtd->erasesize;
 			do_div(chipsize, erasesize);
-			nand_alloc_disturb(chip, chipsize, 100000, 20000);
+			/* YAFFS seems to go about 5% past read limit
+			 * before the block gets refreshed. */
+			nand_alloc_disturb(chip, chipsize, 100000, 19500);
 		}
 		printk("%s: disturb %p chipsize %llu erasesize %u\n", __FUNCTION__, chip->disturb, chip->chipsize, mtd->erasesize);
 	}
@@ -3504,7 +3519,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 		chip->ecc.read_oob = nand_onchip_read_oob_ecc;
 		chip->ecc.write_oob = nand_write_oob_std;
 
-		chip->chip_delay = 75;
+		chip->chip_delay = 100;
 
 		nand_onchip_enable_ecc(mtd, 1);
 		break;
