@@ -75,6 +75,7 @@ struct ehci_hcd {			/* one per controller */
 	struct ehci_qh		*async;
 	struct ehci_qh		*dummy;		/* For AMD quirk use */
 	struct ehci_qh		*reclaim;
+	struct ehci_qh		*qh_scan_next;
 	unsigned		scanning : 1;
 
 	/* periodic schedule support */
@@ -117,7 +118,6 @@ struct ehci_hcd {			/* one per controller */
 	struct timer_list	iaa_watchdog;
 	struct timer_list	watchdog;
 	unsigned long		actions;
-	unsigned		stamp;
 	unsigned		periodic_stamp;
 	unsigned		random_frame;
 	unsigned long		next_statechange;
@@ -343,6 +343,7 @@ struct ehci_qh {
 	struct ehci_qh		*reclaim;	/* next to reclaim */
 
 	struct ehci_hcd		*ehci;
+	unsigned long		unlink_time;
 
 	/*
 	 * Do NOT use atomic operations for QH refcounting. On some CPUs
@@ -374,6 +375,7 @@ struct ehci_qh {
 #define NO_FRAME ((unsigned short)~0)			/* pick new start */
 
 	struct usb_device	*dev;		/* access to TT */
+	unsigned		is_out:1;	/* bulk or intr OUT */
 	unsigned		clearing_tt:1;	/* Clear-TT-Buf in progress */
 };
 
@@ -732,6 +734,23 @@ static inline u32 hc32_to_cpup (const struct ehci_hcd *ehci, const __hc32 *x)
 	return le32_to_cpup(x);
 }
 
+#endif
+
+/*
+ * Writing to dma coherent memory on ARM may be delayed via L2
+ * writing buffer, so introduce the helper which can flush L2 writing
+ * buffer into memory immediately, especially used to flush ehci
+ * descriptor to memory.
+ * */
+#ifdef	CONFIG_ARM_DMA_MEM_BUFFERABLE
+static inline void ehci_sync_mem()
+{
+	mb();
+}
+#else
+static inline void ehci_sync_mem()
+{
+}
 #endif
 
 /*-------------------------------------------------------------------------*/

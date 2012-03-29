@@ -1044,7 +1044,7 @@ static void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 	u16 clk = 0;
 	unsigned long timeout;
 
-	if (clock == host->clock)
+	if (clock && clock == host->clock)
 		return;
 
 	if (host->ops->set_clock) {
@@ -1862,9 +1862,6 @@ static void sdhci_tasklet_finish(unsigned long param)
 	spin_lock_irqsave(&host->lock, flags);
 
 	del_timer(&host->timer);
-
-	if (host->version >= SDHCI_SPEC_300)
-		del_timer(&host->tuning_timer);
 
 	mrq = host->mrq;
 

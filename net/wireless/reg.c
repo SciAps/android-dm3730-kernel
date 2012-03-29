@@ -852,6 +852,7 @@ static void handle_channel(struct wiphy *wiphy,
 		return;
 	}
 
+	chan->beacon_found = false;
 	chan->flags = flags | bw_flags | map_regdom_flags(reg_rule->flags);
 	chan->max_antenna_gain = min(chan->orig_mag,
 		(int) MBI_TO_DBI(power_rule->max_antenna_gain));
@@ -1125,12 +1126,13 @@ void wiphy_update_regulatory(struct wiphy *wiphy,
 	enum ieee80211_band band;
 
 	if (ignore_reg_update(wiphy, initiator))
-		goto out;
+		return;
+
 	for (band = 0; band < IEEE80211_NUM_BANDS; band++) {
 		if (wiphy->bands[band])
 			handle_band(wiphy, band, initiator);
 	}
-out:
+
 	reg_process_beacons(wiphy);
 	reg_process_ht_flags(wiphy);
 	if (wiphy->reg_notifier)
@@ -1757,6 +1759,7 @@ static void restore_alpha2(char *alpha2, bool reset_user)
 static void restore_regulatory_settings(bool reset_user)
 {
 	char alpha2[2];
+	char world_alpha2[2];
 	struct reg_beacon *reg_beacon, *btmp;
 	struct regulatory_request *reg_request, *tmp;
 	LIST_HEAD(tmp_reg_req_list);
@@ -1807,11 +1810,13 @@ static void restore_regulatory_settings(bool reset_user)
 
 	/* First restore to the basic regulatory settings */
 	cfg80211_regdomain = cfg80211_world_regdom;
+	world_alpha2[0] = cfg80211_regdomain->alpha2[0];
+	world_alpha2[1] = cfg80211_regdomain->alpha2[1];
 
 	mutex_unlock(&reg_mutex);
 	mutex_unlock(&cfg80211_mutex);
 
-	regulatory_hint_core(cfg80211_regdomain->alpha2);
+	regulatory_hint_core(world_alpha2);
 
 	/*
 	 * This restores the ieee80211_regdom module parameter

@@ -59,6 +59,7 @@
 
 #include <net/arp.h>
 #include <net/ip.h>
+#include <net/tcp.h>
 #include <net/route.h>
 #include <net/ip_fib.h>
 #include <net/rtnetlink.h>
@@ -735,6 +736,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCSIFBRDADDR:	/* Set the broadcast address */
 	case SIOCSIFDSTADDR:	/* Set the destination address */
 	case SIOCSIFNETMASK: 	/* Set the netmask for the interface */
+	case SIOCKILLADDR:	/* Nuke all sockets on this address */
 		ret = -EACCES;
 		if (!capable(CAP_NET_ADMIN))
 			goto out;
@@ -786,7 +788,8 @@ int devinet_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	}
 
 	ret = -EADDRNOTAVAIL;
-	if (!ifa && cmd != SIOCSIFADDR && cmd != SIOCSIFFLAGS)
+	if (!ifa && cmd != SIOCSIFADDR && cmd != SIOCSIFFLAGS
+	    && cmd != SIOCKILLADDR)
 		goto done;
 
 	switch (cmd) {
@@ -911,6 +914,9 @@ int devinet_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 			}
 			inet_insert_ifa(ifa);
 		}
+		break;
+	case SIOCKILLADDR:	/* Nuke all connections on this address */
+		ret = tcp_nuke_addr(net, (struct sockaddr *) sin);
 		break;
 	}
 done:
@@ -1134,15 +1140,15 @@ static void inetdev_send_gratuitous_arp(struct net_device *dev,
 					struct in_device *in_dev)
 
 {
-	struct in_ifaddr *ifa = in_dev->ifa_list;
+	struct in_ifaddr *ifa;
 
-	if (!ifa)
-		return;
-
-	arp_send(ARPOP_REQUEST, ETH_P_ARP,
-		 ifa->ifa_local, dev,
-		 ifa->ifa_local, NULL,
-		 dev->dev_addr, NULL);
+	for (ifa = in_dev->ifa_list; ifa;
+	     ifa = ifa->ifa_next) {
+		arp_send(ARPOP_REQUEST, ETH_P_ARP,
+			 ifa->ifa_local, dev,
+			 ifa->ifa_local, NULL,
+			 dev->dev_addr, NULL);
+	}
 }
 
 /* Called only under RTNL semaphore */
