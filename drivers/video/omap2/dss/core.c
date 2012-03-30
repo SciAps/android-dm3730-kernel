@@ -576,7 +576,9 @@ static int __init omap_dss_init(void)
 
 static int __init omap_dss_init2(void)
 {
+#ifdef DEBUG
 	dss_debug = 1;
+#endif
 	return platform_driver_register(&omap_dss_driver);
 }
 

@@ -52,7 +52,8 @@ struct v4l2_pix_format;
  * @flavor: V4L2 media bus format code for the same pixel layout but
  *	shifted to be 8 bits per pixel. =0 if format is not shiftable.
  * @pixelformat: V4L2 pixel format FCC identifier
- * @bpp: Bits per pixel
+ * @width: Data bus width
+ * @bpp: Bits per pixel (when stored in memory)
  */
 struct isp_format_info {
 	enum v4l2_mbus_pixelcode code;
@@ -60,6 +61,7 @@ struct isp_format_info {
 	enum v4l2_mbus_pixelcode uncompressed;
 	enum v4l2_mbus_pixelcode flavor;
 	u32 pixelformat;
+	unsigned int width;
 	unsigned int bpp;
 };
 
@@ -86,6 +88,11 @@ enum isp_pipeline_state {
 	ISP_PIPELINE_STREAM = 64,
 };
 
+/*
+ * struct isp_pipeline - An ISP hardware pipeline
+ * @error: A hardware error occurred during capture
+ * @entities: Bitmask of entities in the pipeline (indexed by entity ID)
+ */
 struct isp_pipeline {
 	struct media_pipeline pipe;
 	spinlock_t lock;		/* Pipeline state and queue flags */
@@ -93,10 +100,12 @@ struct isp_pipeline {
 	enum isp_pipeline_stream_state stream_state;
 	struct isp_video *input;
 	struct isp_video *output;
+	u32 entities;
 	unsigned long l3_ick;
 	unsigned int max_rate;
 	atomic_t frame_number;
 	bool do_propagation; /* of frame number */
+	bool error;
 	struct v4l2_fract max_timeperframe;
 };
 
@@ -191,11 +200,11 @@ struct isp_video_fh {
 				container_of(q, struct isp_video_fh, queue)
 
 int omap3isp_video_init(struct isp_video *video, const char *name);
+void omap3isp_video_cleanup(struct isp_video *video);
 int omap3isp_video_register(struct isp_video *video,
 			    struct v4l2_device *vdev);
 void omap3isp_video_unregister(struct isp_video *video);
-struct isp_buffer *omap3isp_video_buffer_next(struct isp_video *video,
-					      unsigned int error);
+struct isp_buffer *omap3isp_video_buffer_next(struct isp_video *video);
 void omap3isp_video_resume(struct isp_video *video, int continuous);
 struct media_pad *omap3isp_video_remote_pad(struct isp_video *video);
 

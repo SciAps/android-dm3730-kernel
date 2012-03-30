@@ -287,7 +287,7 @@ static void isp_power_settings(struct isp_device *isp, int idle)
 void omap3isp_configure_bridge(struct isp_device *isp,
 			       enum ccdc_input_entity input,
 			       const struct isp_parallel_platform_data *pdata,
-			       unsigned int shift)
+			       unsigned int shift, bool bridge)
 {
 	u32 ispctrl_val;
 
@@ -301,7 +301,8 @@ void omap3isp_configure_bridge(struct isp_device *isp,
 	case CCDC_INPUT_PARALLEL:
 		ispctrl_val |= ISPCTRL_PAR_SER_CLK_SEL_PARALLEL;
 		ispctrl_val |= pdata->clk_pol << ISPCTRL_PAR_CLK_POL_SHIFT;
-		ispctrl_val |= pdata->bridge << ISPCTRL_PAR_BRIDGE_SHIFT;
+		if (bridge)
+			ispctrl_val |=  pdata->bridge << ISPCTRL_PAR_BRIDGE_SHIFT;
 		shift += pdata->data_lane_shift * 2;
 		break;
 
@@ -403,6 +404,7 @@ static inline void isp_isr_dbg(struct isp_device *isp, u32 irqstatus)
 static void isp_isr_sbl(struct isp_device *isp)
 {
 	struct device *dev = isp->dev;
+	struct isp_pipeline *pipe;
 	u32 sbl_pcr;
 
 	/*
@@ -416,27 +418,38 @@ static void isp_isr_sbl(struct isp_device *isp)
 	if (sbl_pcr)
 		dev_dbg(dev, "SBL overflow (PCR = 0x%08x)\n", sbl_pcr);
 
-	if (sbl_pcr & (ISPSBL_PCR_CCDC_WBL_OVF | ISPSBL_PCR_CSIA_WBL_OVF
-		     | ISPSBL_PCR_CSIB_WBL_OVF)) {
-		isp->isp_ccdc.error = 1;
-		if (isp->isp_ccdc.output & CCDC_OUTPUT_PREVIEW)
-			isp->isp_prev.error = 1;
-		if (isp->isp_ccdc.output & CCDC_OUTPUT_RESIZER)
-			isp->isp_res.error = 1;
+	if (sbl_pcr & ISPSBL_PCR_CSIB_WBL_OVF) {
+		pipe = to_isp_pipeline(&isp->isp_ccp2.subdev.entity);
+		if (pipe != NULL)
+			pipe->error = true;
+	}
+
+	if (sbl_pcr & ISPSBL_PCR_CSIA_WBL_OVF) {
+		pipe = to_isp_pipeline(&isp->isp_csi2a.subdev.entity);
+		if (pipe != NULL)
+			pipe->error = true;
+	}
+
+	if (sbl_pcr & ISPSBL_PCR_CCDC_WBL_OVF) {
+		pipe = to_isp_pipeline(&isp->isp_ccdc.subdev.entity);
+		if (pipe != NULL)
+			pipe->error = true;
 	}
 
 	if (sbl_pcr & ISPSBL_PCR_PRV_WBL_OVF) {
-		isp->isp_prev.error = 1;
-		if (isp->isp_res.input == RESIZER_INPUT_VP &&
-		    !(isp->isp_ccdc.output & CCDC_OUTPUT_RESIZER))
-			isp->isp_res.error = 1;
+		pipe = to_isp_pipeline(&isp->isp_prev.subdev.entity);
+		if (pipe != NULL)
+			pipe->error = true;
 	}
 
 	if (sbl_pcr & (ISPSBL_PCR_RSZ1_WBL_OVF
 		       | ISPSBL_PCR_RSZ2_WBL_OVF
 		       | ISPSBL_PCR_RSZ3_WBL_OVF
-		       | ISPSBL_PCR_RSZ4_WBL_OVF))
-		isp->isp_res.error = 1;
+		       | ISPSBL_PCR_RSZ4_WBL_OVF)) {
+		pipe = to_isp_pipeline(&isp->isp_res.subdev.entity);
+		if (pipe != NULL)
+			pipe->error = true;
+	}
 
 	if (sbl_pcr & ISPSBL_PCR_H3A_AF_WBL_OVF)
 		omap3isp_stat_sbl_overflow(&isp->isp_af);
@@ -464,24 +477,17 @@ static irqreturn_t isp_isr(int irq, void *_isp)
 				       IRQ0STATUS_HS_VS_IRQ;
 	struct isp_device *isp = _isp;
 	u32 irqstatus;
-	int ret;
 
 	irqstatus = isp_reg_readl(isp, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
 	isp_reg_writel(isp, irqstatus, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
 
 	isp_isr_sbl(isp);
 
-	if (irqstatus & IRQ0STATUS_CSIA_IRQ) {
-		ret = omap3isp_csi2_isr(&isp->isp_csi2a);
-		if (ret)
-			isp->isp_ccdc.error = 1;
-	}
+	if (irqstatus & IRQ0STATUS_CSIA_IRQ)
+		omap3isp_csi2_isr(&isp->isp_csi2a);
 
-	if (irqstatus & IRQ0STATUS_CSIB_IRQ) {
-		ret = omap3isp_ccp2_isr(&isp->isp_ccp2);
-		if (ret)
-			isp->isp_ccdc.error = 1;
-	}
+	if (irqstatus & IRQ0STATUS_CSIB_IRQ)
+		omap3isp_ccp2_isr(&isp->isp_ccp2);
 
 	if (irqstatus & IRQ0STATUS_CCDC_VD0_IRQ) {
 		if (isp->isp_ccdc.output & CCDC_OUTPUT_PREVIEW)
@@ -734,6 +740,17 @@ static int isp_pipeline_enable(struct isp_pipeline *pipe,
 	unsigned long flags;
 	int ret = 0;
 
+	/* If the preview engine crashed it might not respond to read/write
+	 * operations on the L4 bus. This would result in a bus fault and a
+	 * kernel oops. Refuse to start streaming in that case. This check must
+	 * be performed before the loop below to avoid starting entities if the
+	 * pipeline won't start anyway (those entities would then likely fail to
+	 * stop, making the problem worse).
+	 */
+	if ((pipe->entities & isp->crashed) &
+	    (1U << isp->isp_prev.subdev.entity.id))
+		return -EIO;
+
 	spin_lock_irqsave(&pipe->lock, flags);
 	pipe->state &= ~(ISP_PIPELINE_IDLE_INPUT | ISP_PIPELINE_IDLE_OUTPUT);
 	spin_unlock_irqrestore(&pipe->lock, flags);
@@ -874,12 +891,14 @@ static int isp_pipeline_disable(struct isp_pipeline *pipe)
 
 		if (ret) {
 			dev_info(isp->dev, "Unable to stop %s\n", subdev->name);
+			/* If the entity failed to stopped, assume it has
+			 * crashed. Mark it as such, the ISP will be reset when
+			 * applications will release it.
+			 */
+			isp->crashed |= 1U << subdev->entity.id;
 			failure = -ETIMEDOUT;
 		}
 	}
-
-	if (failure < 0)
-		isp->needs_reset = true;
 
 	return failure;
 }
@@ -1064,6 +1083,7 @@ static int isp_reset(struct isp_device *isp)
 		udelay(1);
 	}
 
+	isp->crashed = 0;
 	return 0;
 }
 
@@ -1493,10 +1513,11 @@ void omap3isp_put(struct isp_device *isp)
 	if (--isp->ref_count == 0) {
 		isp_disable_interrupts(isp);
 		isp_save_ctx(isp);
-		if (isp->needs_reset) {
+		/* Reset the ISP if an entity has failed to stop. This is the
+		 * only way to recover from such conditions.
+		 */
+		if (isp->crashed)
 			isp_reset(isp);
-			isp->needs_reset = false;
-		}
 		isp_disable_clocks(isp);
 	}
 	mutex_unlock(&isp->isp_mutex);
@@ -2183,6 +2204,8 @@ error:
 	regulator_put(isp->isp_csiphy2.vdd);
 	regulator_put(isp->isp_csiphy1.vdd);
 	platform_set_drvdata(pdev, NULL);
+
+	mutex_destroy(&isp->isp_mutex);
 	kfree(isp);
 
 	return ret;

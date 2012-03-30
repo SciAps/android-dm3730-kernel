@@ -70,6 +70,17 @@
 #include <plat/printk-debug.h>
 #endif
 
+#if defined(CONFIG_VIDEO_OMAP3)
+//#include <linux/omap3isp.h>
+// #include <media/omap3isp.h>	// for 3.1 kernel
+#include <../drivers/media/video/omap3isp/isp.h>
+#include "devices.h"
+#endif /* defined(CONFIG_VIDEO_OMAP3) */
+#if defined(CONFIG_VIDEO_OV7690)
+#include <../drivers/media/video/ov7690.h>
+#endif /* defined(CONFIG_VIDEO_OV7690) */
+
+
 #define OMAP3LOGIC_SMSC911X_CS			1
 
 #define OMAP3530_LV_SOM_MMC_GPIO_CD		110
@@ -194,6 +205,28 @@ static struct regulator_init_data omap3logic_vaux3 = {
 	.num_consumer_supplies		= ARRAY_SIZE(omap3logic_vaux3_supplies),
 	.consumer_supplies		= omap3logic_vaux3_supplies,
 };
+
+#if defined(CONFIG_VIDEO_OV7690)
+static struct regulator_consumer_supply omap3logic_vaux4_supply = {
+	.supply			= "vaux4",
+};
+
+/* VAUX4 for cam_d0/cam_d1 supply */
+static struct regulator_init_data omap3logic_vaux4 = {
+	.constraints = {
+		.name		= "vaux4",
+		.min_uV		= 1800000,
+		.max_uV		= 1800000,
+		.apply_uV	= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies	= &omap3logic_vaux4_supply,
+};
+#endif	// CONFIG_VIDEO_OV7690
 
 static struct regulator_consumer_supply omap3logic_vmmc3_supply = {
 	.supply			= "vmmc",
@@ -758,6 +791,9 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vmmc2		= &omap3logic_vmmc2,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
+#if defined(CONFIG_VIDEO_OV7690)
+	.vaux4		= &omap3logic_vaux4,
+#endif
 #if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
 	.vdac           = &omap3logic_vdac,
 	.vpll2          = &omap3logic_vpll2,
@@ -840,6 +876,78 @@ struct tsc2004_platform_data omap3logic_tsc2004data = {
 };
 
 #endif
+#if defined(CONFIG_VIDEO_OV7690)
+/* OV7690 */
+// pointer to vaux4 regulator for use by camera for D0/D1 lines
+static struct regulator	*ov7690_reg = NULL;
+
+static int omap3logic_ov7690_s_xclk(struct v4l2_subdev *subdev, u32 on)
+{
+	int isperr = 0;
+	int regerr = 0;
+	struct isp_device *isp = v4l2_dev_to_isp_device(subdev->v4l2_dev);
+
+	if (NULL == isp) {
+	  printk(KERN_ERR "%s: isp@%p sd@%p sd->v4l2_dev@%p xclk@%p on:%d\n",
+		 __FUNCTION__, isp, subdev, subdev->v4l2_dev, (isp) ? isp->platform_cb.set_xclk : NULL, on);
+	  isperr = -EINVAL;
+	} else {
+		if (NULL == isp->platform_cb.set_xclk) {
+			printk(KERN_ERR "%s: isp->platform_cb.set_xclk is NULL isp:%p subdev:%p dev:%p\n", __FUNCTION__,isp,subdev,subdev->v4l2_dev);
+			isperr = -EINVAL;
+		}
+	}
+	if (0 != isperr) {
+		return isperr;
+}
+
+	// get regulator for CAM_D0/CAM_D1
+	if (NULL == ov7690_reg) {
+		ov7690_reg = regulator_get(NULL, "vaux4");
+		if (IS_ERR(ov7690_reg)) {
+			pr_err("%s: unable to get vaux4 regulator\n", __FUNCTION__);
+			regerr = PTR_ERR(ov7690_reg);
+		}
+	}
+	// continue to turn on/off XCLK even if regulator error
+	if (on) {
+		if (!regerr) {
+			// enable 1.8V supply for D0/D1
+			regerr = regulator_enable(ov7690_reg);
+			if (regerr) {
+				printk(KERN_INFO "%s: error enabling vaux4 regulator\n", __FUNCTION__);
+			}
+		}
+		/* Enable EXTCLK */
+		isp->platform_cb.set_xclk(isp, 24000000, ISP_XCLK_A);
+		udelay(5);
+	} else {
+		isp->platform_cb.set_xclk(isp, 0, ISP_XCLK_A);
+		if (!regerr) {
+			if (regulator_is_enabled(ov7690_reg)) {
+				regerr = regulator_disable(ov7690_reg);
+				if (regerr) {
+					printk(KERN_INFO "%s: error disabling vaux4 regulator\n", __FUNCTION__);
+				}
+			}
+			regulator_put(ov7690_reg);
+			ov7690_reg = NULL;
+		}
+	}
+	return regerr;
+}
+
+static struct ov7690_platform_data  omap3logic_ov7690_platform_data = {
+	.s_xclk			= omap3logic_ov7690_s_xclk,
+	.min_width		= 640,
+	.min_height		= 480,
+};
+/* 
+* By default sensored is attached to i2c-2
+* have also been tested on i2c-3
+*/
+#define	OMAP3LOGIC_OV7690_I2C_BUS_NUM 2
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
 
 static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -852,14 +960,62 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #endif
 };
 
+#if defined(CONFIG_VIDEO_OV7690)
+static struct i2c_board_info  omap3logic_camera_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("ov7690", 0x42>>1),
+		.platform_data = &omap3logic_ov7690_platform_data,
+	}
+};
+
+static struct isp_subdev_i2c_board_info omap3logic_ov7690_subdevs[] = {
+	{
+		.board_info = &omap3logic_camera_i2c_devices[0],
+		.i2c_adapter_id = OMAP3LOGIC_OV7690_I2C_BUS_NUM,
+	},
+	{ NULL, 0 },
+};
+#endif
+
 static int __init omap3logic_i2c_init(void)
 {
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
+#if defined(CONFIG_VIDEO_OV7690) 
+#if (2 ==  OMAP3LOGIC_OV7690_I2C_BUS_NUM)
+	omap_register_i2c_bus( OMAP3LOGIC_OV7690_I2C_BUS_NUM , 400, NULL, 0);
+#endif
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
 	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
 			ARRAY_SIZE(omap3logic_i2c3_boardinfo));
 
 	return 0;
 }
+
+#if defined(CONFIG_VIDEO_OMAP3)
+static struct isp_v4l2_subdevs_group omap3logic_camera_subdevs[] = {
+#if defined(CONFIG_VIDEO_OV7690)
+	{
+		.subdevs = omap3logic_ov7690_subdevs,
+		.interface = ISP_INTERFACE_PARALLEL,
+		.bus = {
+			.parallel = {
+				.data_lane_shift	= ISPCTRL_SHIFT_0 >> ISPCTRL_SHIFT_SHIFT, //3.3+ISP_LANE_SHIFT_0,
+				.clk_pol		= 0,
+				.hs_pol			= 0,	// HSYNC not inverted
+				.vs_pol			= 0,	// VSYNC not inverted
+				.bridge			= ISPCTRL_PAR_BRIDGE_BENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
+//3.3+				.bt656			= 0,
+			},
+		},
+	},
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
+	{ NULL, 0 },
+};
+
+static struct isp_platform_data  omap3logic_isp_platform_data = {
+	.subdevs = omap3logic_camera_subdevs,
+};
+#endif
 
 static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 	{
@@ -1275,6 +1431,28 @@ static void omap3logic_usb_init(void)
 		omap3logic_init_isp1763();
 }
 
+/*
+ * Configure the Camera connection pins
+*/
+static void dm3730logic_camera_init(void)
+{
+        omap_mux_init_signal("cam_hs.cam_hs",OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_vs.cam_vs",OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_xclka.cam_xclka", OMAP_PIN_INPUT);
+//        omap_mux_init_signal("cam_xclkb.cam_xclkb", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_pclk.cam_pclk", OMAP_PIN_INPUT);
+
+        omap_mux_init_signal("cam_d0.cam_d0", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d1.cam_d1", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d2.cam_d2", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d3.cam_d3", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d4.cam_d4", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d5.cam_d5", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d6.cam_d6", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d7.cam_d7", OMAP_PIN_INPUT);
+
+}
+
 #if defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH) || defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH_MODULE)
 
 #define DM3730_SOM_LV_CF_RESET_GPIO 6
@@ -1522,6 +1700,12 @@ static void __init omap3logic_init(void)
 
 #if 0
 	omap3logic_opp_init();
+#endif
+#if defined(CONFIG_VIDEO_OMAP3)
+	if ( machine_is_dm3730_torpedo()) {
+		dm3730logic_camera_init();
+		omap3_init_camera(&omap3logic_isp_platform_data);
+	} 
 #endif
 }
 

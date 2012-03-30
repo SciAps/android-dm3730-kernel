@@ -1384,16 +1384,14 @@ static void preview_isr_buffer(struct isp_prev_device *prev)
 	int restart = 0;
 
 	if (prev->input == PREVIEW_INPUT_MEMORY) {
-		buffer = omap3isp_video_buffer_next(&prev->video_in,
-						    prev->error);
+		buffer = omap3isp_video_buffer_next(&prev->video_in);
 		if (buffer != NULL)
 			preview_set_inaddr(prev, buffer->isp_addr);
 		pipe->state |= ISP_PIPELINE_IDLE_INPUT;
 	}
 
 	if (prev->output & PREVIEW_OUTPUT_MEMORY) {
-		buffer = omap3isp_video_buffer_next(&prev->video_out,
-						    prev->error);
+		buffer = omap3isp_video_buffer_next(&prev->video_out);
 		if (buffer != NULL) {
 			preview_set_outaddr(prev, buffer->isp_addr);
 			restart = 1;
@@ -1420,8 +1418,6 @@ static void preview_isr_buffer(struct isp_prev_device *prev)
 	default:
 		return;
 	}
-
-	prev->error = 0;
 }
 
 /*
@@ -1545,7 +1541,6 @@ static int preview_set_stream(struct v4l2_subdev *sd, int enable)
 		omap3isp_subclk_enable(isp, OMAP3_ISP_SUBCLK_PREVIEW);
 		preview_configure(prev);
 		atomic_set(&prev->stopping, 0);
-		prev->error = 0;
 		preview_print_status(prev);
 	}
 
@@ -2046,10 +2041,7 @@ static int preview_init_entities(struct isp_prev_device *prev)
 
 void omap3isp_preview_unregister_entities(struct isp_prev_device *prev)
 {
-	media_entity_cleanup(&prev->subdev.entity);
-
 	v4l2_device_unregister_subdev(&prev->subdev);
-	v4l2_ctrl_handler_free(&prev->ctrls);
 	omap3isp_video_unregister(&prev->video_in);
 	omap3isp_video_unregister(&prev->video_out);
 }
@@ -2085,6 +2077,12 @@ error:
 
 void omap3isp_preview_cleanup(struct isp_device *isp)
 {
+	struct isp_prev_device *prev = &isp->isp_prev;
+
+	v4l2_ctrl_handler_free(&prev->ctrls);
+	omap3isp_video_cleanup(&prev->video_in);
+	omap3isp_video_cleanup(&prev->video_out);
+	media_entity_cleanup(&prev->subdev.entity);
 }
 
 /*

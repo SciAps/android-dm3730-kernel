@@ -96,11 +96,12 @@ static const unsigned int csi2_input_fmts[] = {
 	V4L2_MBUS_FMT_SBGGR10_DPCM8_1X8,
 	V4L2_MBUS_FMT_SGBRG10_1X10,
 	V4L2_MBUS_FMT_SGBRG10_DPCM8_1X8,
+	V4L2_MBUS_FMT_YUYV8_2X8,
 };
 
 /* To set the format on the CSI2 requires a mapping function that takes
  * the following inputs:
- * - 2 different formats (at this time)
+ * - 3 different formats (at this time)
  * - 2 destinations (mem, vp+mem) (vp only handled separately)
  * - 2 decompression options (on, off)
  * - 2 isp revisions (certain format must be handled differently on OMAP3630)
@@ -108,7 +109,7 @@ static const unsigned int csi2_input_fmts[] = {
  * Array indices as follows: [format][dest][decompr][is_3630]
  * Not all combinations are valid. 0 means invalid.
  */
-static const u16 __csi2_fmt_map[2][2][2][2] = {
+static const u16 __csi2_fmt_map[3][2][2][2] = {
 	/* RAW10 formats */
 	{
 		/* Output to memory */
@@ -147,6 +148,25 @@ static const u16 __csi2_fmt_map[2][2][2][2] = {
 			  CSI2_USERDEF_8BIT_DATA1_DPCM10_VP },
 		},
 	},
+	/* YUYV8 2X8 formats */
+	{
+		/* Output to memory */
+		{
+			/* No DPCM decompression */
+			{ CSI2_PIX_FMT_YUV422_8BIT,
+			  CSI2_PIX_FMT_YUV422_8BIT },
+			/* DPCM decompression */
+			{ 0, 0 },
+		},
+		/* Output to both */
+		{
+			/* No DPCM decompression */
+			{ CSI2_PIX_FMT_YUV422_8BIT_VP,
+			  CSI2_PIX_FMT_YUV422_8BIT_VP },
+			/* DPCM decompression */
+			{ 0, 0 },
+		},
+	},
 };
 
 /*
@@ -172,6 +192,9 @@ static u16 csi2_ctx_map_format(struct isp_csi2_device *csi2)
 	case V4L2_MBUS_FMT_SBGGR10_DPCM8_1X8:
 	case V4L2_MBUS_FMT_SGBRG10_DPCM8_1X8:
 		fmtidx = 1;
+		break;
+	case V4L2_MBUS_FMT_YUYV8_2X8:
+		fmtidx = 2;
 		break;
 	default:
 		WARN(1, KERN_ERR "CSI2: pixel format %08x unsupported!\n",
@@ -667,7 +690,7 @@ static void csi2_isr_buffer(struct isp_csi2_device *csi2)
 
 	csi2_ctx_enable(isp, csi2, 0, 0);
 
-	buffer = omap3isp_video_buffer_next(&csi2->video_out, 0);
+	buffer = omap3isp_video_buffer_next(&csi2->video_out);
 
 	/*
 	 * Let video queue operation restart engine if there is an underrun
@@ -727,17 +750,15 @@ static void csi2_isr_ctx(struct isp_csi2_device *csi2,
 
 /*
  * omap3isp_csi2_isr - CSI2 interrupt handling.
- *
- * Return -EIO on Transmission error
  */
-int omap3isp_csi2_isr(struct isp_csi2_device *csi2)
+void omap3isp_csi2_isr(struct isp_csi2_device *csi2)
 {
+	struct isp_pipeline *pipe = to_isp_pipeline(&csi2->subdev.entity);
 	u32 csi2_irqstatus, cpxio1_irqstatus;
 	struct isp_device *isp = csi2->isp;
-	int retval = 0;
 
 	if (!csi2->available)
-		return -ENODEV;
+		return;
 
 	csi2_irqstatus = isp_reg_readl(isp, csi2->regs1, ISPCSI2_IRQSTATUS);
 	isp_reg_writel(isp, csi2_irqstatus, csi2->regs1, ISPCSI2_IRQSTATUS);
@@ -750,7 +771,7 @@ int omap3isp_csi2_isr(struct isp_csi2_device *csi2)
 			       csi2->regs1, ISPCSI2_PHY_IRQSTATUS);
 		dev_dbg(isp->dev, "CSI2: ComplexIO Error IRQ "
 			"%x\n", cpxio1_irqstatus);
-		retval = -EIO;
+		pipe->error = true;
 	}
 
 	if (csi2_irqstatus & (ISPCSI2_IRQSTATUS_OCP_ERR_IRQ |
@@ -775,11 +796,11 @@ int omap3isp_csi2_isr(struct isp_csi2_device *csi2)
 			 ISPCSI2_IRQSTATUS_COMPLEXIO2_ERR_IRQ) ? 1 : 0,
 			(csi2_irqstatus &
 			 ISPCSI2_IRQSTATUS_FIFO_OVF_IRQ) ? 1 : 0);
-		retval = -EIO;
+		pipe->error = true;
 	}
 
 	if (omap3isp_module_sync_is_stopping(&csi2->wait, &csi2->stopping))
-		return 0;
+		return;
 
 	/* Successful cases */
 	if (csi2_irqstatus & ISPCSI2_IRQSTATUS_CONTEXT(0))
@@ -787,8 +808,6 @@ int omap3isp_csi2_isr(struct isp_csi2_device *csi2)
 
 	if (csi2_irqstatus & ISPCSI2_IRQSTATUS_ECC_CORRECTION_IRQ)
 		dev_dbg(isp->dev, "CSI2: ECC correction done\n");
-
-	return retval;
 }
 
 /* -----------------------------------------------------------------------------
@@ -1241,8 +1260,6 @@ static int csi2_init_entities(struct isp_csi2_device *csi2)
 
 void omap3isp_csi2_unregister_entities(struct isp_csi2_device *csi2)
 {
-	media_entity_cleanup(&csi2->subdev.entity);
-
 	v4l2_device_unregister_subdev(&csi2->subdev);
 	omap3isp_video_unregister(&csi2->video_out);
 }
@@ -1277,6 +1294,10 @@ error:
  */
 void omap3isp_csi2_cleanup(struct isp_device *isp)
 {
+	struct isp_csi2_device *csi2a = &isp->isp_csi2a;
+
+	omap3isp_video_cleanup(&csi2a->video_out);
+	media_entity_cleanup(&csi2a->subdev.entity);
 }
 
 /*
