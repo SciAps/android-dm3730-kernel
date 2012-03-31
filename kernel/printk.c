@@ -838,12 +838,13 @@ void printk_flush_log(unsigned old_log_end)
 	if (printk_debug) {
 		if ((log_end & LOG_BUF_MASK) < (old_log_end & LOG_BUF_MASK)) {
 			/* flush from old_log_end to end of buffer */
-			clean_dcache_area(&log_buf[old_log_end & LOG_BUF_MASK], (LOG_BUF_MASK - (old_log_end & LOG_BUF_MASK)));
+			dmac_flush_range(&log_buf[old_log_end & LOG_BUF_MASK],
+					&log_buf[(LOG_BUF_MASK - (old_log_end & LOG_BUF_MASK))]);
 			/* flush from start of buffer to log_end */
-			clean_dcache_area(&log_buf[0], (log_end & LOG_BUF_MASK));
+			dmac_flush_range(&log_buf[0], &log_buf[(log_end & LOG_BUF_MASK)]);
 		} else if ((old_log_end & LOG_BUF_MASK) < (log_end & LOG_BUF_MASK)) {
 			/* flush from old_log_end to log_end */
-			clean_dcache_area(&log_buf[old_log_end & LOG_BUF_MASK], (log_end & LOG_BUF_MASK) - (old_log_end & LOG_BUF_MASK));
+			dmac_flush_range(&log_buf[old_log_end & LOG_BUF_MASK], &log_buf[(log_end & LOG_BUF_MASK) - (old_log_end & LOG_BUF_MASK)]);
 		}
 		printk_debug->tag = PRINTK_DEBUG_COOKIE;
 		printk_debug->log_buf_phys = (char *)virt_to_phys(log_buf);
@@ -851,7 +852,7 @@ void printk_flush_log(unsigned old_log_end)
 		printk_debug->log_start = log_start;
 		printk_debug->log_end = log_end;
 		printk_debug->ndump_chars = (4<<10); /* dump 4K of log */
-		clean_dcache_area(printk_debug, sizeof(*printk_debug));
+		dmac_flush_range(printk_debug, printk_debug + 1);
 	}
 }
 #endif
