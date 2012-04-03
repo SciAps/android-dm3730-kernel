@@ -23,6 +23,7 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 #include <linux/opp.h>
+#include <linux/gpio_keys.h>
 
 #include <linux/regulator/machine.h>
 #include <linux/regulator/fixed.h>
@@ -276,6 +277,54 @@ static struct wl12xx_platform_data omap3logic_wlan_data __initdata = {
 
 static int omap3logic_twl_gpio_base;	/* base GPIO of TWL4030 GPIO.0 */
 
+static struct gpio_keys_button gpio_buttons[] = {
+	{
+		.code = KEY_HOME,
+		.gpio = -EINVAL,
+		.desc = "home",
+		.active_low = 1,
+		.debounce_interval = 30,
+		.wakeup = 1,
+	},
+	{
+		.code = KEY_MENU,
+		.gpio = -EINVAL,
+		.desc = "menu",
+		.active_low = 1,
+		.debounce_interval = 30,
+		.wakeup = 1,
+	},
+	{
+		.code = KEY_BACK,
+		.gpio = -EINVAL,
+		.desc = "back",
+		.active_low = 1,
+		.debounce_interval = 30,
+		.wakeup = 1,
+	},
+	{
+		.code = KEY_SEARCH,
+		.gpio = -EINVAL,
+		.desc = "search",
+		.active_low = 1,
+		.debounce_interval = 30,
+		.wakeup = 1,
+	},
+};
+
+static struct gpio_keys_platform_data gpio_key_info = {
+	.buttons = gpio_buttons,
+	.nbuttons = ARRAY_SIZE(gpio_buttons),
+};
+
+static struct platform_device keys_gpio = {
+	.name = "gpio-keys",
+	.id   = -1,
+	.dev  = {
+		.platform_data = &gpio_key_info,
+	},
+};
+
 #if defined(CONFIG_NEW_LEDS) || defined(CONFIG_NEW_LEDS_MODULE)
 static struct gpio_led omap3logic_leds[] = {
 	{
@@ -361,12 +410,74 @@ static void omap3logic_led_init(void)
 }
 #endif
 
+static void omap3logic_gpio_key_init(unsigned int gpio)
+{
+	int i;
+
+	int omap3logic_key_menu = -EINVAL;
+	int omap3logic_key_home = -EINVAL;
+	int omap3logic_key_back = -EINVAL;
+	int omap3logic_key_search = -EINVAL;
+
+	if (machine_is_dm3730_torpedo()) {
+		omap3logic_key_home = 181;
+		omap3logic_key_menu = 7;
+		omap3logic_key_back = 2;
+		omap3logic_key_search = 178;
+		
+		omap_mux_init_signal("sys_boot0.gpio_2", OMAP_PIN_INPUT_PULLUP);
+		omap_mux_init_signal("sys_boot5.gpio_7", OMAP_PIN_INPUT_PULLUP);
+		omap_mux_init_signal("mcspi2_cs0.gpio_181", OMAP_PIN_INPUT_PULLUP);
+		omap_mux_init_signal("mcspi2_clk.gpio_178", OMAP_PIN_INPUT_PULLUP);
+
+	} else if (machine_is_dm3730_som_lv()) {
+		omap3logic_key_home = gpio + 7;
+		omap3logic_key_menu = gpio + 15;
+		omap3logic_key_back = 111;
+		omap3logic_key_search = gpio + 2;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(gpio_buttons); i++) {
+		if( KEY_MENU == gpio_buttons[i].code )
+			gpio_buttons[i].gpio = omap3logic_key_menu;
+		if( KEY_HOME == gpio_buttons[i].code )
+			gpio_buttons[i].gpio = omap3logic_key_home;
+		if( KEY_BACK == gpio_buttons[i].code )
+			gpio_buttons[i].gpio = omap3logic_key_back;
+		if( KEY_SEARCH == gpio_buttons[i].code )
+			gpio_buttons[i].gpio = omap3logic_key_search;
+		printk( KERN_INFO "gpio_buttons[%d] (%s) gpio=%d\n",i, gpio_buttons[i].desc, gpio_buttons[i].gpio );
+	}
+
+	/* Adjust deboucing configuration of GPIO buttons, depending on baseboard type. */
+	for (i = 0; i < ARRAY_SIZE(gpio_buttons); i++) {
+		if (machine_is_dm3730_torpedo()) {
+			/* On Torpedo, HOME (S6) and SEARCH (S7) buttons are connected to capacitors. 
+                           Thus there is no need of debouncing for those two buttons. */ 
+			if( KEY_HOME == gpio_buttons[i].code )
+				gpio_buttons[i].debounce_interval = 0;
+			if( KEY_SEARCH == gpio_buttons[i].code )
+				gpio_buttons[i].debounce_interval = 0;
+		} else if (machine_is_dm3730_som_lv()) {
+			/* On SOM-LV, BACK button (S4) is connected to a capacitor. 
+                           Thus there is no need of debouncing for that button. */ 
+			if( KEY_BACK == gpio_buttons[i].code )
+				gpio_buttons[i].debounce_interval = 0;
+		}
+		printk( KERN_INFO "gpio_buttons[%d] (%s) debounce_interval=%d\n",i, gpio_buttons[i].desc, gpio_buttons[i].debounce_interval );
+	}
+	
+	if (platform_device_register(&keys_gpio) < 0)
+		printk(KERN_ERR "Unable to register GPIO key device\n");
+}
+
 static int omap3logic_twl_gpio_setup(struct device *dev,
 		unsigned gpio, unsigned ngpio)
 {
 	omap3logic_twl_gpio_base = gpio;
 
 	omap3logic_led_init();
+	omap3logic_gpio_key_init(gpio);
 
 	return 0;
 }
