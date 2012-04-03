@@ -103,11 +103,46 @@ int __init omap3logic_nor_init(u32 nor_cs_mask, unsigned long nor_size)
 }
 
 static struct mtd_partition omap3logic_nand_partitions[] = {
+	/* All the partition sizes are listed in terms of NAND block size */
 	{
-		.name	= "nand-flash",
-		.offset	= 0,
-		.size	= MTDPART_SIZ_FULL,
+		.name           = "x-loader",
+		.offset         = 0,
+		.size           = 4*(SZ_128K),
+		.mask_flags     = MTD_WRITEABLE
 	},
+	{
+		.name           = "u-boot",
+		.offset         = MTDPART_OFS_APPEND, /* 0x80000 */
+		.size           = 15*(SZ_128K),
+		.mask_flags     = MTD_WRITEABLE
+	},
+	{
+		.name           = "u-boot-env",
+		.offset         = MTDPART_OFS_APPEND, /* 0x80000 */
+		.size           = 1*(SZ_128K),
+		.mask_flags     = MTD_WRITEABLE
+	},
+	{
+		.name           = "kernel",
+		.offset         = MTDPART_OFS_APPEND, /* 0x280000 */
+		.size           = 80*(SZ_128K)
+	},
+	{
+		.name           = "system",
+		.offset         = MTDPART_OFS_APPEND, /* 0xC80000 */
+		.size           = 1000*(SZ_128K)   
+	},
+	{
+		.name           = "userdata",
+		.offset         = MTDPART_OFS_APPEND,  /* 0x8980000 */
+		.size           = 1000*(SZ_128K)
+	},
+	{
+		.name           = "cache",
+		.offset         = MTDPART_OFS_APPEND, /* 0x10680000 */
+		.size           = 1996*(SZ_128K)
+	},
+
 };
 
 #ifdef CONFIG_MTD_NAND_OMAP2
