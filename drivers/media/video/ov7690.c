@@ -216,6 +216,13 @@ struct regval_list {
 	unsigned char mask;
 };
 #define REGVAL_LIST_END { REG_DUMMY, REG_DUMMY,}
+/* Structure describing frame interval */
+struct ov7690_interval 
+{
+	const struct regval_list *regs;
+	struct v4l2_fract interval;
+};
+
 /*
  * Information we maintain about a known sensor.
  */
@@ -226,6 +233,7 @@ struct ov7690_info {
 	struct ov7690_format_struct *fmt;  /* Descriptor of current format */
 	struct v4l2_rect curr_crop;
 	struct v4l2_ctrl_handler ctrls;
+	const struct ov7690_interval *curr_fi;
 	struct ov7690_platform_data *pdata;
 	struct mutex power_lock;
 	int power_count;
@@ -277,22 +285,13 @@ static struct regval_list ov7690_default_regs[] = {
 	{0x39, 0x80},
 	{REG_REG1E, 0xb1},
 	/* Format */
-#if 0
-	// RGB
-	{REG_REG12, 0x00, 0x3f},
-	{REG_REG82, 0x03, 0x03},
-	{REG_REGD0, 0x48}, // Boundary offset
-	{REG_REG80, 0x7f}, 
-	{REG_REG3E, 0x10, 0x10},
-	
-#else
 	// YUV
 	{REG_REG12, 0x00},
 	{REG_REG82, 0x03}, // YUV422
 	{REG_REGD0, 0x48}, // Boundary offset
 	{REG_REG80, 0x7f}, 
 	{REG_REG3E, 0x30}, // Double pclk for YUV format
-#endif
+
 	{REG_REG22, 0x00},
 
 	/* Resolution */
@@ -341,7 +340,6 @@ static struct regval_list ov7690_default_regs[] = {
 	{REG_UVCTR2, 0x48},
 	{REG_UVCTR3, 0x32},
 
-
 	/* AEC/AGC target */
 	{REG_WPT, 0x78},
 	{REG_BPT, 0x68},
@@ -367,7 +365,6 @@ static struct regval_list ov7690_default_regs[] = {
 
 
 	/* AWB */
-
 	/* Simple */
 //;42 8e 92 ; simple AWB
 //;42 96 ff
@@ -399,7 +396,6 @@ static struct regval_list ov7690_default_regs[] = {
 	{REG_AWB(22), 0x13},
 
 	/* General Control */
-
 	{REG_BD50ST, 0x9a},
 	{REG_BD60ST, 0x80},
 	{REG_AECGM, 0x23},
@@ -422,28 +418,81 @@ static struct regval_list ov7690_default_regs[] = {
 
 
 /*
- * Here we'll try to encapsulate the changes for just the output
- * video format.
- *
+ * Output video format register settings
  * RGB656 and YUV422 come from OV
- *
  */
-
-
-static struct regval_list ov7690_fmt_yuv422[] = {
+static const struct regval_list ov7690_fmt_yuv422[] = {
 	{REG_REG12, 0x00, 0x3f},
 	{REG_REG82, 0x03, 0x03},
 	{REG_REG3E, 0x10, 0x10},
 	REGVAL_LIST_END
 };
 
-static struct regval_list ov7690_fmt_rgb565[] = {
+static const struct regval_list ov7690_fmt_rgb565[] = {
 	{REG_REG12, 0x06, 0x3f},
 	{REG_REG82, 0x03, 0x03},
 	{REG_REG3E, 0x10, 0x10},
 	REGVAL_LIST_END
 };
 
+/* 
+ * Frame interval register settings 
+ * values come from OmniVision.
+ * Frame rates are more then just pll, AEC related values change as well
+ */
+static const struct regval_list ov7690_15fps[] = {
+	{REG_BD50ST, 0x4c},
+	{REG_BD60ST, 0x3f},
+	{REG_AECGM, 0x57 },
+	{REG_REG20, 0x0},
+	{REG_CLKRC, 0x1, CLK_SCALE},
+	REGVAL_LIST_END
+};
+
+static const struct regval_list ov7690_30fps[] = {
+	{REG_BD50ST, 0x9a},
+	{REG_BD60ST, 0x80},
+	{REG_AECGM, 0x23 },
+	{REG_REG20, 0x0},
+	{REG_CLKRC, 0x0, CLK_SCALE},
+	REGVAL_LIST_END
+};
+
+static const struct ov7690_interval ov7690_intervals[] = {
+	{ov7690_30fps,{33300,1000000}}, /* 30fps */
+	{ov7690_15fps,{15000,1000000}}, /* 15fps */
+};
+
+/*
+ * Video format definitions
+ */
+static struct ov7690_format_struct {
+	struct v4l2_mbus_framefmt format;
+	const struct regval_list *regs;
+} ov7690_formats[] = {
+	{       
+	  .format = { 
+	    .width= VGA_WIDTH,
+	    .height = VGA_HEIGHT,
+	    .code	= V4L2_MBUS_FMT_YUYV8_2X8, //?1X8
+	    .colorspace	= V4L2_COLORSPACE_JPEG,
+	    .field =  V4L2_FIELD_NONE,
+	  },
+	  .regs 		= ov7690_fmt_yuv422,
+	},
+	{
+	  .format = { 
+	    .width= VGA_WIDTH,
+	    .height = VGA_HEIGHT,
+	    .code	=V4L2_MBUS_FMT_RGB565_2X8_BE,
+	    .colorspace	= V4L2_COLORSPACE_SRGB,
+	    .field =  V4L2_FIELD_NONE,
+	  },
+	  .regs		= ov7690_fmt_rgb565,
+	},
+
+};
+#define N_OV7690_FMTS ARRAY_SIZE(ov7690_formats)
 
 /*
  * Low-level register I/O.
@@ -466,7 +515,6 @@ static int ov7690_read(struct v4l2_subdev *sd, unsigned char reg,
 	}
 	return ret;
 }
-
 
 static int ov7690_write(struct v4l2_subdev *sd, unsigned char reg,
 		unsigned char value)
@@ -495,7 +543,7 @@ static int ov7690_write_mask(struct v4l2_subdev *sd, unsigned char reg, unsigned
 /*
  * Write a list of register settings; ff/ff ends the list
  */
-static int ov7690_write_array(struct v4l2_subdev *sd, struct regval_list *vals)
+static int ov7690_write_array(struct v4l2_subdev *sd, const struct regval_list *vals)
 {
 	while (vals->reg_num != REG_DUMMY || vals->value != REG_DUMMY) {
 		int ret;
@@ -509,7 +557,6 @@ static int ov7690_write_array(struct v4l2_subdev *sd, struct regval_list *vals)
 	}
 	return 0;
 }
-
 
 /*
  * Stuff that knows about the sensor.
@@ -567,7 +614,7 @@ static int ov7690_detect(struct v4l2_subdev *sd)
 		if (pbuf != outbuf)  printk(KERN_INFO "%s\n",outbuf); 
 	}
 #endif
-	/* It is right chip, do things, which need to be done ASAP.
+	/* It is right sensor, do things, which need to be done ASAP.
         ** Sensor comes out of both hard and soft reset with
 	** enabled outputs and pll. 
 	** To avoid causing grief to the host, disable outputs immediately.
@@ -577,37 +624,6 @@ static int ov7690_detect(struct v4l2_subdev *sd)
 	ov7690_write_mask(sd, REG_PLL, 0x8,0x8);
 	return 0;
 }
-
-/*
- * Store information about the video data format.
- */
-static struct ov7690_format_struct {
-	struct v4l2_mbus_framefmt format;
-	struct regval_list *regs;
-} ov7690_formats[] = {
-	{       
-	  .format = { 
-	    .width= VGA_WIDTH,
-	    .height = VGA_HEIGHT,
-	    .code	= V4L2_MBUS_FMT_YUYV8_2X8, //?1X8
-	    .colorspace	= V4L2_COLORSPACE_JPEG,
-	    .field =  V4L2_FIELD_NONE,
-	  },
-	  .regs 		= ov7690_fmt_yuv422,
-	},
-	{
-	  .format = { 
-	    .width= VGA_WIDTH,
-	    .height = VGA_HEIGHT,
-	    .code	=V4L2_MBUS_FMT_RGB565_2X8_BE,
-	    .colorspace	= V4L2_COLORSPACE_SRGB,
-	    .field =  V4L2_FIELD_NONE,
-	  },
-	  .regs		= ov7690_fmt_rgb565,
-	},
-
-};
-#define N_OV7690_FMTS ARRAY_SIZE(ov7690_formats)
 
 static int ov7690_set_scaling( struct v4l2_subdev *sd)
 {
@@ -629,326 +645,7 @@ static int ov7690_set_scaling( struct v4l2_subdev *sd)
  * Code for dealing with controls.
  */
 
-/*
- * Hue also requires messing with the color matrix.  It also requires
- * trig functions, which tend not to be well supported in the kernel.
- * So here is a simple table of sine values, 0-90 degrees, in steps
- * of five degrees.  Values are multiplied by 1000.
- *
- * The following naive approximate trig functions require an argument
- * carefully limited to -180 <= theta <= 180.
- */
-#define SIN_STEP 5
-static const int ov7690_sin_table[] = {
-	   0,	 87,   173,   258,   342,   422,
-	 500,	573,   642,   707,   766,   819,
-	 866,	906,   939,   965,   984,   996,
-	1000
-};
-
-static int ov7690_sine(int theta)
-{
-	int chs = 1;
-	int sine;
-
-	if (theta < 0) {
-		theta = -theta;
-		chs = -1;
-	}
-	if (theta <= 90)
-		sine = ov7690_sin_table[theta/SIN_STEP];
-	else {
-		theta = 180 - theta;
-		sine = ov7690_sin_table[theta/SIN_STEP];
-	}
-	return sine*chs;
-}
-
-static int ov7690_cosine(int theta)
-{
-	theta = 90 - theta;
-	if (theta > 180)
-		theta -= 360;
-	else if (theta < -180)
-		theta += 360;
-	return ov7690_sine(theta);
-}
-
-static int ov7690_s_hue(struct v4l2_subdev *sd, int value)
-{
-#define HUE_MIN -180
-#define HUE_MAX 180
-#define HUE_STEP 5
-	int ret;
-	int sinth, costh;
-	unsigned char sign_hue;
-	if (value < -180 || value > 180)
-		return -ERANGE;
-	// 1.7 fixpoint format for sin and cos
-	sinth = ov7690_sine(value);
-	costh = ov7690_cosine(value);
-	if (sinth < 0) sinth = -sinth;
-	if (costh < 0) costh = -costh;
-	sinth = ((sinth << 4)+124) / 125;	// x = x*128/1000;
-	costh = ((costh << 4)+124) / 125;	// x = x*128/1000;
-
-	/* Sight bits go into bits 0:1:4:5 of reg 0xDC
-	 * 0.1.4.5 
-	 * 1.0.0.0 := 0 <= theta < pi/2
-	 * 0.1.0.0 := -pi/2 <= theta < 0
-	 * 1.0.1.1 := pi/2 < theta
-	 * 0.1.1.1 := theta < -pi/2
-	 */
-   	if (value >= 0 ) {
-		if (value < 90) sign_hue = 0x01;
-		else sign_hue = 0x31;
-	} else {
-		if (value < -90) sign_hue = 0x32;
-		else sign_hue = 0x02;
-	}
-
-	// Write values
-	// enable SDE
-	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
-	// enable Hue side-control
-	if (ret >= 0) ret = ov7690_write_mask(sd,REG_SDECTRL,SDECTRL_HUE_EN,SDECTRL_HUE_EN);
-	// Write values and signs
-	if (ret >= 0) ret = ov7690_write(sd,REG_REGD6, costh);	
-	if (ret >= 0) ret = ov7690_write(sd,REG_REGD7, sinth);	
-	if (ret >= 0) ret = ov7690_write_mask(sd,REG_REGDC,sign_hue,0x33);
-
-	return ret;
-}
-
-static int ov7690_s_brightness(struct v4l2_subdev *sd, int value)
-{
-#define BRIGHTNESS_MIN -255
-#define BRIGHTNESS_MAX 255
-	int ret;
-	unsigned char v, sign_bright;
-	struct ov7690_info *info = to_state(sd);
-
-	if (value < -255 || value > 255)
-		return -EINVAL;
-	// enable SDE
-	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
-	
-	if (value < 0) {
-		sign_bright = 0x8;
-		v = (unsigned char) ((-value));
-	} else {
-		sign_bright = 0;
-		v = (unsigned char) (value);
-	}
-	// Write value, side-control and sign
-	if (ret >= 0) ret = ov7690_write(sd, REG_REGD3, v);
-	if (0 == info->setup) 
-		info->brightness = value;
-
-	if (ret >= 0) ret = ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_CONT_EN, SDECTRL_CONT_EN);
-	if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGDC, sign_bright, 0x8);
-
-	return ret;
-}
-
-static int ov7690_s_contrast(struct v4l2_subdev *sd, int value)
-{
-#define CONTRAST_MIN -4
-#define CONTRAST_MAX 4
-	// For some reason setting contrast sets brightness as well
-	// If brightnesss is undesirable, set it after setting contrast
-	int ret;
-	unsigned char v, sign_cont, imply_brightness;
-	struct ov7690_info *info = to_state(sd);
-
-	static unsigned char brightness_list[] =
-		{ 0xd0, 0x80, 0x48, 0x20 };
-	if (value < -4 || value > 4)
-		return -ERANGE;
-
-	// enable SDE
-	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
-	if (value < 0) {
-		sign_cont = 0x4;
-		imply_brightness = 
-			brightness_list[ARRAY_SIZE(brightness_list) + value];
-	} else {
-		sign_cont = 0x0;
-		imply_brightness = 0;
-	}
-	v = 0x20 + (value*4);
-	if (ret >= 0) ret = ov7690_write(sd, REG_REGD5, 0x20);
-	if (ret >= 0) ret = ov7690_write(sd, REG_REGD4, v);
-	if (ret >= 0) {
-		if (0 == info->setup) {
-			ret = ov7690_write_mask(sd, REG_REGDC, 0, 0x8);
-			ret = ov7690_write(sd, REG_REGD3, imply_brightness);
-			info->bright_ctrl->cur.val=imply_brightness;
-			info->brightness = imply_brightness;
-		} else {
-			// brightness setup will take care of setting 
-		}
-	} 
-	if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGDC, sign_cont, 0x4);
-	if (ret >= 0) ret = ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_CONT_EN, SDECTRL_CONT_EN);
-
-	return ret;
-}
-
-
-static int ov7690_s_hflip(struct v4l2_subdev *sd, int value)
-{
-	int ret;
-
-	unsigned char v = (value) ? REG0C_MIRROR : 0;
-	ret = ov7690_write_mask(sd,REG_REG0C, v, REG0C_MIRROR);
-	return ret;
-}
-
-static int ov7690_s_vflip(struct v4l2_subdev *sd, int value)
-{
-	int ret;
-
-	unsigned char v = (value) ? REG0C_VFLIP : 0;
-	ret = ov7690_write_mask(sd,REG_REG0C, v, REG0C_VFLIP);
-	return ret;
-}
-static int ov7690_s_sharpness(struct v4l2_subdev *sd, int value)
-{
-#define SHARPNESS_MIN -1
-#define SHARPNESS_MAX 5
-	int ret;
-	if (-1 == value) { /* Sharpness off */
-		ret = ov7690_write_mask(sd, REG_REGB4, 0x20,0x20);
-		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, 0,0x1f);
-	} else if (0 == value) { /* Sharpness Auto */
-		ret = ov7690_write_mask(sd, REG_REGB4, 0,0x20);
-		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, 2,0x1f);
-		if (ret >= 0) ret = ov7690_write(sd, REG_REGB8, 9);
-	} else {
-		static unsigned char sharp_vals[SHARPNESS_MAX] =
-			{ 1,2,3,5,8 };
-		if (value > ARRAY_SIZE(sharp_vals)) return -ERANGE;
-		ret = ov7690_write_mask(sd, REG_REGB4, 0x20,0x20);
-		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, sharp_vals[value-1],0x1f);
-	}
-	return ret;
-}
-static int ov7690_s_saturation(struct v4l2_subdev *sd, int value)
-{
-#define SATURATION_MIN -1
-#define SATURATION_MAX 8
-	int ret;
-	if ((value < SATURATION_MIN) || (value > SATURATION_MAX)) return -ERANGE;
-	if (-1 == value) {
-		ret = ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_SAT_EN);
-	} else {
-		ret =  ov7690_write_mask(sd, REG_SDECTRL,SDECTRL_SAT_EN ,SDECTRL_SAT_EN);
-		if (ret >= 0) {
-			ret= ov7690_write(sd,REG_REGD8,value<<4);
-			ret |= ov7690_write(sd,REG_REGD9,value<<4);
-		}
-	}
-	return ret;
-}
-static int ov7690_s_exposure(struct v4l2_subdev *sd, int value)
-{
-#define EXPOSURE_MIN -5
-#define EXPOSURE_MAX 5
-        struct {
-                unsigned char WPT; /* reg 0x24 */
-                unsigned char BPT; /* reg 0x25 */
-                unsigned char VPT; /* reg 0x26 */
-        } exposure_avg[1 + EXPOSURE_MAX - EXPOSURE_MIN] = {
-		/* -1.7EV */ { 0x50 , 0x40 , 0x63 }, 
-		/* -1.3EV */ { 0x58 , 0x48 , 0x73 }, 
-		/* -1.0EV */ { 0x60 , 0x50 , 0x83 },
-		/* -0.7EV */ { 0x68 , 0x58 , 0x93 },
-                /* -0.3EV */ { 0x70 , 0x60 , 0xa3 },
-                /* default */ { 0x78 , 0x68 , 0xb3 },
-                /* 0.3EV */ { 0x80 , 0x70 , 0xc3 },
-                /* 0.7EV */ { 0x88 , 0x78 , 0xd3 },
-                /* 1.0EV */ { 0x90 , 0x80 , 0xd3 },
-		/* 1.3EV */ { 0x98 , 0x88 , 0xe3 }, 
-		/* 1.7EV */ { 0xa0 , 0x90 , 0xe3 }, 
-        };
-	int ret;
-	int	index = value - EXPOSURE_MIN;
-	if ((index < 0) || (index > ARRAY_SIZE(exposure_avg) )) return -ERANGE;
-	ret=ov7690_write(sd,REG_WPT,exposure_avg[index].WPT);
-	ret=ov7690_write(sd,REG_BPT,exposure_avg[index].BPT);
-	ret=ov7690_write(sd,REG_VPT,exposure_avg[index].VPT);
-	return ret;
-}
-static int ov7690_s_colorfx(struct v4l2_subdev *sd, int value)
-{
-	int ret = -EINVAL;
-	switch(value) {
-	case V4L2_COLORFX_NONE:
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_FIX_UV);
-		break;
-	case V4L2_COLORFX_BW:
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
-		ret |= ov7690_write(sd,REG_REGDA, 0x80);
-		ret |= ov7690_write(sd,REG_REGDB, 0x80);
-		break;
-	case V4L2_COLORFX_SEPIA:
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
-		ret |= ov7690_write(sd,REG_REGDA, 0x40);
-		ret |= ov7690_write(sd,REG_REGDB, 0xa0);
-		break;
-	case V4L2_COLORFX_NEGATIVE :
-		ret = ov7690_write_mask(sd,REG_REG28, 0x80, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_FIX_UV);
-		break;
-	case V4L2_COLORFX_SKY_BLUE:
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
-		ret |= ov7690_write(sd,REG_REGDA, 0xa0);
-		ret |= ov7690_write(sd,REG_REGDB, 0x40);
-		break;
-	case V4L2_COLORFX_GRASS_GREEN:
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
-		ret |= ov7690_write(sd,REG_REGDA, 0x60);
-		ret |= ov7690_write(sd,REG_REGDB, 0x60);
-		break;
-	case V4L2_COLORFX_EMBOSS: /* Reddish */
-		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
-		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
-		ret |= ov7690_write(sd,REG_REGDA, 0x80);
-		ret |= ov7690_write(sd,REG_REGDB, 0xc0);
-		break;
-		
-		break;
-	default:
-		return -EINVAL;
-	}
-	return ret;
-}
-
-static int ov7690_test_pattern(struct v4l2_subdev *sd, int value)
-{
-	switch(value) {
-	case 0:
-		ov7690_write_mask(sd, REG_REG82, 0x0, 0xc);
-		return ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
-	case 1:
-		ov7690_write_mask(sd, REG_REG82, 0x0, 0xc);
-		return ov7690_write_mask(sd, REG_REG0C, REG0C_COLOR_BAR, REG0C_COLOR_BAR);
-	case 2:
-		ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
-		return ov7690_write_mask(sd, REG_REG82, 0x8, 0xc);
-	case 3:
-		ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
-		return ov7690_write_mask(sd, REG_REG82, 0xc, 0xc);	
-	}
-	return -ERANGE;
-}
-
+/* Low-level interface to clock/power */
 static int ov7690_power_on(struct ov7690_info *info)
 {
   if (info->pdata->s_xclk)
@@ -996,9 +693,10 @@ static int ov7690_s_stream(struct v4l2_subdev *sd, int enable)
 	} else {
 		ret = ov7690_init(sd);
 		if (ret >= 0) {
-			/* set format and scaling */
+			/* set format, scaling and frame rate*/
 			ret = ov7690_write_array(sd, info->fmt->regs);
 			ov7690_set_scaling(sd);
+			ret = ov7690_write_array(sd, info->curr_fi->regs);
 		}
                 info->setup = 1;
                 ret=v4l2_ctrl_handler_setup(&info->ctrls);
@@ -1010,6 +708,48 @@ static int ov7690_s_stream(struct v4l2_subdev *sd, int enable)
 	}
 	return ret;
 }
+
+static int ov7690_g_frame_interval(struct v4l2_subdev *sd,
+                                   struct v4l2_subdev_frame_interval *fi)
+{
+       
+	struct ov7690_info *info = to_state(sd);
+       
+        fi->interval = info->curr_fi->interval;
+
+        return 0;
+}
+
+static int ov7690_s_frame_interval(struct v4l2_subdev *sd,
+                                   struct v4l2_subdev_frame_interval *fi)
+{
+     	struct ov7690_info *info = to_state(sd);
+	int i, fr_time;
+	unsigned int err, min_err = UINT_MAX;
+	const struct ov7690_interval *fiv = &ov7690_intervals[0];
+	
+	if (fi->interval.denominator == 0)
+                return -EINVAL;
+
+	fr_time = fi->interval.numerator * 10000 / fi->interval.denominator;
+        for (i = 0; i < ARRAY_SIZE(ov7690_intervals); i++) {
+		const struct ov7690_interval *iv = &ov7690_intervals[i];
+		err = abs((iv->interval.numerator * 10000/ iv->interval.denominator) - fr_time);
+                if (err < min_err) {
+                        fiv = iv;
+                        min_err = err;
+		}
+	}
+	
+	info->curr_fi = fiv;
+
+        return 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * V4L2 subdev pad operations
+ */
+
 static int ov7690_enum_mbus_code(struct v4l2_subdev *sd,
                                   struct v4l2_subdev_fh *fh,
                                   struct v4l2_subdev_mbus_code_enum *code)
@@ -1169,9 +909,355 @@ static int ov7690_set_crop(struct v4l2_subdev *sd,
 
 	return 0;
 }
+
+static int ov7690_enum_frame_interval(struct v4l2_subdev *sd,
+                              struct v4l2_subdev_fh *fh,
+                              struct v4l2_subdev_frame_interval_enum *fie)
+{
+	
+        if (fie->index > ARRAY_SIZE(ov7690_intervals))
+                return -EINVAL;
+	
+        v4l_bound_align_image(&fie->width, OV7690_WINDOW_MIN_WIDTH,
+                              OV7690_WINDOW_MAX_WIDTH, 1,
+                              &fie->height, OV7690_WINDOW_MIN_HEIGHT,
+                              OV7690_WINDOW_MAX_HEIGHT, 1, 0);
+
+        fie->interval = ov7690_intervals[fie->index].interval;
+
+        return 0;
+}
+  
 /* -----------------------------------------------------------------------------
  * V4L2 subdev control operations
  */
+/*
+ * Hue also requires messing with the color matrix.  It also requires
+ * trig functions, which tend not to be well supported in the kernel.
+ * So here is a simple table of sine values, 0-90 degrees, in steps
+ * of five degrees.  Values are multiplied by 1000.
+ *
+ * The following naive approximate trig functions require an argument
+ * carefully limited to -180 <= theta <= 180.
+ */
+#define SIN_STEP 5
+static const int ov7690_sin_table[] = {
+	   0,	 87,   173,   258,   342,   422,
+	 500,	573,   642,   707,   766,   819,
+	 866,	906,   939,   965,   984,   996,
+	1000
+};
+
+static int ov7690_sine(int theta)
+{
+	int chs = 1;
+	int sine;
+
+	if (theta < 0) {
+		theta = -theta;
+		chs = -1;
+	}
+	if (theta <= 90)
+		sine = ov7690_sin_table[theta/SIN_STEP];
+	else {
+		theta = 180 - theta;
+		sine = ov7690_sin_table[theta/SIN_STEP];
+	}
+	return sine*chs;
+}
+
+static int ov7690_cosine(int theta)
+{
+	theta = 90 - theta;
+	if (theta > 180)
+		theta -= 360;
+	else if (theta < -180)
+		theta += 360;
+	return ov7690_sine(theta);
+}
+
+static int ov7690_s_hue(struct v4l2_subdev *sd, int value)
+{
+#define HUE_MIN -180
+#define HUE_MAX 180
+#define HUE_STEP 5
+	int ret;
+	int sinth, costh;
+	unsigned char sign_hue;
+	if (value < -180 || value > 180)
+		return -ERANGE;
+	// 1.7 fixpoint format for sin and cos
+	sinth = ov7690_sine(value);
+	costh = ov7690_cosine(value);
+	if (sinth < 0) sinth = -sinth;
+	if (costh < 0) costh = -costh;
+	sinth = ((sinth << 4)+124) / 125;	// x = x*128/1000;
+	costh = ((costh << 4)+124) / 125;	// x = x*128/1000;
+
+	/* Sight bits go into bits 0:1:4:5 of reg 0xDC
+	 * 0.1.4.5 
+	 * 1.0.0.0 := 0 <= theta < pi/2
+	 * 0.1.0.0 := -pi/2 <= theta < 0
+	 * 1.0.1.1 := pi/2 < theta
+	 * 0.1.1.1 := theta < -pi/2
+	 */
+   	if (value >= 0 ) {
+		if (value < 90) sign_hue = 0x01;
+		else sign_hue = 0x31;
+	} else {
+		if (value < -90) sign_hue = 0x32;
+		else sign_hue = 0x02;
+	}
+
+	// Write values
+	// enable SDE
+	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
+	// enable Hue side-control
+	if (ret >= 0) ret = ov7690_write_mask(sd,REG_SDECTRL,SDECTRL_HUE_EN,SDECTRL_HUE_EN);
+	// Write values and signs
+	if (ret >= 0) ret = ov7690_write(sd,REG_REGD6, costh);	
+	if (ret >= 0) ret = ov7690_write(sd,REG_REGD7, sinth);	
+	if (ret >= 0) ret = ov7690_write_mask(sd,REG_REGDC,sign_hue,0x33);
+
+	return ret;
+}
+
+static int ov7690_s_brightness(struct v4l2_subdev *sd, int value)
+{
+#define BRIGHTNESS_MIN -255
+#define BRIGHTNESS_MAX 255
+	int ret;
+	unsigned char v, sign_bright;
+	struct ov7690_info *info = to_state(sd);
+
+	if (value < -255 || value > 255)
+		return -EINVAL;
+	// enable SDE
+	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
+	
+	if (value < 0) {
+		sign_bright = 0x8;
+		v = (unsigned char) ((-value));
+	} else {
+		sign_bright = 0;
+		v = (unsigned char) (value);
+	}
+	// Write value, side-control and sign
+	if (ret >= 0) ret = ov7690_write(sd, REG_REGD3, v);
+	if (0 == info->setup) 
+		info->brightness = value;
+
+	if (ret >= 0) ret = ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_CONT_EN, SDECTRL_CONT_EN);
+	if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGDC, sign_bright, 0x8);
+
+	return ret;
+}
+
+static int ov7690_s_contrast(struct v4l2_subdev *sd, int value)
+{
+#define CONTRAST_MIN -4
+#define CONTRAST_MAX 4
+	// For some reason setting contrast sets brightness as well
+	// If brightnesss is undesirable, set it after setting contrast
+	int ret;
+	unsigned char v, sign_cont, imply_brightness;
+	struct ov7690_info *info = to_state(sd);
+
+	static unsigned char brightness_list[] =
+		{ 0xd0, 0x80, 0x48, 0x20 };
+	if (value < CONTRAST_MIN || value > CONTRAST_MAX)
+		return -ERANGE;
+
+	// enable SDE
+	ret = ov7690_write_mask(sd, REG_REG81, 0x20, 0x20);
+	if (value < 0) {
+		sign_cont = 0x4;
+		imply_brightness = 
+			brightness_list[ARRAY_SIZE(brightness_list) + value];
+	} else {
+		sign_cont = 0x0;
+		imply_brightness = 0;
+	}
+	v = 0x20 + (value*4);
+	if (ret >= 0) ret = ov7690_write(sd, REG_REGD5, 0x20);
+	if (ret >= 0) ret = ov7690_write(sd, REG_REGD4, v);
+	if (ret >= 0) {
+		if (0 == info->setup) {
+			ret = ov7690_write_mask(sd, REG_REGDC, 0, 0x8);
+			ret = ov7690_write(sd, REG_REGD3, imply_brightness);
+			info->bright_ctrl->cur.val=imply_brightness;
+			info->brightness = imply_brightness;
+		} else {
+			// brightness setup will take care of setting 
+		}
+	} 
+	if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGDC, sign_cont, 0x4);
+	if (ret >= 0) ret = ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_CONT_EN, SDECTRL_CONT_EN);
+
+	return ret;
+}
+
+
+static int ov7690_s_hflip(struct v4l2_subdev *sd, int value)
+{
+	int ret;
+
+	unsigned char v = (value) ? REG0C_MIRROR : 0;
+	ret = ov7690_write_mask(sd,REG_REG0C, v, REG0C_MIRROR);
+	return ret;
+}
+
+static int ov7690_s_vflip(struct v4l2_subdev *sd, int value)
+{
+	int ret;
+
+	unsigned char v = (value) ? REG0C_VFLIP : 0;
+	ret = ov7690_write_mask(sd,REG_REG0C, v, REG0C_VFLIP);
+	return ret;
+}
+static int ov7690_s_sharpness(struct v4l2_subdev *sd, int value)
+{
+#define SHARPNESS_MIN -1
+#define SHARPNESS_MAX 5
+	int ret;
+	if (-1 == value) { /* Sharpness off */
+		ret = ov7690_write_mask(sd, REG_REGB4, 0x20,0x20);
+		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, 0,0x1f);
+	} else if (0 == value) { /* Sharpness Auto */
+		ret = ov7690_write_mask(sd, REG_REGB4, 0,0x20);
+		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, 2,0x1f);
+		if (ret >= 0) ret = ov7690_write(sd, REG_REGB8, 9);
+	} else {
+		static unsigned char sharp_vals[SHARPNESS_MAX] =
+			{ 1,2,3,5,8 };
+		if (value > ARRAY_SIZE(sharp_vals)) return -ERANGE;
+		ret = ov7690_write_mask(sd, REG_REGB4, 0x20,0x20);
+		if (ret >= 0) ret = ov7690_write_mask(sd, REG_REGB6, sharp_vals[value-1],0x1f);
+	}
+	return ret;
+}
+static int ov7690_s_saturation(struct v4l2_subdev *sd, int value)
+{
+#define SATURATION_MIN -1
+#define SATURATION_MAX 8
+	int ret;
+	if ((value < SATURATION_MIN) || (value > SATURATION_MAX)) return -ERANGE;
+	if (-1 == value) {
+		ret = ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_SAT_EN);
+	} else {
+		ret =  ov7690_write_mask(sd, REG_SDECTRL,SDECTRL_SAT_EN ,SDECTRL_SAT_EN);
+		if (ret >= 0) {
+			ret= ov7690_write(sd,REG_REGD8,value<<4);
+			ret |= ov7690_write(sd,REG_REGD9,value<<4);
+		}
+	}
+	return ret;
+}
+static int ov7690_s_exposure(struct v4l2_subdev *sd, int value)
+{
+#define EXPOSURE_MIN -5
+#define EXPOSURE_MAX 5
+        struct {
+                unsigned char WPT; /* reg 0x24 */
+                unsigned char BPT; /* reg 0x25 */
+                unsigned char VPT; /* reg 0x26 */
+        } exposure_avg[1 + EXPOSURE_MAX - EXPOSURE_MIN] = {
+		/* -1.7EV */ { 0x50 , 0x40 , 0x63 }, 
+		/* -1.3EV */ { 0x58 , 0x48 , 0x73 }, 
+		/* -1.0EV */ { 0x60 , 0x50 , 0x83 },
+		/* -0.7EV */ { 0x68 , 0x58 , 0x93 },
+                /* -0.3EV */ { 0x70 , 0x60 , 0xa3 },
+                /* default */ { 0x78 , 0x68 , 0xb3 },
+                /* 0.3EV */ { 0x80 , 0x70 , 0xc3 },
+                /* 0.7EV */ { 0x88 , 0x78 , 0xd3 },
+                /* 1.0EV */ { 0x90 , 0x80 , 0xd3 },
+		/* 1.3EV */ { 0x98 , 0x88 , 0xe3 }, 
+		/* 1.7EV */ { 0xa0 , 0x90 , 0xe3 }, 
+        };
+	int ret;
+	int	index = value - EXPOSURE_MIN;
+	if ((index < 0) || (index > ARRAY_SIZE(exposure_avg) )) return -ERANGE;
+	ret=ov7690_write(sd,REG_WPT,exposure_avg[index].WPT);
+	ret=ov7690_write(sd,REG_BPT,exposure_avg[index].BPT);
+	ret=ov7690_write(sd,REG_VPT,exposure_avg[index].VPT);
+	return ret;
+}
+
+static int ov7690_s_colorfx(struct v4l2_subdev *sd, int value)
+{
+	int ret = -EINVAL;
+	switch(value) {
+	case V4L2_COLORFX_NONE:
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_FIX_UV);
+		break;
+	case V4L2_COLORFX_BW:
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
+		ret |= ov7690_write(sd,REG_REGDA, 0x80);
+		ret |= ov7690_write(sd,REG_REGDB, 0x80);
+		break;
+	case V4L2_COLORFX_SEPIA:
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
+		ret |= ov7690_write(sd,REG_REGDA, 0x40);
+		ret |= ov7690_write(sd,REG_REGDB, 0xa0);
+		break;
+	case V4L2_COLORFX_NEGATIVE :
+		ret = ov7690_write_mask(sd,REG_REG28, 0x80, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, 0,SDECTRL_FIX_UV);
+		break;
+	case V4L2_COLORFX_SKY_BLUE:
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
+		ret |= ov7690_write(sd,REG_REGDA, 0xa0);
+		ret |= ov7690_write(sd,REG_REGDB, 0x40);
+		break;
+	case V4L2_COLORFX_GRASS_GREEN:
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
+		ret |= ov7690_write(sd,REG_REGDA, 0x60);
+		ret |= ov7690_write(sd,REG_REGDB, 0x60);
+		break;
+	case V4L2_COLORFX_EMBOSS: /* Reddish */
+		ret = ov7690_write_mask(sd,REG_REG28, 0, 0x80);
+		ret |= ov7690_write_mask(sd, REG_SDECTRL, SDECTRL_FIX_UV,SDECTRL_FIX_UV);
+		ret |= ov7690_write(sd,REG_REGDA, 0x80);
+		ret |= ov7690_write(sd,REG_REGDB, 0xc0);
+		break;
+		
+		break;
+	default:
+		return -EINVAL;
+	}
+	return ret;
+}
+
+static int ov7690_test_pattern(struct v4l2_subdev *sd, int value)
+{
+/*
+ * 0: None
+ * 1: Color bar overlay
+ * 2: Framecount intenciry color bar
+ * 3: Solid color bar
+ */
+	switch(value) {
+	case 0:
+		ov7690_write_mask(sd, REG_REG82, 0x0, 0xc);
+		return ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
+	case 1:
+		ov7690_write_mask(sd, REG_REG82, 0x0, 0xc);
+		return ov7690_write_mask(sd, REG_REG0C, REG0C_COLOR_BAR, REG0C_COLOR_BAR);
+	case 2:
+		ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
+		return ov7690_write_mask(sd, REG_REG82, 0x8, 0xc);
+	case 3:
+		ov7690_write_mask(sd, REG_REG0C, 0, REG0C_COLOR_BAR);
+		return ov7690_write_mask(sd, REG_REG82, 0xc, 0xc);	
+	}
+	return -ERANGE;
+}
+
 static int ov7690_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct ov7690_info *info =
@@ -1311,9 +1397,7 @@ static int ov7690_s_register(struct v4l2_subdev *sd, struct v4l2_dbg_register *r
 }
 #endif
 
-/*
- * fall-through for ioctls, which were not handled by the v4l2-subdev
- */
+/* fall-through for ioctls, which were not handled by the v4l2-subdev */
 static   long ov7690_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg){
 	switch (cmd) {
 	case VIDIOC_QUERYCAP:
@@ -1342,7 +1426,7 @@ static   long ov7690_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg){
  * V4L2 subdev internal operations
  */
 static int ov7690_registered(struct v4l2_subdev *sd)
- {
+{
           struct i2c_client *client = v4l2_get_subdevdata(sd);
           struct ov7690_info *info = to_state(sd);
           int ret;
@@ -1364,23 +1448,30 @@ static int ov7690_registered(struct v4l2_subdev *sd)
           dev_info(&client->dev, "OV7690 detected at address 0x%02x\n",
                    client->addr);
           return ret;
-  }
+}
   
-  static int ov7690_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
-  {
-          struct v4l2_mbus_framefmt *format;
-
-	  format = v4l2_subdev_get_try_format(fh, 0);
-	  format->width = VGA_WIDTH;
-	  format->height = VGA_HEIGHT;
-          format->field = V4L2_FIELD_NONE;
-          format->colorspace = V4L2_COLORSPACE_JPEG;
-	  format->code =  V4L2_MBUS_FMT_YUYV8_2X8;
-
-
-	  return ov7690_s_power(sd, 1);
-	  
-  }
+static int ov7690_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+{
+	struct v4l2_mbus_framefmt *format;
+	struct v4l2_rect *crop;
+	struct ov7690_info *info = to_state(sd);
+	
+	crop = v4l2_subdev_get_try_crop(fh, 0);
+	crop->left = 0;
+	crop->top = 0;
+	crop->width = VGA_WIDTH;
+	crop->height = VGA_HEIGHT;
+	
+	format = v4l2_subdev_get_try_format(fh, 0);
+	format->width = VGA_WIDTH;
+	format->height = VGA_HEIGHT;
+	format->field = V4L2_FIELD_NONE;
+	format->colorspace = V4L2_COLORSPACE_JPEG;;
+	format->code =  V4L2_MBUS_FMT_YUYV8_2X8;
+	
+	return ov7690_s_power(sd, 1);
+	
+}
 
 static int ov7690_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
@@ -1402,6 +1493,8 @@ static const struct v4l2_subdev_core_ops ov7690_subdev_core_ops = {
 
 static const struct v4l2_subdev_video_ops ov7690_subdev_video_ops = {
 	.s_stream = ov7690_s_stream,
+	.g_frame_interval = ov7690_g_frame_interval,
+	.s_frame_interval = ov7690_s_frame_interval,
 };
 
 static struct v4l2_subdev_pad_ops ov7690_subdev_pad_ops = {
@@ -1411,6 +1504,7 @@ static struct v4l2_subdev_pad_ops ov7690_subdev_pad_ops = {
         .set_fmt = ov7690_set_format,
         .get_crop = ov7690_get_crop,
 	.set_crop = ov7690_set_crop,
+	.enum_frame_interval = ov7690_enum_frame_interval,
 };
 
 static const struct v4l2_subdev_ops ov7690_ops = {
@@ -1509,6 +1603,8 @@ static int ov7690_probe(struct i2c_client *client,
         info->curr_crop.height = VGA_HEIGHT;
         info->curr_crop.left = 0;
         info->curr_crop.top = 0;
+
+	info->curr_fi = &ov7690_intervals[0];
 
 	info->pad.flags = MEDIA_PAD_FL_SOURCE;
 #if defined(CONFIG_MEDIA_CONTROLLER)
