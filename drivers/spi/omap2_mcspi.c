@@ -780,6 +780,9 @@ static int omap2_mcspi_setup(struct spi_device *spi)
 	struct omap2_mcspi_dma	*mcspi_dma;
 	struct omap2_mcspi_cs	*cs = spi->controller_state;
 
+	if (spi->bits_per_word == 0)
+		spi->bits_per_word = 16;
+
 	if (spi->bits_per_word < 4 || spi->bits_per_word > 32) {
 		dev_dbg(&spi->dev, "setup: unsupported %d bit words\n",
 			spi->bits_per_word);

@@ -153,9 +153,20 @@ config MACH_OMAP_LDP
 	default y
 	select OMAP_PACKAGE_CBB
 
+config OMAP3LOGIC
+       bool
+
+config OMAP3LOGIC_TORPEDO
+       bool
+
+config OMAP3LOGIC_SOM_LV
+       bool
+
 config MACH_OMAP3530_LV_SOM
 	bool "OMAP3 Logic 3530 LV SOM board"
 	depends on ARCH_OMAP3
+	select OMAP3LOGIC
+	select OMAP3LOGIC_SOM_LV
 	select OMAP_PACKAGE_CBB
 	default y
 	help
@@ -166,6 +177,8 @@ config MACH_OMAP3530_LV_SOM
 config MACH_OMAP3_TORPEDO
 	bool "OMAP3 Logic 35x Torpedo board"
 	depends on ARCH_OMAP3
+	select OMAP3LOGIC_TORPEDO
+	select OMAP3LOGIC
 	select OMAP_PACKAGE_CBB
 	default y
 	help
@@ -176,6 +189,8 @@ config MACH_OMAP3_TORPEDO
 config MACH_DM3730_SOM_LV
 	bool "Logic DM373x SOM LV board"
 	depends on ARCH_OMAP3
+	select OMAP3LOGIC
+	select OMAP3LOGIC_SOM_LV
 	select OMAP_PACKAGE_CBP
 	default y
 	help
@@ -186,6 +201,8 @@ config MACH_DM3730_SOM_LV
 config MACH_DM3730_TORPEDO
 	bool "Logic DM37x Torpedo board"
 	depends on ARCH_OMAP3
+	select OMAP3LOGIC
+	select OMAP3LOGIC_TORPEDO
 	select OMAP_PACKAGE_CBP
 	default y
 	help
@@ -193,29 +210,65 @@ config MACH_DM3730_TORPEDO
 	 for full description please see the products webpage at
 	 http://www.logicpd.com/products/development-kits/dm3730-torpedo-devkit
 
+menu "OMAP3LOGIC setup"
+     depends on OMAP3LOGIC
+
+menu "OMAP3LOGIC SPI Config"
+
+comment "BRF6300 uses McSPI1/CS0"
+	depends on BT_HCIBRF6300_SPI
+
+config OMAP3LOGIC_AT25160AN
+	bool "AT25160AN on Torpeodo is present on the Torpeodo baseboard"
+	depends on OMAP3LOGIC_TORPEDO
+	default y
+
+config OMAP3LOGIC_SPI1_CS0
+	bool "Enable SPIDEV for MFP_D8  (McSPI1.CS0)"
+	depends on SPI_SPIDEV
+
+config OMAP3LOGIC_SPI1_CS1
+	bool "Enable SPIDEV for MFP_D13 (McSPI1.CS1)"
+	depends on SPI_SPIDEV && OMAP3LOGIC_TORPEDO
+
+config OMAP3LOGIC_SPI1_CS2
+	bool "Enable SPIDEV for MFP_D12/CONFIG3 (McSPI1.CS2)"
+	depends on SPI_SPIDEV && OMAP3LOGIC_TORPEDO
+
+config OMAP3LOGIC_SPI1_CS3
+	bool "Enable SPIDEV for CONFIG1 (McSPI1.CS3)"
+	depends on SPI_SPIDEV && OMAP3LOGIC_TORPEDO
+
+config OMAP3LOGIC_SPI3_CS0
+	bool "Enable SPIDEV for uP_SPI_CS0/CONFIG21 (McSPI3.CS0)"
+	depends on SPI_SPIDEV
+
+config OMAP3LOGIC_SPI3_CS1
+	bool "Enable SPIDEV for uP_SPI_CS1/CONFIG20 (McSPI3.CS1)"
+	depends on SPI_SPIDEV
+endmenu
+
 menu "OMAP3LOGIC serial ports"
-     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
 
 config OMAP3LOGIC_UART_A
      bool "OMAP3 Logic UART A"
-     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
      default y
      help
        Mux/Enable UART A (ttyO0, OMAP UART1) on omap3logic platform
 
 config OMAP3LOGIC_UART_B
      bool "OMAP3 Logic UART B"
-     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
      default n
      help
        Mux/Enable UART B (ttyO1, OMAP UART2) on omap3logic platform
 
 config OMAP3LOGIC_UART_C
      bool "OMAP3 Logic UART C"
-     depends on MACH_OMAP3530_LV_SOM || MACH_OMAP3_TORPEDO
      default n
      help
        Mux/Enable UART C (ttyO2, OMAP UART3) on omap3logic platform
+
+endmenu
 
 endmenu
 

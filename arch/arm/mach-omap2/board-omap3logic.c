@@ -35,6 +35,9 @@
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
 
+#include <linux/spi/spi.h>
+#include <linux/spi/eeprom.h>
+
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -55,6 +58,7 @@
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
 #include <plat/omap_device.h>
+#include <plat/mcspi.h>
 
 #include "smartreflex.h"
 #include "pm.h"
@@ -1393,6 +1397,289 @@ static void omap3logic_musb_init(void)
 }
 #endif
 
+#define USE_AT25_AS_EEPROM
+#ifdef USE_AT25_AS_EEPROM
+/* Access the AT25160AN chip on the Torpedo baseboard using eeprom driver */
+static struct spi_eeprom at25160an_config = {
+	.name		= "at25160an",
+	.byte_len	= 2048,
+	.page_size	= 32,
+	.flags		= EE_ADDR2,
+};
+
+static struct spi_board_info omap3logic_spi_at25160an = {
+	.modalias	= "at25",
+	.max_speed_hz	= 30000,
+	.bus_num	= 1,
+	.chip_select	= 0,
+	.platform_data	= &at25160an_config,
+	.bits_per_word	= 8,
+};
+
+#else
+/* Access the AT25160AN chip on the Torpedo baseboard using spidev driver */
+static struct omap2_mcspi_device_config at25160an_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel	= 0,	/* 0: slave, 1: master */
+};
+
+static struct spi_board_info omap3logic_spi_at25160an = {
+	/*
+	 * SPI EEPROM on Torpedo baseboard
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 0,
+	.max_speed_hz		= 19000000,
+	.controller_data	= &at25160an_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#if defined(CONFIG_OMAP3LOGIC_SPI1_CS0) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS1) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS2) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS3) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI3_CS0) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI3_CS1)
+static struct omap2_mcspi_device_config expansion_board_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel	= 1, 	/* 0: slave, 1: master */ // Note: This doesn't actually seem to be connected anywhere in the code base.
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS0
+static struct spi_board_info omap3logic_spi1_expansion_board_cs0 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS0
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 0,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS1
+static struct spi_board_info omap3logic_spi1_expansion_board_cs1 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS1
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 1,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS2
+static struct spi_board_info omap3logic_spi1_expansion_board_cs2 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS2
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 2,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS3
+static struct spi_board_info omap3logic_spi1_expansion_board_cs3 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS3
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 3,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS0
+static struct spi_board_info omap3logic_spi3_expansion_board_cs0 = {
+	/*
+	 * Generic SPI on expansion board, SPI3/CS0
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 3,
+	.chip_select		= 0,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS1
+static struct spi_board_info omap3logic_spi3_expansion_board_cs1= {
+	/*
+	 * Generic SPI on expansion board, SPI3/CS1
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 3,
+	.chip_select		= 1,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+
+
+/* SPI device entries we can have */
+static struct spi_board_info omap3logic_spi_devices[7];
+
+static void omap3logic_spi_init(void)
+{
+    int nspi=0;
+    int use_mcspi1 = 0;
+    int use_mcspi3 = 0;
+    if (machine_is_dm3730_som_lv()) {
+        /* LV SOM only has the brf6300 on SPI */
+#ifdef CONFIG_BT_HCIBRF6300_SPI
+        omap3logic_spi_devices[nspi++] = omap3logic_spi_brf6300;
+        omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+        use_mcspi1=1;
+#endif
+    } else if (machine_is_dm3730_torpedo()) {
+#ifdef USE_AT25_AS_EEPROM
+		omap3logic_spi_devices[nspi++] = omap3logic_spi_at25160an;
+		omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+#endif
+    }
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS0
+	/* SPIDEV on McSPI1/CS0 can only work if we aren't using it
+	   for either the bfr6300 or at25160an, each of which would
+	   set use_mcspi1 to non-zero. */
+	if (!use_mcspi1) {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs0;
+		omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS1
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS1 as McSPI1_CS1 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs1;
+		omap_mux_init_signal("mcspi1_cs1", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS2
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS2 as McSPI1_CS2 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs2;
+		omap_mux_init_signal("mcspi1_cs2.mcspi1_cs2", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS3
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS3 as McSPI1_CS3 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs3;
+		omap_mux_init_signal("mcspi1_cs3.mcspi1_cs3", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS0
+	omap3logic_spi_devices[nspi++] = omap3logic_spi3_expansion_board_cs0;
+	if (machine_is_dm3730_som_lv())
+		omap_mux_init_signal("sdmmc2_dat3.mcspi3_cs0", OMAP_PIN_INPUT); 
+	else
+		omap_mux_init_signal("etk_d2.mcspi3_cs0", OMAP_PIN_INPUT); 
+	use_mcspi3=1;
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS1
+	omap3logic_spi_devices[nspi++] = omap3logic_spi3_expansion_board_cs1;
+	if (machine_is_dm3730_som_lv())
+		omap_mux_init_signal("sdmmc2_dat2.mcspi3_cs1", OMAP_PIN_INPUT); 
+	else
+		omap_mux_init_signal("etk_d7.mcspi3_cs1", OMAP_PIN_INPUT); 
+	use_mcspi3=1;
+#endif
+
+    if (use_mcspi1) {
+        omap_mux_init_signal("mcspi1_clk", OMAP_PIN_INPUT);
+        omap_mux_init_signal("mcspi1_simo", OMAP_PIN_INPUT);
+        omap_mux_init_signal("mcspi1_somi", OMAP_PIN_INPUT);
+    }
+
+    if (use_mcspi3) {
+        if (machine_is_dm3730_som_lv()) {
+
+            omap_mux_init_signal("sdmmc2_clk.mcspi3_clk", OMAP_PIN_INPUT);
+            omap_mux_init_signal("sdmmc2_cmd.mcspi3_simo", OMAP_PIN_INPUT);
+            omap_mux_init_signal("sdmmc2_dat0.mcspi3_somi", OMAP_PIN_INPUT);
+        } else {
+            omap_mux_init_signal("etk_d3.mcspi3_clk", OMAP_PIN_INPUT);
+            omap_mux_init_signal("etk_d0.mcspi3_simo", OMAP_PIN_INPUT);
+            omap_mux_init_signal("etk_d1.mcspi3_somi", OMAP_PIN_INPUT);
+        }
+    }
+    if (nspi)
+        spi_register_board_info(omap3logic_spi_devices, nspi);
+}
+
+#ifdef CONFIG_BT_HCIBRF6300_SPI
+static void brf6300_dev_init(void)
+{
+    /* Only the LV SOM has a BRF6300 */
+    if (!machine_is_dm3730_som_lv())
+        return;
+
+    if (!twl4030_base_gpio) {
+        printk(KERN_ERR "Huh?!? twl4030_base_gpio not set!\n");
+        return;
+    }
+
+    brf6300_config.irq_gpio = BT_IRQ_GPIO;
+    brf6300_config.shutdown_gpio = twl4030_base_gpio + TWL4030_BT_nSHUTDOWN;
+    brf6300_config.request_shutdown_gpio = brf6300_request_shutdown_gpio;
+    brf6300_config.free_shutdown_gpio = brf6300_free_shutdown_gpio;
+    brf6300_config.set_shutdown_gpio_direction = brf6300_set_shutdown_gpio_direction;
+    brf6300_config.set_shutdown_gpio = brf6300_set_shutdown_gpio;
+    brf6300_config.get_shutdown_gpio = brf6300_get_shutdown_gpio;
+
+    omap_mux_init_gpio(brf6300_config.irq_gpio, OMAP_PIN_INPUT_PULLUP); /* GPIO_157 */
+    if (gpio_request(brf6300_config.irq_gpio, "BRF6300 IRQ") < 0)
+        printk(KERN_ERR "can't get BRF6300 irq GPIO\n");
+
+    gpio_direction_input(brf6300_config.irq_gpio);
+
+}
+#else
+static void brf6300_dev_init(void)
+{
+}
+#endif
+
 static void __init omap3logic_init_early(void)
 {
 	omap2_init_common_infrastructure();
@@ -1677,6 +1964,8 @@ static void __init omap3logic_init(void)
 	bdata.pads_cnt = 0;
 	omap_serial_init_port(&bdata);
 #endif
+
+	omap3logic_spi_init();
 
 	board_mmc_init();
 	board_smsc911x_init();
