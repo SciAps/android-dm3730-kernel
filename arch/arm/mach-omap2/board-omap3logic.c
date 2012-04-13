@@ -1902,6 +1902,24 @@ static void __init omap3logic_opp_init(void)
 	}
 }
 
+static void __init omap3logic_pm_init(void)
+{
+	/* Don't use sys_offmode signal */
+	omap_pm_sys_offmode_select(1);
+
+	/* sys_clkreq - active high */
+	omap_pm_sys_clkreq_pol(1);
+
+	/* sys_offmode - active low */
+	omap_pm_sys_offmode_pol(0);
+
+	/* Automatically send OFF command */
+	omap_pm_auto_off(1);
+
+	/* Automatically send RET command */
+	omap_pm_auto_ret(0);
+}
+
 static void __init omap3logic_init(void)
 {
 	struct omap_board_data bdata;
@@ -1986,6 +2004,8 @@ static void __init omap3logic_init(void)
 	/* Ensure SDRC pins are mux'd for self-refresh */
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
+
+	omap3logic_pm_init();
 
 #if 0
 	omap3logic_opp_init();
