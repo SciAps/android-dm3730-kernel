@@ -990,10 +990,10 @@ static int __init board_wl12xx_init(void)
 	/* Extract the MAC addr from the productID data */
 	if (!omap3logic_extract_wifi_ethaddr(mac_addr))
 		memcpy(omap3logic_wlan_data.mac_addr, mac_addr, sizeof(mac_addr));
+#ifdef CONFIG_WL12XX_PLATFORM_DATA
 	if (ignore_nvs_data)
 		omap3logic_wlan_data.platform_quirks |= WL12XX_QUIRK_IGNORE_PRODUCT_ID_NVS;
 
-#ifdef CONFIG_WL12XX_PLATFORM_DATA
 	/* WL12xx WLAN Init */
 	if (wl12xx_set_platform_data(&omap3logic_wlan_data))
 		pr_err("error setting wl12xx data\n");
