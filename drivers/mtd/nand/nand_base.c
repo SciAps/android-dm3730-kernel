@@ -2825,7 +2825,17 @@ static void nand_resume(struct mtd_info *mtd)
 	struct nand_chip *chip = mtd->priv;
 
 	if (chip->state == FL_PM_SUSPENDED)
+	{
+		// On the DM3730, when we go into off mode, the GPMC loses
+		// context and drives the write protect pin to the NAND
+		// low long enough to cause the NAND chip to lock up
+		// again, so we need to unlock the chip again at resume
+		// time.
+		chip->select_chip(mtd, -1);
+		chip->select_chip(mtd, 0);
+		__nand_unlock(mtd, 0, mtd->size - mtd->erasesize, 0);
 		nand_release_device(mtd);
+	}
 	else
 		printk(KERN_ERR "%s called for a chip which is not "
 		       "in suspended state\n", __func__);
