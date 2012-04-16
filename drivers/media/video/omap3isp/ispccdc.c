@@ -57,6 +57,8 @@ static const unsigned int ccdc_fmts[] = {
 	V4L2_MBUS_FMT_SRGGB12_1X12,
 	V4L2_MBUS_FMT_SBGGR12_1X12,
 	V4L2_MBUS_FMT_SGBRG12_1X12,
+	V4L2_MBUS_FMT_YUYV8_2X8,
+	V4L2_MBUS_FMT_UYVY8_2X8,
 };
 
 /*
@@ -623,9 +625,12 @@ static void ccdc_configure_lpf(struct isp_ccdc_device *ccdc)
 static void ccdc_configure_alaw(struct isp_ccdc_device *ccdc)
 {
 	struct isp_device *isp = to_isp_device(ccdc);
+	const struct isp_format_info *info;
 	u32 alaw = 0;
 
-	switch (ccdc->syncif.datsz) {
+	info = omap3isp_video_format_info(ccdc->formats[CCDC_PAD_SINK].code);
+
+	switch (info->width) {
 	case 8:
 		return;
 
@@ -808,6 +813,7 @@ static void ccdc_config_vp(struct isp_ccdc_device *ccdc)
 {
 	struct isp_pipeline *pipe = to_isp_pipeline(&ccdc->subdev.entity);
 	struct isp_device *isp = to_isp_device(ccdc);
+	const struct isp_format_info *info;
 	unsigned long l3_ick = pipe->l3_ick;
 	unsigned int max_div = isp->revision == ISP_REVISION_15_0 ? 64 : 8;
 	unsigned int div = 0;
@@ -816,7 +822,9 @@ static void ccdc_config_vp(struct isp_ccdc_device *ccdc)
 	fmtcfg_vp = isp_reg_readl(isp, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_FMTCFG)
 		  & ~(ISPCCDC_FMTCFG_VPIN_MASK | ISPCCDC_FMTCFG_VPIF_FRQ_MASK);
 
-	switch (ccdc->syncif.datsz) {
+	info = omap3isp_video_format_info(ccdc->formats[CCDC_PAD_SINK].code);
+
+	switch (info->width) {
 	case 8:
 	case 10:
 		fmtcfg_vp |= ISPCCDC_FMTCFG_VPIN_9_0;
@@ -959,9 +967,11 @@ void omap3isp_ccdc_max_rate(struct isp_ccdc_device *ccdc,
  *          signals.
  */
 static void ccdc_config_sync_if(struct isp_ccdc_device *ccdc,
-				struct ispccdc_syncif *syncif)
+				struct ispccdc_syncif *syncif,
+				unsigned int data_size)
 {
 	struct isp_device *isp = to_isp_device(ccdc);
+	const struct v4l2_mbus_framefmt *format;
 	u32 syn_mode = isp_reg_readl(isp, OMAP3_ISP_IOMEM_CCDC,
 				     ISPCCDC_SYN_MODE);
 
@@ -972,10 +982,25 @@ static void ccdc_config_sync_if(struct isp_ccdc_device *ccdc,
 	else
 		syn_mode &= ~ISPCCDC_SYN_MODE_FLDSTAT;
 
+	format = &ccdc->formats[CCDC_PAD_SINK];
+
+	if (format->code == V4L2_MBUS_FMT_YUYV8_2X8 ||
+	    format->code == V4L2_MBUS_FMT_UYVY8_2X8) {
+		/* The bridge is enabled for YUV8 formats. Configure the input
+		 * mode accordingly.
+		 */
+		syn_mode |= ISPCCDC_SYN_MODE_INPMOD_YCBCR16;
+	}
+
 	syn_mode &= ~ISPCCDC_SYN_MODE_DATSIZ_MASK;
-	switch (syncif->datsz) {
+	switch (data_size) {
 	case 8:
-		syn_mode |= ISPCCDC_SYN_MODE_DATSIZ_8;
+                if (ISPCCDC_SYN_MODE_INPMOD_YCBCR16 == (syn_mode & ISPCCDC_SYN_MODE_INPMOD_MASK))
+                {
+                        syn_mode |= ISPCCDC_SYN_MODE_DATSIZ_8_16;       // 8-bits, bridge will assemble to 16 bits
+                } else {
+                        syn_mode |= ISPCCDC_SYN_MODE_DATSIZ_8;          // 8-bits, no bridge
+                }
 		break;
 	case 10:
 		syn_mode |= ISPCCDC_SYN_MODE_DATSIZ_10;
@@ -1031,6 +1056,13 @@ static void ccdc_config_sync_if(struct isp_ccdc_device *ccdc,
 			      ISPCCDC_SYN_MODE_VDHDOUT);
 
 	isp_reg_writel(isp, syn_mode, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_SYN_MODE);
+
+	if (format->code == V4L2_MBUS_FMT_UYVY8_2X8)
+		isp_reg_set(isp, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_CFG,
+			    ISPCCDC_CFG_Y8POS);
+	else
+		isp_reg_clr(isp, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_CFG,
+			    ISPCCDC_CFG_Y8POS);
 
 	if (!syncif->bt_r656_en)
 		isp_reg_clr(isp, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_REC656IF,
@@ -1132,23 +1164,29 @@ static void ccdc_configure(struct isp_ccdc_device *ccdc)
 		pdata = &((struct isp_v4l2_subdevs_group *)sensor->host_priv)
 			->bus.parallel;
 
-	/* Compute shift value for lane shifter to configure the bridge. */
+	/* Compute the lane shifter shift value and enable the bridge when the
+	 * input format is YUV.
+	 */
 	fmt_src.pad = pad->index;
 	fmt_src.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 	if (!v4l2_subdev_call(sensor, pad, get_fmt, NULL, &fmt_src)) {
 		fmt_info = omap3isp_video_format_info(fmt_src.format.code);
-		depth_in = fmt_info->bpp;
+		depth_in = fmt_info->width;
 	}
 
 	fmt_info = omap3isp_video_format_info
 		(isp->isp_ccdc.formats[CCDC_PAD_SINK].code);
-	depth_out = fmt_info->bpp;
+	depth_out = fmt_info->width;
 
 	shift = depth_in - depth_out;
-	omap3isp_configure_bridge(isp, ccdc->input, pdata, shift);
+	omap3isp_configure_bridge(isp, ccdc->input, pdata, shift,
+				  fmt_info->code == V4L2_MBUS_FMT_YUYV8_2X8 ||
+				  fmt_info->code == V4L2_MBUS_FMT_UYVY8_2X8);
 
 	ccdc->syncif.datsz = depth_out;
-	ccdc_config_sync_if(ccdc, &ccdc->syncif);
+	ccdc->syncif.hdpol = pdata ? pdata->hs_pol : 0;
+	ccdc->syncif.vdpol = pdata ? pdata->vs_pol : 0;
+	ccdc_config_sync_if(ccdc, &ccdc->syncif,depth_out);
 
 	/* CCDC_PAD_SINK */
 	format = &ccdc->formats[CCDC_PAD_SINK];
@@ -1170,13 +1208,8 @@ static void ccdc_configure(struct isp_ccdc_device *ccdc)
 	else
 		syn_mode &= ~ISPCCDC_SYN_MODE_SDR2RSZ;
 
-	/* Use PACK8 mode for 1byte per pixel formats. */
-	if (omap3isp_video_format_info(format->code)->bpp <= 8)
-		syn_mode |= ISPCCDC_SYN_MODE_PACK8;
-	else
-		syn_mode &= ~ISPCCDC_SYN_MODE_PACK8;
-
-	isp_reg_writel(isp, syn_mode, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_SYN_MODE);
+	/* CCDC_PAD_SINK */
+	format = &ccdc->formats[CCDC_PAD_SINK];
 
 	/* Mosaic filter */
 	switch (format->code) {
@@ -1234,6 +1267,16 @@ static void ccdc_configure(struct isp_ccdc_device *ccdc)
 		       (format->height << ISPCCDC_VP_OUT_VERT_NUM_SHIFT),
 		       OMAP3_ISP_IOMEM_CCDC, ISPCCDC_VP_OUT);
 
+	/* Use PACK8 mode for 1byte per pixel formats unless bridge have already merged bytes*/
+	if ((omap3isp_video_format_info(format->code)->width <= 8) &&
+	   ((pdata == NULL) || (pdata->bridge == (ISPCTRL_PAR_BRIDGE_DISABLE>>ISPCTRL_PAR_BRIDGE_SHIFT ))))
+		syn_mode |= ISPCCDC_SYN_MODE_PACK8;
+	else
+		syn_mode &= ~ISPCCDC_SYN_MODE_PACK8;
+
+	isp_reg_writel(isp, syn_mode, OMAP3_ISP_IOMEM_CCDC, ISPCCDC_SYN_MODE);
+
+	/* Lens shading correction. */
 	spin_lock_irqsave(&ccdc->lsc.req_lock, flags);
 	if (ccdc->lsc.request == NULL)
 		goto unlock;
@@ -1421,8 +1464,11 @@ static void ccdc_lsc_isr(struct isp_ccdc_device *ccdc, u32 events)
 	unsigned long flags;
 
 	if (events & IRQ0STATUS_CCDC_LSC_PREF_ERR_IRQ) {
+		struct isp_pipeline *pipe =
+			to_isp_pipeline(&ccdc->subdev.entity);
+
 		ccdc_lsc_error_handler(ccdc);
-		ccdc->error = 1;
+		pipe->error = true;
 		dev_dbg(to_device(ccdc), "lsc prefetch error\n");
 	}
 
@@ -1497,7 +1543,7 @@ static int ccdc_isr_buffer(struct isp_ccdc_device *ccdc)
 		goto done;
 	}
 
-	buffer = omap3isp_video_buffer_next(&ccdc->video_out, ccdc->error);
+	buffer = omap3isp_video_buffer_next(&ccdc->video_out);
 	if (buffer != NULL) {
 		ccdc_set_outaddr(ccdc, buffer->isp_addr);
 		restart = 1;
@@ -1511,7 +1557,6 @@ static int ccdc_isr_buffer(struct isp_ccdc_device *ccdc)
 					ISP_PIPELINE_STREAM_SINGLESHOT);
 
 done:
-	ccdc->error = 0;
 	return restart;
 }
 
@@ -1732,8 +1777,11 @@ static int ccdc_set_stream(struct v4l2_subdev *sd, int enable)
 		 * links are inactive.
 		 */
 		ccdc_config_vp(ccdc);
-		ccdc_enable_vp(ccdc, 1);
-		ccdc->error = 0;
+		if (ccdc->output & (CCDC_OUTPUT_PREVIEW | CCDC_OUTPUT_RESIZER))
+			ccdc_enable_vp(ccdc, 1);
+		else
+			ccdc_enable_vp(ccdc, 0);
+
 		ccdc_print_status(ccdc);
 	}
 
@@ -1791,7 +1839,6 @@ ccdc_try_format(struct isp_ccdc_device *ccdc, struct v4l2_subdev_fh *fh,
 		unsigned int pad, struct v4l2_mbus_framefmt *fmt,
 		enum v4l2_subdev_format_whence which)
 {
-	struct v4l2_mbus_framefmt *format;
 	const struct isp_format_info *info;
 	unsigned int width = fmt->width;
 	unsigned int height = fmt->height;
@@ -1799,9 +1846,6 @@ ccdc_try_format(struct isp_ccdc_device *ccdc, struct v4l2_subdev_fh *fh,
 
 	switch (pad) {
 	case CCDC_PAD_SINK:
-		/* TODO: If the CCDC output formatter pad is connected directly
-		 * to the resizer, only YUV formats can be used.
-		 */
 		for (i = 0; i < ARRAY_SIZE(ccdc_fmts); i++) {
 			if (fmt->code == ccdc_fmts[i])
 				break;
@@ -1817,13 +1861,20 @@ ccdc_try_format(struct isp_ccdc_device *ccdc, struct v4l2_subdev_fh *fh,
 		break;
 
 	case CCDC_PAD_SOURCE_OF:
-		format = __ccdc_get_format(ccdc, fh, CCDC_PAD_SINK, which);
-		memcpy(fmt, format, sizeof(*fmt));
+		*fmt = *__ccdc_get_format(ccdc, fh, CCDC_PAD_SINK, which);
 
-		/* The data formatter truncates the number of horizontal output
-		 * pixels to a multiple of 16. To avoid clipping data, allow
-		 * callers to request an output size bigger than the input size
-		 * up to the nearest multiple of 16.
+		/* In YUV mode the bridge will be enabled, converting the input
+		 * format from 2X8 to 1X16.
+		 */
+		if (fmt->code == V4L2_MBUS_FMT_YUYV8_2X8)
+			fmt->code = V4L2_MBUS_FMT_YUYV8_1X16;
+		else if (fmt->code == V4L2_MBUS_FMT_UYVY8_2X8)
+			fmt->code = V4L2_MBUS_FMT_UYVY8_1X16;
+
+		/* The output formatter truncates the number of horizontal
+		 * output pixels to a multiple of 16. To avoid clipping data,
+		 * allow callers to request an output size bigger than the input
+		 * size up to the nearest multiple of 16.
 		 */
 		fmt->width = clamp_t(u32, width, 32, (fmt->width + 15) & ~15);
 		fmt->width &= ~15;
@@ -1831,8 +1882,7 @@ ccdc_try_format(struct isp_ccdc_device *ccdc, struct v4l2_subdev_fh *fh,
 		break;
 
 	case CCDC_PAD_SOURCE_VP:
-		format = __ccdc_get_format(ccdc, fh, CCDC_PAD_SINK, which);
-		memcpy(fmt, format, sizeof(*fmt));
+		*fmt = *__ccdc_get_format(ccdc, fh, CCDC_PAD_SINK, which);
 
 		/* The video port interface truncates the data to 10 bits. */
 		info = omap3isp_video_format_info(fmt->code);
@@ -1878,11 +1928,13 @@ static int ccdc_enum_mbus_code(struct v4l2_subdev *sd,
 
 	case CCDC_PAD_SOURCE_OF:
 	case CCDC_PAD_SOURCE_VP:
-		/* No format conversion inside CCDC */
+		/* No configurable format conversion inside CCDC, enumerate a
+		 * single output format code.
+		 */
 		if (code->index != 0)
 			return -EINVAL;
 
-		format = __ccdc_get_format(ccdc, fh, CCDC_PAD_SINK,
+		format = __ccdc_get_format(ccdc, fh, code->pad,
 					   V4L2_SUBDEV_FORMAT_TRY);
 
 		code->code = format->code;
@@ -2196,8 +2248,6 @@ static int ccdc_init_entities(struct isp_ccdc_device *ccdc)
 
 void omap3isp_ccdc_unregister_entities(struct isp_ccdc_device *ccdc)
 {
-	media_entity_cleanup(&ccdc->subdev.entity);
-
 	v4l2_device_unregister_subdev(&ccdc->subdev);
 	omap3isp_video_unregister(&ccdc->video_out);
 }
@@ -2257,8 +2307,6 @@ int omap3isp_ccdc_init(struct isp_device *isp)
 	ccdc->syncif.fldout = 0;
 	ccdc->syncif.fldpol = 0;
 	ccdc->syncif.fldstat = 0;
-	ccdc->syncif.hdpol = 0;
-	ccdc->syncif.vdpol = 0;
 
 	ccdc->clamp.oblen = 0;
 	ccdc->clamp.dcsubval = 0;
@@ -2279,6 +2327,9 @@ void omap3isp_ccdc_cleanup(struct isp_device *isp)
 {
 	struct isp_ccdc_device *ccdc = &isp->isp_ccdc;
 
+	omap3isp_video_cleanup(&ccdc->video_out);
+	media_entity_cleanup(&ccdc->subdev.entity);
+
 	/* Free LSC requests. As the CCDC is stopped there's no active request,
 	 * so only the pending request and the free queue need to be handled.
 	 */
@@ -2288,4 +2339,6 @@ void omap3isp_ccdc_cleanup(struct isp_device *isp)
 
 	if (ccdc->fpc.fpcaddr != 0)
 		iommu_vfree(isp->iommu, ccdc->fpc.fpcaddr);
+
+	mutex_destroy(&ccdc->ioctl_lock);
 }

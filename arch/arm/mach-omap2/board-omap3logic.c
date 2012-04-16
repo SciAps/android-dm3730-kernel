@@ -35,6 +35,9 @@
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
 
+#include <linux/spi/spi.h>
+#include <linux/spi/eeprom.h>
+
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -55,6 +58,7 @@
 #include <plat/gpmc.h>
 #include <plat/sdrc.h>
 #include <plat/omap_device.h>
+#include <plat/mcspi.h>
 
 #include "smartreflex.h"
 #include "pm.h"
@@ -69,6 +73,17 @@
 #ifdef CONFIG_PRINTK_DEBUG
 #include <plat/printk-debug.h>
 #endif
+
+#if defined(CONFIG_VIDEO_OMAP3)
+//#include <linux/omap3isp.h>
+// #include <media/omap3isp.h>	// for 3.1 kernel
+#include <../drivers/media/video/omap3isp/isp.h>
+#include "devices.h"
+#endif /* defined(CONFIG_VIDEO_OMAP3) */
+#if defined(CONFIG_VIDEO_OV7690)
+#include <../drivers/media/video/ov7690.h>
+#endif /* defined(CONFIG_VIDEO_OV7690) */
+
 
 #define OMAP3LOGIC_SMSC911X_CS			1
 
@@ -194,6 +209,28 @@ static struct regulator_init_data omap3logic_vaux3 = {
 	.num_consumer_supplies		= ARRAY_SIZE(omap3logic_vaux3_supplies),
 	.consumer_supplies		= omap3logic_vaux3_supplies,
 };
+
+#if defined(CONFIG_VIDEO_OV7690)
+static struct regulator_consumer_supply omap3logic_vaux4_supply = {
+	.supply			= "vaux4",
+};
+
+/* VAUX4 for cam_d0/cam_d1 supply */
+static struct regulator_init_data omap3logic_vaux4 = {
+	.constraints = {
+		.name		= "vaux4",
+		.min_uV		= 1800000,
+		.max_uV		= 1800000,
+		.apply_uV	= true,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL
+					| REGULATOR_MODE_STANDBY,
+		.valid_ops_mask		= REGULATOR_CHANGE_MODE
+					| REGULATOR_CHANGE_STATUS,
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies	= &omap3logic_vaux4_supply,
+};
+#endif	// CONFIG_VIDEO_OV7690
 
 static struct regulator_consumer_supply omap3logic_vmmc3_supply = {
 	.supply			= "vmmc",
@@ -392,26 +429,10 @@ static struct twl4030_usb_data omap3logic_usb_data = {
 	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
-#define STANDARD_OMAP	1
-#define TEST_LOGIC	0
-
-//#define TEST_GROUP	DEV_GRP_P1
-#define TEST_GROUP	DEV_GRP_NULL
-
 static struct twl4030_ins  sleep_on_seq[] = {
-#if STANDARD_OMAP
 	/* Broadcast message to put res to sleep (TYPE2 = 1, 2) */
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R1, RES_STATE_SLEEP), 2},
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_SLEEP), 2},
-#else
-	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_OFF), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD1,     RES_STATE_OFF), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD2,     RES_STATE_OFF), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VPLL1,    RES_STATE_OFF), 2},
-#if TEST_LOGIC
-	{MSG_BROADCAST(TEST_GROUP, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_OFF), 2},
-#endif
-#endif
 };
 
 static struct twl4030_script sleep_on_script = {
@@ -421,7 +442,6 @@ static struct twl4030_script sleep_on_script = {
 };
 
 static struct twl4030_ins wakeup_p12_seq[] = {
-#if STANDARD_OMAP
 	/*
 	 * Broadcast message to put resources to active
 	 *
@@ -429,15 +449,6 @@ static struct twl4030_ins wakeup_p12_seq[] = {
 	 * as 1 will be targeted (VPLL1, VDD1, VDD2, REGEN, NRES_PWRON, SYSEN).
 	 */
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R1, RES_STATE_ACTIVE), 2},
-#else
-	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD1,     RES_STATE_ACTIVE), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VDD2,     RES_STATE_ACTIVE), 2},
-	{MSG_SINGULAR(DEV_GRP_P1, RES_VPLL1,    RES_STATE_ACTIVE), 2},
-#if TEST_LOGIC
-	{MSG_BROADCAST(TEST_GROUP, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_ACTIVE), 2},
-#endif
-#endif
 };
 
 static struct twl4030_script wakeup_p12_script = {
@@ -447,7 +458,6 @@ static struct twl4030_script wakeup_p12_script = {
 };
 
 static struct twl4030_ins wakeup_p3_seq[] = {
-#if STANDARD_OMAP
 	/*
 	 * Broadcast message to put resources to active
 	 *
@@ -456,9 +466,6 @@ static struct twl4030_ins wakeup_p3_seq[] = {
 	 * (VINTANA1, VINTANA2, VINTDIG, VIO, CLKEN, HFCLKOUT).
 	 */
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2, RES_STATE_ACTIVE), 2},
-#else
-	{MSG_SINGULAR(DEV_GRP_P1, RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
-#endif
 };
 
 static struct twl4030_script wakeup_p3_script = {
@@ -468,7 +475,6 @@ static struct twl4030_script wakeup_p3_script = {
 };
 
 static struct twl4030_ins wrst_seq[] = {
-#if STANDARD_OMAP
 	/*
 	 * As a workaround for OMAP Erratum  (ID: i537 - OMAP HS devices are
 	 * not recovering from warm reset while in OFF mode)
@@ -490,24 +496,8 @@ static struct twl4030_ins wrst_seq[] = {
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_RC, RES_TYPE_ALL, RES_TYPE2_R0, RES_STATE_WRST), 2},
 	/* Re-enable twl4030 */
 	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET, RES_STATE_ACTIVE), 2},
-	/* Trun ON NRES_PWRON */
+	/* Turn ON NRES_PWRON */
 	{MSG_SINGULAR(DEV_GRP_NULL, RES_NRES_PWRON, RES_STATE_ACTIVE), 2},
-#else
-	/*
-	 * Reset twl4030.
-	 * Reset VDD1 regulator.
-	 * Reset VDD2 regulator.
-	 * Reset VPLL1 regulator.
-	 * Enable sysclk output.
-	 * Reenable twl4030.
-	 */
-	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET,    RES_STATE_OFF),    2},
-	{MSG_SINGULAR(DEV_GRP_P1,   RES_VDD1,     RES_STATE_WRST),   15},
-	{MSG_SINGULAR(DEV_GRP_P1,   RES_VDD2,     RES_STATE_WRST),   15},
-	{MSG_SINGULAR(DEV_GRP_P1,   RES_VPLL1,    RES_STATE_WRST),   0x60},
-	{MSG_SINGULAR(DEV_GRP_P1,   RES_HFCLKOUT, RES_STATE_ACTIVE), 2},
-	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET,    RES_STATE_ACTIVE), 2},
-#endif
 };
 static struct twl4030_script wrst_script = {
 	.script = wrst_seq,
@@ -523,17 +513,16 @@ static struct twl4030_script *twl4030_scripts[] = {
 };
 
 static struct twl4030_resconfig twl4030_rconfig[] = {
-#if STANDARD_OMAP
 	{
 		.resource = RES_NRES_PWRON,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 0,
 		.type2 = 1,
 		.remap_sleep = RES_STATE_SLEEP
 	},
 	{
 		.resource = RES_VINTANA2,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 0,
 		.type2 = 2,
 		.remap_sleep = RES_STATE_SLEEP
@@ -547,28 +536,28 @@ static struct twl4030_resconfig twl4030_rconfig[] = {
 	},
 	{
 		.resource = RES_VINTANA1,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 1,
 		.type2 = 2,
 		.remap_sleep = RES_STATE_SLEEP
 	},
 	{
 		.resource = RES_VINTDIG,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 1,
 		.type2 = 2,
 		.remap_sleep = RES_STATE_SLEEP
 	},
 	{
 		.resource = RES_REGEN,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 2,
 		.type2 = 1,
 		.remap_sleep = RES_STATE_SLEEP
 	},
 	{
 		.resource = RES_VIO,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 2,
 		.type2 = 2,
 		.remap_sleep = RES_STATE_SLEEP
@@ -589,7 +578,7 @@ static struct twl4030_resconfig twl4030_rconfig[] = {
 	},
 	{
 		.resource = RES_CLKEN,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 3,
 		.type2 = 2,
 		.remap_sleep = RES_STATE_SLEEP
@@ -603,130 +592,11 @@ static struct twl4030_resconfig twl4030_rconfig[] = {
 	},
 	{
 		.resource = RES_SYSEN,
-		.devgroup = DEV_GRP_ALL,
+		.devgroup = DEV_GRP_P1 | DEV_GRP_P3,
 		.type = 6,
 		.type2 = 1,
 		.remap_sleep = RES_STATE_SLEEP
 	},
-#else
-	{
-		.resource = RES_HFCLKOUT,
-		.devgroup = DEV_GRP_P3,
-		.type = -1,
-		.type2 = -1
-	},
-	{
-		.resource = RES_VDD1,
-		.devgroup = DEV_GRP_P1,
-		.type = -1,
-		.type2 = -1
-	},
-	{
-		.resource = RES_VDD2,
-		.devgroup = DEV_GRP_P1,
-		.type = -1,
-		.type2 = -1
-	},
-#if TEST_LOGIC
-	{
-		.resource = RES_VAUX1,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VAUX2,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VAUX3,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VAUX4,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VMMC1,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VMMC2,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VSIM,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VDAC,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-#if 0
-	// Disabling these seems to to hose up the warm reset.  The system will
-	// still come up from a cold start.
-	{
-		.resource = RES_VINTANA1,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VINTANA2,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-#endif
-	{
-		.resource = RES_VUSB_1V5,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VUSB_1V8,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-	{
-		.resource = RES_VUSB_3V1,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-#if 1
-	// No effect on power consumption when the system is in suspend.
-	{
-		.resource = RES_VUSBCP,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-#endif
-	{
-		.resource = RES_SYSEN,
-		.devgroup = TEST_GROUP,
-		.type = -1,
-		.type2 = RES_TYPE2_R2,
-	},
-#endif
-#endif
 	{ 0, 0},
 };
 
@@ -745,9 +615,14 @@ static struct twl4030_codec_data omap3logic_codec_data = {
 	.audio = &omap3logic_audio_data,
 };
 
+static struct twl4030_clock_init_data omap3logic_twl_clock_data = {
+	.ck32k_lowpwr_enable = 1,
+};
+
 static struct twl4030_platform_data omap3logic_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
+	.clock		= &omap3logic_twl_clock_data,
 
 	/* platform_data for children goes here */
 	.usb		= &omap3logic_usb_data,
@@ -758,6 +633,9 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vmmc2		= &omap3logic_vmmc2,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
+#if defined(CONFIG_VIDEO_OV7690)
+	.vaux4		= &omap3logic_vaux4,
+#endif
 #if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
 	.vdac           = &omap3logic_vdac,
 	.vpll2          = &omap3logic_vpll2,
@@ -840,6 +718,78 @@ struct tsc2004_platform_data omap3logic_tsc2004data = {
 };
 
 #endif
+#if defined(CONFIG_VIDEO_OV7690)
+/* OV7690 */
+// pointer to vaux4 regulator for use by camera for D0/D1 lines
+static struct regulator	*ov7690_reg = NULL;
+
+static int omap3logic_ov7690_s_xclk(struct v4l2_subdev *subdev, u32 on)
+{
+	int isperr = 0;
+	int regerr = 0;
+	struct isp_device *isp = v4l2_dev_to_isp_device(subdev->v4l2_dev);
+
+	if (NULL == isp) {
+	  printk(KERN_ERR "%s: isp@%p sd@%p sd->v4l2_dev@%p xclk@%p on:%d\n",
+		 __FUNCTION__, isp, subdev, subdev->v4l2_dev, (isp) ? isp->platform_cb.set_xclk : NULL, on);
+	  isperr = -EINVAL;
+	} else {
+		if (NULL == isp->platform_cb.set_xclk) {
+			printk(KERN_ERR "%s: isp->platform_cb.set_xclk is NULL isp:%p subdev:%p dev:%p\n", __FUNCTION__,isp,subdev,subdev->v4l2_dev);
+			isperr = -EINVAL;
+		}
+	}
+	if (0 != isperr) {
+		return isperr;
+}
+
+	// get regulator for CAM_D0/CAM_D1
+	if (NULL == ov7690_reg) {
+		ov7690_reg = regulator_get(NULL, "vaux4");
+		if (IS_ERR(ov7690_reg)) {
+			pr_err("%s: unable to get vaux4 regulator\n", __FUNCTION__);
+			regerr = PTR_ERR(ov7690_reg);
+		}
+	}
+	// continue to turn on/off XCLK even if regulator error
+	if (on) {
+		if (!regerr) {
+			// enable 1.8V supply for D0/D1
+			regerr = regulator_enable(ov7690_reg);
+			if (regerr) {
+				printk(KERN_INFO "%s: error enabling vaux4 regulator\n", __FUNCTION__);
+			}
+		}
+		/* Enable EXTCLK */
+		isp->platform_cb.set_xclk(isp, 24000000, ISP_XCLK_A);
+		udelay(5);
+	} else {
+		isp->platform_cb.set_xclk(isp, 0, ISP_XCLK_A);
+		if (!regerr) {
+			if (regulator_is_enabled(ov7690_reg)) {
+				regerr = regulator_disable(ov7690_reg);
+				if (regerr) {
+					printk(KERN_INFO "%s: error disabling vaux4 regulator\n", __FUNCTION__);
+				}
+			}
+			regulator_put(ov7690_reg);
+			ov7690_reg = NULL;
+		}
+	}
+	return regerr;
+}
+
+static struct ov7690_platform_data  omap3logic_ov7690_platform_data = {
+	.s_xclk			= omap3logic_ov7690_s_xclk,
+	.min_width		= 640,
+	.min_height		= 480,
+};
+/* 
+* By default sensored is attached to i2c-2
+* have also been tested on i2c-3
+*/
+#define	OMAP3LOGIC_OV7690_I2C_BUS_NUM 2
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
 
 static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -852,14 +802,62 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #endif
 };
 
+#if defined(CONFIG_VIDEO_OV7690)
+static struct i2c_board_info  omap3logic_camera_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("ov7690", 0x42>>1),
+		.platform_data = &omap3logic_ov7690_platform_data,
+	}
+};
+
+static struct isp_subdev_i2c_board_info omap3logic_ov7690_subdevs[] = {
+	{
+		.board_info = &omap3logic_camera_i2c_devices[0],
+		.i2c_adapter_id = OMAP3LOGIC_OV7690_I2C_BUS_NUM,
+	},
+	{ NULL, 0 },
+};
+#endif
+
 static int __init omap3logic_i2c_init(void)
 {
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
+#if defined(CONFIG_VIDEO_OV7690) 
+#if (2 ==  OMAP3LOGIC_OV7690_I2C_BUS_NUM)
+	omap_register_i2c_bus( OMAP3LOGIC_OV7690_I2C_BUS_NUM , 400, NULL, 0);
+#endif
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
 	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
 			ARRAY_SIZE(omap3logic_i2c3_boardinfo));
 
 	return 0;
 }
+
+#if defined(CONFIG_VIDEO_OMAP3)
+static struct isp_v4l2_subdevs_group omap3logic_camera_subdevs[] = {
+#if defined(CONFIG_VIDEO_OV7690)
+	{
+		.subdevs = omap3logic_ov7690_subdevs,
+		.interface = ISP_INTERFACE_PARALLEL,
+		.bus = {
+			.parallel = {
+				.data_lane_shift	= ISPCTRL_SHIFT_0 >> ISPCTRL_SHIFT_SHIFT, //3.3+ISP_LANE_SHIFT_0,
+				.clk_pol		= 0,
+				.hs_pol			= 0,	// HSYNC not inverted
+				.vs_pol			= 0,	// VSYNC not inverted
+				.bridge			= ISPCTRL_PAR_BRIDGE_BENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
+//3.3+				.bt656			= 0,
+			},
+		},
+	},
+#endif /*  defined(CONFIG_VIDEO_OV7690) */
+	{ NULL, 0 },
+};
+
+static struct isp_platform_data  omap3logic_isp_platform_data = {
+	.subdevs = omap3logic_camera_subdevs,
+};
+#endif
 
 static struct omap2_hsmmc_info __initdata board_mmc_info[] = {
 	{
@@ -997,10 +995,10 @@ static int __init board_wl12xx_init(void)
 	/* Extract the MAC addr from the productID data */
 	if (!omap3logic_extract_wifi_ethaddr(mac_addr))
 		memcpy(omap3logic_wlan_data.mac_addr, mac_addr, sizeof(mac_addr));
+#ifdef CONFIG_WL12XX_PLATFORM_DATA
 	if (ignore_nvs_data)
 		omap3logic_wlan_data.platform_quirks |= WL12XX_QUIRK_IGNORE_PRODUCT_ID_NVS;
 
-#ifdef CONFIG_WL12XX_PLATFORM_DATA
 	/* WL12xx WLAN Init */
 	if (wl12xx_set_platform_data(&omap3logic_wlan_data))
 		pr_err("error setting wl12xx data\n");
@@ -1237,6 +1235,289 @@ static void omap3logic_musb_init(void)
 }
 #endif
 
+#define USE_AT25_AS_EEPROM
+#ifdef USE_AT25_AS_EEPROM
+/* Access the AT25160AN chip on the Torpedo baseboard using eeprom driver */
+static struct spi_eeprom at25160an_config = {
+	.name		= "at25160an",
+	.byte_len	= 2048,
+	.page_size	= 32,
+	.flags		= EE_ADDR2,
+};
+
+static struct spi_board_info omap3logic_spi_at25160an = {
+	.modalias	= "at25",
+	.max_speed_hz	= 30000,
+	.bus_num	= 1,
+	.chip_select	= 0,
+	.platform_data	= &at25160an_config,
+	.bits_per_word	= 8,
+};
+
+#else
+/* Access the AT25160AN chip on the Torpedo baseboard using spidev driver */
+static struct omap2_mcspi_device_config at25160an_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel	= 0,	/* 0: slave, 1: master */
+};
+
+static struct spi_board_info omap3logic_spi_at25160an = {
+	/*
+	 * SPI EEPROM on Torpedo baseboard
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 0,
+	.max_speed_hz		= 19000000,
+	.controller_data	= &at25160an_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#if defined(CONFIG_OMAP3LOGIC_SPI1_CS0) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS1) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS2) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI1_CS3) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI3_CS0) \
+	|| defined(CONFIG_OMAP3LOGIC_SPI3_CS1)
+static struct omap2_mcspi_device_config expansion_board_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel	= 1, 	/* 0: slave, 1: master */ // Note: This doesn't actually seem to be connected anywhere in the code base.
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS0
+static struct spi_board_info omap3logic_spi1_expansion_board_cs0 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS0
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 0,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS1
+static struct spi_board_info omap3logic_spi1_expansion_board_cs1 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS1
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 1,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS2
+static struct spi_board_info omap3logic_spi1_expansion_board_cs2 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS2
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 2,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS3
+static struct spi_board_info omap3logic_spi1_expansion_board_cs3 = {
+	/*
+	 * Generic SPI on expansion board, SPI1/CS3
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 1,
+	.chip_select		= 3,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS0
+static struct spi_board_info omap3logic_spi3_expansion_board_cs0 = {
+	/*
+	 * Generic SPI on expansion board, SPI3/CS0
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 3,
+	.chip_select		= 0,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS1
+static struct spi_board_info omap3logic_spi3_expansion_board_cs1= {
+	/*
+	 * Generic SPI on expansion board, SPI3/CS1
+	 */
+	.modalias		= "spidev",
+	.bus_num		= 3,
+	.chip_select		= 1,
+	.max_speed_hz		= 48000000,
+	.controller_data	= &expansion_board_mcspi_config,
+	.irq			= 0,
+	.platform_data		= NULL,
+	.bits_per_word		= 8,
+};
+#endif
+
+
+
+/* SPI device entries we can have */
+static struct spi_board_info omap3logic_spi_devices[7];
+
+static void omap3logic_spi_init(void)
+{
+    int nspi=0;
+    int use_mcspi1 = 0;
+    int use_mcspi3 = 0;
+    if (machine_is_dm3730_som_lv()) {
+        /* LV SOM only has the brf6300 on SPI */
+#ifdef CONFIG_BT_HCIBRF6300_SPI
+        omap3logic_spi_devices[nspi++] = omap3logic_spi_brf6300;
+        omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+        use_mcspi1=1;
+#endif
+    } else if (machine_is_dm3730_torpedo()) {
+#ifdef USE_AT25_AS_EEPROM
+		omap3logic_spi_devices[nspi++] = omap3logic_spi_at25160an;
+		omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+#endif
+    }
+
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS0
+	/* SPIDEV on McSPI1/CS0 can only work if we aren't using it
+	   for either the bfr6300 or at25160an, each of which would
+	   set use_mcspi1 to non-zero. */
+	if (!use_mcspi1) {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs0;
+		omap_mux_init_signal("mcspi1_cs0", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS1
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS1 as McSPI1_CS1 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs1;
+		omap_mux_init_signal("mcspi1_cs1", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS2
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS2 as McSPI1_CS2 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs2;
+		omap_mux_init_signal("mcspi1_cs2.mcspi1_cs2", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI1_CS3
+	if (machine_is_dm3730_som_lv()) {
+		printk("Can't setup SPIDEV SPI1/CS3 as McSPI1_CS3 not available on LV SOM\n");
+	} else {
+		omap3logic_spi_devices[nspi++] = omap3logic_spi1_expansion_board_cs3;
+		omap_mux_init_signal("mcspi1_cs3.mcspi1_cs3", OMAP_PIN_INPUT);
+		use_mcspi1=1;
+	}
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS0
+	omap3logic_spi_devices[nspi++] = omap3logic_spi3_expansion_board_cs0;
+	if (machine_is_dm3730_som_lv())
+		omap_mux_init_signal("sdmmc2_dat3.mcspi3_cs0", OMAP_PIN_INPUT); 
+	else
+		omap_mux_init_signal("etk_d2.mcspi3_cs0", OMAP_PIN_INPUT); 
+	use_mcspi3=1;
+#endif
+#ifdef CONFIG_OMAP3LOGIC_SPI3_CS1
+	omap3logic_spi_devices[nspi++] = omap3logic_spi3_expansion_board_cs1;
+	if (machine_is_dm3730_som_lv())
+		omap_mux_init_signal("sdmmc2_dat2.mcspi3_cs1", OMAP_PIN_INPUT); 
+	else
+		omap_mux_init_signal("etk_d7.mcspi3_cs1", OMAP_PIN_INPUT); 
+	use_mcspi3=1;
+#endif
+
+    if (use_mcspi1) {
+        omap_mux_init_signal("mcspi1_clk", OMAP_PIN_INPUT);
+        omap_mux_init_signal("mcspi1_simo", OMAP_PIN_INPUT);
+        omap_mux_init_signal("mcspi1_somi", OMAP_PIN_INPUT);
+    }
+
+    if (use_mcspi3) {
+        if (machine_is_dm3730_som_lv()) {
+
+            omap_mux_init_signal("sdmmc2_clk.mcspi3_clk", OMAP_PIN_INPUT);
+            omap_mux_init_signal("sdmmc2_cmd.mcspi3_simo", OMAP_PIN_INPUT);
+            omap_mux_init_signal("sdmmc2_dat0.mcspi3_somi", OMAP_PIN_INPUT);
+        } else {
+            omap_mux_init_signal("etk_d3.mcspi3_clk", OMAP_PIN_INPUT);
+            omap_mux_init_signal("etk_d0.mcspi3_simo", OMAP_PIN_INPUT);
+            omap_mux_init_signal("etk_d1.mcspi3_somi", OMAP_PIN_INPUT);
+        }
+    }
+    if (nspi)
+        spi_register_board_info(omap3logic_spi_devices, nspi);
+}
+
+#ifdef CONFIG_BT_HCIBRF6300_SPI
+static void brf6300_dev_init(void)
+{
+    /* Only the LV SOM has a BRF6300 */
+    if (!machine_is_dm3730_som_lv())
+        return;
+
+    if (!twl4030_base_gpio) {
+        printk(KERN_ERR "Huh?!? twl4030_base_gpio not set!\n");
+        return;
+    }
+
+    brf6300_config.irq_gpio = BT_IRQ_GPIO;
+    brf6300_config.shutdown_gpio = twl4030_base_gpio + TWL4030_BT_nSHUTDOWN;
+    brf6300_config.request_shutdown_gpio = brf6300_request_shutdown_gpio;
+    brf6300_config.free_shutdown_gpio = brf6300_free_shutdown_gpio;
+    brf6300_config.set_shutdown_gpio_direction = brf6300_set_shutdown_gpio_direction;
+    brf6300_config.set_shutdown_gpio = brf6300_set_shutdown_gpio;
+    brf6300_config.get_shutdown_gpio = brf6300_get_shutdown_gpio;
+
+    omap_mux_init_gpio(brf6300_config.irq_gpio, OMAP_PIN_INPUT_PULLUP); /* GPIO_157 */
+    if (gpio_request(brf6300_config.irq_gpio, "BRF6300 IRQ") < 0)
+        printk(KERN_ERR "can't get BRF6300 irq GPIO\n");
+
+    gpio_direction_input(brf6300_config.irq_gpio);
+
+}
+#else
+static void brf6300_dev_init(void)
+{
+}
+#endif
+
 static void __init omap3logic_init_early(void)
 {
 	omap2_init_common_infrastructure();
@@ -1245,6 +1526,7 @@ static void __init omap3logic_init_early(void)
 
 #ifdef CONFIG_OMAP_MUX
 static struct omap_board_mux board_mux[] __initdata = {
+	OMAP3_MUX(SYS_NIRQ, OMAP_PIN_INPUT_PULLUP | OMAP_PIN_OFF_WAKEUPENABLE | OMAP_MUX_MODE0),
 	{ .reg_offset = OMAP_MUX_TERMINATOR },
 };
 #endif
@@ -1273,6 +1555,28 @@ static void omap3logic_usb_init(void)
 		omap3logic_init_ehci();
 	else
 		omap3logic_init_isp1763();
+}
+
+/*
+ * Configure the Camera connection pins
+*/
+static void dm3730logic_camera_init(void)
+{
+        omap_mux_init_signal("cam_hs.cam_hs",OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_vs.cam_vs",OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_xclka.cam_xclka", OMAP_PIN_INPUT);
+//        omap_mux_init_signal("cam_xclkb.cam_xclkb", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_pclk.cam_pclk", OMAP_PIN_INPUT);
+
+        omap_mux_init_signal("cam_d0.cam_d0", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d1.cam_d1", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d2.cam_d2", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d3.cam_d3", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d4.cam_d4", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d5.cam_d5", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d6.cam_d6", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d7.cam_d7", OMAP_PIN_INPUT);
+
 }
 
 #if defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH) || defined(CONFIG_OMAP3LOGIC_COMPACT_FLASH_MODULE)
@@ -1437,6 +1741,24 @@ static void __init omap3logic_opp_init(void)
 	}
 }
 
+static void __init omap3logic_pm_init(void)
+{
+	/* Don't use sys_offmode signal */
+	omap_pm_sys_offmode_select(1);
+
+	/* sys_clkreq - active high */
+	omap_pm_sys_clkreq_pol(1);
+
+	/* sys_offmode - active low */
+	omap_pm_sys_offmode_pol(0);
+
+	/* Automatically send OFF command */
+	omap_pm_auto_off(1);
+
+	/* Automatically send RET command */
+	omap_pm_auto_ret(0);
+}
+
 static void __init omap3logic_init(void)
 {
 	struct omap_board_data bdata;
@@ -1500,6 +1822,8 @@ static void __init omap3logic_init(void)
 	omap_serial_init_port(&bdata);
 #endif
 
+	omap3logic_spi_init();
+
 	board_mmc_init();
 	board_smsc911x_init();
 
@@ -1520,8 +1844,16 @@ static void __init omap3logic_init(void)
 	omap_mux_init_signal("sdrc_cke0", OMAP_PIN_OUTPUT);
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 
+	omap3logic_pm_init();
+
 #if 0
 	omap3logic_opp_init();
+#endif
+#if defined(CONFIG_VIDEO_OMAP3)
+	if ( machine_is_dm3730_torpedo()) {
+		dm3730logic_camera_init();
+		omap3_init_camera(&omap3logic_isp_platform_data);
+	} 
 #endif
 }
 

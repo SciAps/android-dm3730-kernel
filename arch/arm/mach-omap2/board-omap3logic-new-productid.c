@@ -915,6 +915,93 @@ int omap3logic_extract_new_part_number(u32 *part_number)
 	return ret;
 }
 
+struct ddr_timings {
+	u32 sysconfig;
+	u32 sharing;
+	u32 power;
+	u32 cfg;
+	struct ddr_cs {
+		u32 mcfg;
+		u32 mr;
+		u32 rfr;
+		u32 emr;
+		u32 actima;
+		u32 actimb;
+		u32 dlla;
+	} cs;
+} ddr_timings;
+
+id_keys_t dram_cs_group_keys[] = {
+	ID_KEY_mcfg_reg,
+	ID_KEY_mr_reg,
+	ID_KEY_rfr_ctrl_reg,
+	ID_KEY_emr2_reg,
+	ID_KEY_actim_ctrla_reg,
+	ID_KEY_actim_ctrlb_reg,
+	ID_KEY_dlla_ctrl_reg,
+};
+id_keys_t dram_bus_group_keys[] = {
+	ID_KEY_sysconfig_reg,
+	ID_KEY_sharing_reg,
+	ID_KEY_power_reg,
+	ID_KEY_cs_cfg_reg,
+};
+
+int omap3logic_extract_new_ddr_timings(struct ddr_timings *ddr_timings)
+{
+	int ret;
+	struct id_cookie cookie, dram_bus_group_cookie;
+	int dram_bus_group_values[ARRAY_SIZE(dram_bus_group_keys)];
+	int dram_cs_group_values[ARRAY_SIZE(dram_cs_group_keys)];
+
+	ret = id_init_cookie(&id_data, &cookie);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+
+	/* find /cpu0_bus_group from root */
+	ret = id_find_dict(&cookie, ID_KEY_cpu0_bus_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+
+	/* find /dram_bus_group from /cpu0_bus_group */
+	ret = id_find_dict(&cookie, ID_KEY_dram_bus_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+
+	dram_bus_group_cookie = cookie;
+	ret = id_find_numbers(&dram_bus_group_cookie, dram_bus_group_keys, ARRAY_SIZE(dram_bus_group_keys), dram_bus_group_values);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+
+	ddr_timings->sysconfig = dram_bus_group_values[0];
+	ddr_timings->sharing = dram_bus_group_values[1];
+	ddr_timings->power = dram_bus_group_values[2];
+	ddr_timings->cfg = dram_bus_group_values[3];
+
+	ret = id_find_dict(&dram_bus_group_cookie, ID_KEY_cs0_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+
+	ret = id_find_numbers(&dram_bus_group_cookie, dram_cs_group_keys, ARRAY_SIZE(dram_cs_group_keys), dram_cs_group_values);
+	if (ret != ID_EOK) {
+		return ret;
+	}
+	ddr_timings->cs.mcfg = dram_cs_group_values[0];
+	ddr_timings->cs.mr = dram_cs_group_values[1];
+	ddr_timings->cs.rfr = dram_cs_group_values[2];
+	ddr_timings->cs.emr = dram_cs_group_values[3];
+	ddr_timings->cs.actima = dram_cs_group_values[4];
+	ddr_timings->cs.actimb = dram_cs_group_values[5];
+	ddr_timings->cs.dlla = dram_cs_group_values[6];
+
+	return ret;
+}
+
 static int omap3logic_extract_new_model_name(char *model_name, u32 *model_name_size)
 {
 	int ret;
@@ -977,6 +1064,7 @@ int omap3logic_extract_new_nvs_data(u8 *nvs_data, u32 *nvs_data_size)
 static int valid_product_id_lan_ethaddr;  // !0 if LAN ethaddr is good
 static int valid_product_id_wifi_ethaddr;  // !0 if LAN ethaddr is good
 static int valid_product_id_has_wifi_config_data;  // !0 if has Murata
+static int valid_product_id_ddr_timings;  // !0 if has ddr_timings
 
 int omap3logic_extract_new_lan_ethaddr(u8 *ethaddr);
 int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr);
@@ -1040,6 +1128,10 @@ int logic_dump_serialization_info(void)
 			ethaddr[0], ethaddr[1], ethaddr[2],
 			ethaddr[3], ethaddr[4], ethaddr[5]);
 		valid_product_id_wifi_ethaddr = 1;
+	}
+	ret = omap3logic_extract_new_ddr_timings(&ddr_timings);
+	if (ret == ID_EOK) {
+		valid_product_id_ddr_timings = 1;
 	}
 	return 0;
 }
@@ -1294,7 +1386,25 @@ static ssize_t product_id_show_wifi_config_data(struct class *class, struct clas
 	return ret;
 }
 
+#define DUMP_DDR_TIMING(REG) i += sprintf(&buf[i], "%-9s: %08x\n", #REG, ddr_timings. REG)
+static ssize_t product_id_show_ddr_timings(struct class *class, struct class_attribute *attr, char *buf)
+{
+	int i=0;
 
+	DUMP_DDR_TIMING(sysconfig);
+	DUMP_DDR_TIMING(sharing);
+	DUMP_DDR_TIMING(power);
+	DUMP_DDR_TIMING(cfg);
+	DUMP_DDR_TIMING(cs.mcfg);
+	DUMP_DDR_TIMING(cs.mr);
+	DUMP_DDR_TIMING(cs.rfr);
+	DUMP_DDR_TIMING(cs.emr);
+	DUMP_DDR_TIMING(cs.actima);
+	DUMP_DDR_TIMING(cs.actimb);
+	DUMP_DDR_TIMING(cs.dlla);
+
+	return i;
+}
 
 #define DECLARE_CLASS_ATTR(_name,_mode,_show,_store)                  \
 {                                                               \
@@ -1330,6 +1440,10 @@ static struct {
 	{
 		__ATTR(wifi_config_data, S_IRUGO, product_id_show_wifi_config_data, NULL),
 		&valid_product_id_has_wifi_config_data,
+	},
+	{
+		__ATTR(ddr_timings, S_IRUGO, product_id_show_ddr_timings, NULL),
+		&valid_product_id_ddr_timings,
 	},
 };
 

@@ -737,7 +737,7 @@ static void omap3logic_lcd_set_panel_mux(void)
 	if (gpio_request(pdata->lcd_gpio_enable, "LCD enable"))
 		pr_err("omap3logic: can't request GPIO %d for LCD enable\n", pdata->lcd_gpio_enable);
 	gpio_direction_output(pdata->lcd_gpio_enable, 0);
-	omap_mux_init_gpio(pdata->lcd_gpio_enable, OMAP_PIN_OUTPUT);
+	omap_mux_init_gpio(pdata->lcd_gpio_enable, OMAP_PIN_OUTPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW);
 	pdata->gpio_flag = 1;
 
 	/* Mux common DSS signals */

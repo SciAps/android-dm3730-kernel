@@ -145,4 +145,10 @@ static inline int omap4_twl_init(void)
 extern int omap34xx_sram_dbg_suspend_struct_offset;
 #endif
 
+extern void omap_pm_sys_offmode_select(int);
+extern void omap_pm_sys_offmode_pol(int);
+extern void omap_pm_sys_clkreq_pol(int);
+extern void omap_pm_auto_off(int);
+extern void omap_pm_auto_ret(int);
+
 #endif
