@@ -615,9 +615,14 @@ static struct twl4030_codec_data omap3logic_codec_data = {
 	.audio = &omap3logic_audio_data,
 };
 
+static struct twl4030_clock_init_data omap3logic_twl_clock_data = {
+	.ck32k_lowpwr_enable = 1,
+};
+
 static struct twl4030_platform_data omap3logic_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
+	.clock		= &omap3logic_twl_clock_data,
 
 	/* platform_data for children goes here */
 	.usb		= &omap3logic_usb_data,
