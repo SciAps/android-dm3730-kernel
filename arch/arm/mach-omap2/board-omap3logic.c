@@ -284,7 +284,7 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.desc = "home",
 		.active_low = 1,
 		.debounce_interval = 30,
-		.wakeup = 1,
+		.wakeup = 0,
 	},
 	{
 		.code = KEY_MENU,
@@ -292,7 +292,7 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.desc = "menu",
 		.active_low = 1,
 		.debounce_interval = 30,
-		.wakeup = 1,
+		.wakeup = 0,
 	},
 	{
 		.code = KEY_BACK,
@@ -300,7 +300,7 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.desc = "back",
 		.active_low = 1,
 		.debounce_interval = 30,
-		.wakeup = 1,
+		.wakeup = 0,
 	},
 	{
 		.code = KEY_SEARCH,
@@ -308,7 +308,7 @@ static struct gpio_keys_button gpio_buttons[] = {
 		.desc = "search",
 		.active_low = 1,
 		.debounce_interval = 30,
-		.wakeup = 1,
+		.wakeup = 0,
 	},
 };
 
