@@ -2251,4 +2251,15 @@ __acquires(musb->lock)
 	/* start with default limits on VBUS power draw */
 	(void) musb_gadget_vbus_draw(&musb->g,
 			is_otg_enabled(musb) ? 8 : 100);
+
+	/* Force a disconnect if we should be disconnected.
+	 * This fixes the case where the gadget has told
+	 * musb to be disconnected from the remote device
+	 * during startup.  The android composite driver
+	 * is an example driver which does this (although,
+	 * that is not part of this kernel.                 */
+	if(!musb->softconnect)
+	{
+		musb_pullup(musb, 0);
+	}
 }
