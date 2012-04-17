@@ -35,6 +35,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
 #include <linux/err.h>
+#include <linux/wakelock.h>
 
 #include "musb_core.h"
 #include "omap2430.h"
@@ -42,6 +43,7 @@
 struct omap2430_glue {
 	struct device		*dev;
 	struct platform_device	*musb;
+	struct wake_lock	wake_lock;
 };
 #define glue_to_musb(g)		platform_get_drvdata(g->musb)
 
@@ -447,6 +449,7 @@ static int __init omap2430_probe(struct platform_device *pdev)
 
 	glue->dev			= &pdev->dev;
 	glue->musb			= musb;
+	wake_lock_init(&glue->wake_lock, WAKE_LOCK_SUSPEND, "musb-omap2430");
 
 	pdata->platform_ops		= &omap2430_ops;
 
@@ -492,6 +495,7 @@ static int __exit omap2430_remove(struct platform_device *pdev)
 	platform_device_del(glue->musb);
 	platform_device_put(glue->musb);
 	pm_runtime_disable(&pdev->dev);
+	wake_lock_destroy(&glue->wake_lock);
 	kfree(glue);
 
 	return 0;
@@ -510,6 +514,8 @@ static int omap2430_runtime_suspend(struct device *dev)
 	omap2430_low_level_exit(musb);
 	otg_set_suspend(musb->xceiv, 1);
 
+	wake_unlock(&glue->wake_lock);
+
 	return 0;
 }
 
@@ -518,6 +524,7 @@ static int omap2430_runtime_resume(struct device *dev)
 	struct omap2430_glue		*glue = dev_get_drvdata(dev);
 	struct musb			*musb = glue_to_musb(glue);
 
+	wake_lock(&glue->wake_lock);
 	omap2430_low_level_init(musb);
 	musb_writel(musb->mregs, OTG_INTERFSEL,
 					musb->context.otg_interfsel);
