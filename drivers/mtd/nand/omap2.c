@@ -145,7 +145,6 @@ struct omap_nand_info {
 	int					buf_len;
 	/* Buffer to hold page on read when correctable ECC error found;
 	 * read is done w/o ECC to count ECC corrected bits */
-	u_char				*ecc_read_buffer;
 };
 
 /**
@@ -1257,7 +1256,7 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	/* second phase scan */
 	if (nand_scan_tail(&info->mtd)) {
 		err = -ENXIO;
-		goto out_free_buffers;
+		goto out_unmap;
 	}
 
 	err = parse_mtd_partitions(&info->mtd, part_probes, &info->parts, 0);
@@ -1272,9 +1271,6 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 
 	return 0;
 
-out_free_buffers:
-	if (info->ecc_read_buffer)
-		kfree(info->ecc_read_buffer);
 out_unmap:
 	iounmap(info->nand.IO_ADDR_R);
 out_release_mem_region:
@@ -1297,9 +1293,6 @@ static int omap_nand_remove(struct platform_device *pdev)
 
 	if (info->gpmc_irq)
 		free_irq(info->gpmc_irq, info);
-
-	if (info->ecc_read_buffer)
-		kfree(info->ecc_read_buffer);
 
 	if (info->nand.disturb)
 		kfree(info->nand.disturb);
