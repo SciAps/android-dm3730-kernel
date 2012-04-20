@@ -246,6 +246,7 @@ struct omap3_cm_regs {
 	u32 cam_cm_clksel;
 	u32 per_cm_clksel;
 	u32 emu_cm_clksel;
+	u32 core_cm_clksel;
 	u32 emu_cm_clkstctrl;
 	u32 pll_cm_autoidle;
 	u32 pll_cm_autoidle2;
@@ -430,10 +431,14 @@ void omap3_cm_save_context(void)
 	cm_context.cm_clkout_ctrl =
 		omap2_cm_read_mod_reg(OMAP3430_CCR_MOD,
 				      OMAP3_CM_CLKOUT_CTRL_OFFSET);
+	cm_context.core_cm_clksel =
+		omap2_cm_read_mod_reg(CORE_MOD, CM_CLKSEL);
 }
 
 void omap3_cm_restore_context(void)
 {
+	omap2_cm_write_mod_reg(cm_context.core_cm_clksel, CORE_MOD,
+	                       CM_CLKSEL);
 	omap2_cm_write_mod_reg(cm_context.iva2_cm_clksel1, OMAP3430_IVA2_MOD,
 			       CM_CLKSEL1);
 	omap2_cm_write_mod_reg(cm_context.iva2_cm_clksel2, OMAP3430_IVA2_MOD,
