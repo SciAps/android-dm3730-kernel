@@ -59,7 +59,9 @@ static int w1_bq27000_add_slave(struct w1_slave *sl)
 				       sizeof(bq27000_battery_info));
 	pdev->dev.parent = &sl->dev;
 
+	mutex_unlock(&sl->master->mutex);
 	ret = platform_device_add(pdev);
+	mutex_lock(&sl->master->mutex);
 	if (ret)
 		goto pdev_add_failed;
 
