@@ -217,10 +217,10 @@ u8 w1_triplet(struct w1_master *dev, int bdir)
  * @param dev     the master device
  * @return        the byte read
  */
-u8 w1_read_8(struct w1_master *dev)
+int w1_read_8(struct w1_master *dev)
 {
 	int i;
-	u8 res = 0;
+	int res = 0;
 
 	if (dev->bus_master->read_byte)
 		res = dev->bus_master->read_byte(dev->bus_master->data);

@@ -28,7 +28,7 @@ static int F_ID;
 
 static int w1_bq27000_read(struct device *dev, unsigned int reg)
 {
-	u8 val;
+	int val;
 	struct w1_slave *sl = container_of(dev->parent, struct w1_slave, dev);
 
 	mutex_lock(&sl->master->mutex);
