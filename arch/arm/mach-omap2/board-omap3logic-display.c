@@ -21,7 +21,6 @@
 #include <linux/i2c/twl.h>
 #include <linux/backlight.h>
 #include <linux/regulator/machine.h>
-#include <linux/clk.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -172,11 +171,6 @@ static void dm3730_torpedo_bl_set_intensity(int level)
 		gpio_set_value(omap3logic_dss_lcd_data.lcd_gpio_backlight, 1);
 
 		omap_dm_timer_enable(intensity_timer);
-
-		// Working around an off-mode issue for the dmtimer - it resets to 32kHz
-		// but the framework doesn't know it and refuses to actually reset it to
-		// SYS_CLK.
-		omap_dm_timer_set_source(intensity_timer, OMAP_TIMER_SRC_32_KHZ);
 		omap_dm_timer_set_source(intensity_timer, OMAP_TIMER_SRC_SYS_CLK);
 		omap_dm_timer_set_load(intensity_timer, 1, 0xFFFF0000);
 		omap_dm_timer_set_pwm(intensity_timer, 0, 1,
