@@ -85,7 +85,7 @@ static struct platform_driver omap_hdq_driver = {
 	},
 };
 
-static u8 omap_w1_read_byte(void *_hdq);
+static int omap_w1_read_byte(void *_hdq);
 static void omap_w1_write_byte(void *_hdq, u8 byte);
 static u8 omap_w1_reset_bus(void *_hdq);
 static void omap_w1_search_bus(void *_hdq, struct w1_master *master_dev,
@@ -396,8 +396,7 @@ static int hdq_read_byte(struct hdq_data *hdq_data, u8 *val)
 out:
 	mutex_unlock(&hdq_data->hdq_mutex);
 rtn:
-	return 0;
-
+	return ret;
 }
 
 /* Enable clocks and set the controller to HDQ mode */
@@ -486,7 +485,7 @@ static int omap_hdq_put(struct hdq_data *hdq_data)
 }
 
 /* Read a byte of data from the device */
-static u8 omap_w1_read_byte(void *_hdq)
+static int omap_w1_read_byte(void *_hdq)
 {
 	struct hdq_data *hdq_data = _hdq;
 	u8 val = 0;

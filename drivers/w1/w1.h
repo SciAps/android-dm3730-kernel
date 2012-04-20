@@ -114,7 +114,7 @@ struct w1_bus_master
 	 * Reads a bytes. Same as 8 touch_bit(1) calls.
 	 * @return the byte read
 	 */
-	u8		(*read_byte)(void *);
+	int		(*read_byte)(void *);
 
 	/**
 	 * Writes a byte. Same as 8 touch_bit(x) calls.
@@ -209,7 +209,7 @@ void w1_slave_detach(struct w1_slave *sl);
 
 u8 w1_triplet(struct w1_master *dev, int bdir);
 void w1_write_8(struct w1_master *, u8);
-u8 w1_read_8(struct w1_master *);
+int w1_read_8(struct w1_master *);
 int w1_reset_bus(struct w1_master *);
 u8 w1_calc_crc8(u8 *, int);
 void w1_write_block(struct w1_master *, const u8 *, int);

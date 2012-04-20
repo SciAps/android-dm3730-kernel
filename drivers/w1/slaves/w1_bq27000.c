@@ -28,7 +28,7 @@ static int F_ID;
 
 static int w1_bq27000_read(struct device *dev, unsigned int reg)
 {
-	u8 val;
+	int val;
 	struct w1_slave *sl = container_of(dev->parent, struct w1_slave, dev);
 
 	mutex_lock(&sl->master->mutex);
@@ -59,7 +59,9 @@ static int w1_bq27000_add_slave(struct w1_slave *sl)
 				       sizeof(bq27000_battery_info));
 	pdev->dev.parent = &sl->dev;
 
+	mutex_unlock(&sl->master->mutex);
 	ret = platform_device_add(pdev);
+	mutex_lock(&sl->master->mutex);
 	if (ret)
 		goto pdev_add_failed;
 
