@@ -24,6 +24,7 @@
 #include <linux/gpio.h>
 #include <linux/opp.h>
 #include <linux/gpio_keys.h>
+#include <linux/pda_power.h>
 
 #include <linux/regulator/machine.h>
 #include <linux/regulator/fixed.h>
@@ -1785,6 +1786,27 @@ static void omap3logic_cf_init(void)
 }
 #endif
 
+static char *dm3730logic_supplicants[] = {
+	"bq27000-battery"
+};
+
+static struct pda_power_pdata power_supply_info = {
+	// Give the charger IC 10 seconds to catch up to the fact that
+	// a charger is plugged in.
+	.wait_for_charger = 10000,
+	.supplied_to      = dm3730logic_supplicants,
+	.num_supplicants  = ARRAY_SIZE(dm3730logic_supplicants),
+	.use_otg_notifier = 1,
+};
+
+static struct platform_device power_supply = {
+	.name             = "pda-power",
+	.id               = -1,
+	.dev = {
+		.platform_data = &power_supply_info,
+	},
+};
+
 /* Code that is invoked only after
  * the product ID data has been found; used for finer-grain
  * board configuration
@@ -1956,6 +1978,8 @@ static void __init omap3logic_init(void)
 	omap_mux_init_signal("sdrc_cke1", OMAP_PIN_OUTPUT);
 
 	omap3logic_pm_init();
+
+	platform_device_register(&power_supply);
 
 #if 0
 	omap3logic_opp_init();
