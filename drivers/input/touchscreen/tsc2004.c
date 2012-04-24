@@ -406,6 +406,13 @@ static void tsc2004_free_irq(struct tsc2004 *ts)
 	}
 }
 
+static int tsc2004_resume(struct i2c_client *client)
+{
+	struct tsc2004 *ts = i2c_get_clientdata(client);
+	tsc2004_prepare_for_reading(ts);
+	return 0;
+}
+
 static int __devinit tsc2004_probe(struct i2c_client *client,
 				   const struct i2c_device_id *id)
 {
@@ -525,6 +532,7 @@ static struct i2c_driver tsc2004_driver = {
 	.id_table	= tsc2004_idtable,
 	.probe		= tsc2004_probe,
 	.remove		= __devexit_p(tsc2004_remove),
+	.resume		= tsc2004_resume,
 };
 
 static int __init tsc2004_init(void)
