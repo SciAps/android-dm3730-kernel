@@ -971,7 +971,7 @@ static struct isp_v4l2_subdevs_group omap3logic_camera_subdevs[] = {
 				.clk_pol		= 0,
 				.hs_pol			= 0,	// HSYNC not inverted
 				.vs_pol			= 0,	// VSYNC not inverted
-				.bridge			= ISPCTRL_PAR_BRIDGE_BENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
+				.bridge			= ISPCTRL_PAR_BRIDGE_LENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
 //3.3+				.bt656			= 0,
 			},
 		},
