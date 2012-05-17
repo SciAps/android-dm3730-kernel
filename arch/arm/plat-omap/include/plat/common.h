@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 
 #include <plat/i2c.h>
+#include <plat/omap_hwmod.h>
 
 struct sys_timer;
 
@@ -41,6 +42,7 @@ extern unsigned long long notrace omap_32k_sched_clock(void);
 
 extern void omap_reserve(void);
 
+extern int omap_dss_reset(struct omap_hwmod *);
 /*
  * IO bases for various OMAP processors
  * Except the tap base, rest all the io bases

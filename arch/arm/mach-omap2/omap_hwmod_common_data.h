@@ -16,10 +16,14 @@
 
 #include <plat/omap_hwmod.h>
 
+#include "display.h"
+
 /* OMAP hwmod classes - forward declarations */
 extern struct omap_hwmod_class l3_hwmod_class;
 extern struct omap_hwmod_class l4_hwmod_class;
 extern struct omap_hwmod_class mpu_hwmod_class;
 extern struct omap_hwmod_class iva_hwmod_class;
+
+extern struct omap_dss_dispc_dev_attr omap2_3_dss_dispc_dev_attr;
 
 #endif
