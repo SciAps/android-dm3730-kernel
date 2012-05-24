@@ -51,6 +51,8 @@
 #include "pm.h"
 #include "sdrc.h"
 #include "control.h"
+#include "smartreflex.h"
+#include "voltage.h"
 
 #ifdef CONFIG_SUSPEND
 static suspend_state_t suspend_state = PM_SUSPEND_ON;
@@ -535,6 +537,10 @@ static int omap3_pm_suspend(void)
 		omap2_pm_wakeup_on_timer(wakeup_timer_seconds,
 					 wakeup_timer_milliseconds);
 
+	/* XXX Disable smartreflex before entering suspend */
+	omap_sr_disable(omap_voltage_domain_lookup("mpu"));
+	omap_sr_disable(omap_voltage_domain_lookup("core"));
+
 	/* Read current next_pwrsts */
 	list_for_each_entry(pwrst, &pwrst_list, node)
 		pwrst->saved_state = pwrdm_read_next_pwrst(pwrst->pwrdm);
@@ -568,6 +574,10 @@ restore:
 	else
 		printk(KERN_INFO "Successfully put all powerdomains "
 		       "to target state\n");
+
+	/* XXX Enable smartreflex after suspend */
+	omap_sr_enable(omap_voltage_domain_lookup("core"));
+	omap_sr_enable(omap_voltage_domain_lookup("mpu"));
 
 	return ret;
 }

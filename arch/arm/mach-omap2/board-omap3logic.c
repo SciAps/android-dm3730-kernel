@@ -972,7 +972,7 @@ static struct isp_v4l2_subdevs_group omap3logic_camera_subdevs[] = {
 				.clk_pol		= 0,
 				.hs_pol			= 0,	// HSYNC not inverted
 				.vs_pol			= 0,	// VSYNC not inverted
-				.bridge			= ISPCTRL_PAR_BRIDGE_BENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
+				.bridge			= ISPCTRL_PAR_BRIDGE_LENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
 //3.3+				.bt656			= 0,
 			},
 		},
@@ -1852,9 +1852,6 @@ static void __init omap3logic_opp_init(void)
 		return;
 	}
 
-	/* Smart reflex must be enabled for higher OPP levels! */
-	omap_enable_smartreflex_on_init();
-
 	/* Custom OPP enabled for DM37x versions */
 	if (cpu_is_omap3630()) {
 		struct device *mpu_dev, *iva_dev;
@@ -1996,6 +1993,8 @@ static void __init omap3logic_init(void)
 
 	platform_device_register(&power_supply);
 
+	/* Smart reflex must be enabled for higher OPP levels! */
+	omap_enable_smartreflex_on_init();
 #if 0
 	omap3logic_opp_init();
 #endif

@@ -258,7 +258,7 @@ static inline struct ov7690_info *to_state(struct v4l2_subdev *sd)
  * is really no making sense of most of these - lots of "reserved" values
  * and such.
  *
- * These settings give VGA YUYV.
+ * These settings provide VGA YUYV(or UYVY depending on OMAP3 ISP bridge configuration).
  */
 
 
@@ -428,6 +428,14 @@ static const struct regval_list ov7690_fmt_yuv422[] = {
 	REGVAL_LIST_END
 };
 
+static const struct regval_list ov7690_fmt_yvu422[] = {
+	{REG_REG0C, 0x00, REG0C_UV_SWAP },
+	{REG_REG12, 0x00, 0x3f},
+	{REG_REG82, 0x03, 0x03},
+	{REG_REG3E, 0x10, 0x10},
+	REGVAL_LIST_END
+};
+
 static const struct regval_list ov7690_fmt_rgb565[] = {
 	{REG_REG12, 0x06, 0x3f},
 	{REG_REG82, 0x03, 0x03},
@@ -470,15 +478,55 @@ static struct ov7690_format_struct {
 	struct v4l2_mbus_framefmt format;
 	const struct regval_list *regs;
 } ov7690_formats[] = {
+
+/*
+** Sensor interface is 8 bits wide
+** Control of YU vs UY is facilitated by omap3isp
+** For boards whith different byte ordering consider undefining 
+** ISP_BRIDGE_LE below
+*/  
+#define ISP_BRIDGE_LE
+#if defined(ISP_BRIDGE_LE)
 	{       
 	  .format = { 
 	    .width= VGA_WIDTH,
 	    .height = VGA_HEIGHT,
-	    .code	= V4L2_MBUS_FMT_YUYV8_2X8, //?1X8
+	    .code	= V4L2_MBUS_FMT_UYVY8_2X8, 
 	    .colorspace	= V4L2_COLORSPACE_JPEG,
 	    .field =  V4L2_FIELD_NONE,
 	  },
 	  .regs 		= ov7690_fmt_yuv422,
+	},
+	{
+	  .format = { 
+	    .width= VGA_WIDTH,
+	    .height = VGA_HEIGHT,
+	    .code	=V4L2_MBUS_FMT_RGB565_2X8_LE,
+	    .colorspace	= V4L2_COLORSPACE_SRGB,
+	    .field =  V4L2_FIELD_NONE,
+	  },
+	  .regs		= ov7690_fmt_rgb565,
+	},
+#else
+	{       
+	  .format = { 
+	    .width= VGA_WIDTH,
+	    .height = VGA_HEIGHT,
+	    .code	= V4L2_MBUS_FMT_YUYV8_2X8,
+	    .colorspace	= V4L2_COLORSPACE_JPEG,
+	    .field =  V4L2_FIELD_NONE,
+	  },
+	  .regs 		= ov7690_fmt_yuv422,
+	},
+	{       
+	  .format = { 
+	    .width= VGA_WIDTH,
+	    .height = VGA_HEIGHT,
+	    .code	= V4L2_MBUS_FMT_YVYU8_2X8, //?1X8
+	    .colorspace	= V4L2_COLORSPACE_JPEG,
+	    .field =  V4L2_FIELD_NONE,
+	  },
+	  .regs 		= ov7690_fmt_yvu422,
 	},
 	{
 	  .format = { 
@@ -490,6 +538,7 @@ static struct ov7690_format_struct {
 	  },
 	  .regs		= ov7690_fmt_rgb565,
 	},
+#endif
 
 };
 #define N_OV7690_FMTS ARRAY_SIZE(ov7690_formats)
