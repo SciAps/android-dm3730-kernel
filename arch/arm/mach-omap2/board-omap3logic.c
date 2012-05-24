@@ -1830,9 +1830,6 @@ static void __init omap3logic_opp_init(void)
 		return;
 	}
 
-	/* Smart reflex must be enabled for higher OPP levels! */
-	omap_enable_smartreflex_on_init();
-
 	/* Custom OPP enabled for DM37x versions */
 	if (cpu_is_omap3630()) {
 		struct device *mpu_dev, *iva_dev;
@@ -1972,6 +1969,8 @@ static void __init omap3logic_init(void)
 
 	omap3logic_pm_init();
 
+	/* Smart reflex must be enabled for higher OPP levels! */
+	omap_enable_smartreflex_on_init();
 #if 0
 	omap3logic_opp_init();
 #endif
