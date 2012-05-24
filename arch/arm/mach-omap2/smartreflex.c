@@ -214,6 +214,7 @@ static void sr_set_regfields(struct omap_sr *sr)
 
 static void sr_start_vddautocomp(struct omap_sr *sr)
 {
+	printk("%s: sr->srid %d\n", __FUNCTION__, sr->srid);
 	if (!sr_class || !(sr_class->enable) || !(sr_class->configure)) {
 		dev_warn(&sr->pdev->dev,
 			"%s: smartreflex class driver not registered\n",
@@ -997,62 +998,11 @@ static int __devexit omap_sr_remove(struct platform_device *pdev)
 
 	return 0;
 }
-#ifdef CONFIG_PM
-static int sr_device_suspend(struct device *dev)
-{
-	struct omap_sr_data *pdata = dev->platform_data;
-	struct omap_sr *sr_info;
-
-	if (!pdata) {
-		dev_err(dev, "%s: platform data missing\n", __func__);
-		return -EINVAL;
-	}
-
-	sr_info = _sr_lookup(pdata->voltdm);
-	if (IS_ERR(sr_info)) {
-		dev_warn(dev, "%s: omap_sr struct not found\n",__func__);
-		return -EINVAL;
-	}
-	dev_info(dev, "suspending\n");
-	sr_stop_vddautocomp(sr_info);
-	return 0;
-}
-
-static int sr_device_resume(struct device *dev)
-{
-	struct omap_sr_data *pdata = dev->platform_data;
-	struct omap_sr *sr_info;
-
-	if (!pdata) {
-		dev_err(dev, "%s: platform data missing\n", __func__);
-		return -EINVAL;
-	}
-
-	sr_info = _sr_lookup(pdata->voltdm);
-	if (IS_ERR(sr_info)) {
-		dev_warn(dev, "%s: omap_sr struct not found\n", __func__);
-		return -EINVAL;
-	}
-	dev_info(dev, "resuming\n");
-	sr_start_vddautocomp(sr_info);
-	return 0;
-}
-
-struct dev_pm_ops omap37x_sr_pm_ops = {
-	.suspend = sr_device_suspend,
-	.resume	= sr_device_resume,
-};
-
-#define OMAP3_SR_PM_OPS	&omap37x_sr_pm_ops
-#else
-#define OMAP3_SR_PM_OPS	NULL
-#endif
 
 static struct platform_driver smartreflex_driver = {
 	.remove         = omap_sr_remove,
 	.driver		= {
 		.name	= "smartreflex",
-		.pm	= OMAP3_SR_PM_OPS,
 	},
 };
 
