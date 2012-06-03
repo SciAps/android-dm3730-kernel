@@ -1845,12 +1845,10 @@ static void __init omap3logic_opp_init(void)
 
 		/* Enable MPU 1GHz and lower opps */
 		ret |= opp_enable(mpu_dev, 800000000);
-		ret |= opp_enable(mpu_dev, 1000000000);
 		/* TODO: MPU 1GHz needs SR and ABB */
 
 		/* Enable IVA 800Mhz and lower opps */
 		ret |= opp_enable(iva_dev, 660000000);
-		ret |= opp_enable(iva_dev, 800000000);
 		/* TODO: DSP 800Mhz needs SR and ABB */
 		if (ret) {
 			pr_err("%s: failed to enable higher opp %d\n",
@@ -1971,7 +1969,7 @@ static void __init omap3logic_init(void)
 
 	/* Smart reflex must be enabled for higher OPP levels! */
 	omap_enable_smartreflex_on_init();
-#if 0
+#if 1
 	omap3logic_opp_init();
 #endif
 #if defined(CONFIG_VIDEO_OMAP3)
