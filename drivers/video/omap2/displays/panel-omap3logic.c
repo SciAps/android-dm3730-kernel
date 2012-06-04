@@ -399,8 +399,6 @@ static int omap3logic_panel_enable(struct omap_dss_device *dssdev)
 	if (r)
 		goto err0;
 
-	/* wait couple of vsyncs until enabling the LCD */
-	msleep(50);
 
 	if (dssdev->platform_enable)
 		r = dssdev->platform_enable(dssdev);
@@ -418,10 +416,6 @@ static void omap3logic_panel_disable(struct omap_dss_device *dssdev)
 
 	if (dssdev->platform_disable)
 		dssdev->platform_disable(dssdev);
-
-	/* wait at least 5 vsyncs after disabling the LCD */
-
-	msleep(100);
 
 	omapdss_dpi_display_disable(dssdev);
 

@@ -226,162 +226,44 @@ static void omap3logic_disable_backlight(void)
 	mutex_unlock(&omap3logic_bl_data.lock);
 }
 
-#define PANEL_REGULATOR "vpll2"
-static int omap3logic_panel_power_enable(struct omap_dss_device *dssdev, int enable)
+static void omap3logic_panel_wait_vsyncs(int count)
 {
-	int ret;
-	struct regulator *vpll2_reg;
-
-	LCDPRINTK("%s: enable %d\n", __FUNCTION__, enable);
-
-	vpll2_reg = regulator_get(NULL, PANEL_REGULATOR);
-	if (IS_ERR(vpll2_reg)) {
-		pr_err("Unable to get " PANEL_REGULATOR " regulator\n");
-		return PTR_ERR(vpll2_reg);
-	}
-
-	if (enable)
-		ret = regulator_enable(vpll2_reg);
-	else
-		ret = regulator_disable(vpll2_reg);
-
-	return ret;
-}
-
-static int omap3logic_panel_pre_enable_lcd(struct omap_dss_device *dssdev)
-{
-	struct omap3logic_dss_board_info *pdata;
-	int ret;
-        struct omap_mux_partition *partition;        
-
-	LCDPRINTK("%s: dssdev %p\n", __FUNCTION__, dssdev);
-
-        partition = omap_mux_get("core");
-        if (partition == NULL)
-		return -EINVAL;
-
-
-	pdata = omap3logic_lcd_device.dev.platform_data;
-
-	if (pdata->dvi_enabled) {
-		printk(KERN_ERR "cannot enable LCD, DVI is enabled\n");
-		return -EINVAL;
-	}
-
-	/* if hsync/vsync are GPIOs then release them */
-	if (pdata->syncs_as_gpio) {
-		printk(KERN_INFO "Remux DSS sync pins as DSS sync pins\n");
-		gpio_free(66);
-		gpio_free(67);
-		gpio_free(68);
-		gpio_free(69);
-		gpio_free(70);
-		gpio_free(71);
-		gpio_free(72);
-		gpio_free(73);
-		gpio_free(74);
-		gpio_free(75);
-		gpio_free(76);
-		gpio_free(77);
-		gpio_free(78);
-		gpio_free(79);
-		gpio_free(80);
-		gpio_free(81);
-		gpio_free(82);
-		gpio_free(83);
-		gpio_free(84);
-		gpio_free(85);
-		gpio_free(86);
-		gpio_free(87);
-		gpio_free(88);
-		gpio_free(89);
-		gpio_free(90);
-		gpio_free(91);
-		gpio_free(92);
-		gpio_free(93);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_PCLK_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_HSYNC_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_VSYNC_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_ACBIAS_OFFSET);
-		if (machine_is_dm3730_torpedo()) {
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA0_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA1_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA2_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA3_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA4_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA5_OFFSET);
-		} else {
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA0_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA1_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA2_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA3_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA4_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA5_OFFSET);
+	while(count--)
+	{
+		// Wait for a VSYNC for up to 50ms (or bail)
+		if(omap_dispc_wait_for_irq_timeout(DISPC_IRQ_VSYNC, msecs_to_jiffies(50)) < 0)
+		{
+			printk(KERN_INFO "omap3logic_panel_wait_vsyncs: Failed to find VSYNC interrupt.\n");
 		}
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA6_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA7_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA8_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA9_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA10_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA11_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA12_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA13_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA14_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE0, OMAP3_CONTROL_PADCONF_DSS_DATA15_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA16_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA17_OFFSET);
-		if (machine_is_dm3730_torpedo()) {
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA18_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA19_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA20_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA21_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA22_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE3, OMAP3_CONTROL_PADCONF_DSS_DATA23_OFFSET);
-		} else {
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA18_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA19_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA20_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA21_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA22_OFFSET);
-			omap_mux_write(partition, OMAP_PIN_INPUT_PULLDOWN | OMAP_MUX_MODE7, OMAP3_CONTROL_PADCONF_DSS_DATA23_OFFSET);
-		}
-		pdata->syncs_as_gpio = 0;
 	}
-
-	ret = omap3logic_panel_power_enable(dssdev, 1);
-	if (ret < 0)
-		return ret;
-
-	/* Allow the power to stablize */
-	msleep(50);
-
-	pdata = dssdev->dev.platform_data;
-
-	gpio_set_value(pdata->lcd_gpio_enable, 1);
-
-	msleep(300);
-
-	pdata->lcd_enabled = 1;
-
-	return 0;
 }
 
 static int omap3logic_panel_enable_lcd(struct omap_dss_device *dssdev)
 {
-	struct omap3logic_dss_board_info *pdata;
+	static int first_init = 1;
+	struct omap3logic_dss_board_info *pdata = dssdev->dev.platform_data;
 
-	LCDPRINTK("%s: dssdev %p\n", __FUNCTION__, dssdev);
+	// If this is the first init, ensure we fully reset the
+	// LCD controller.  The Sharp LCD controller is a bit picky,
+	// and needs clocks running for a minimum amount to reset.
+	// Handle this on the first initialization, and subsequently
+	// remove this extra time from other panel enables.
+	if(first_init)
+	{
+		gpio_set_value(pdata->lcd_gpio_enable, 1);
+		omap3logic_panel_wait_vsyncs(11);
+		gpio_set_value(pdata->lcd_gpio_enable, 0);
+		omap3logic_panel_wait_vsyncs(11);
+		first_init = 0;
+	}
 
-	pdata = dssdev->dev.platform_data;
+	omap3logic_panel_wait_vsyncs(3);
+	gpio_set_value(pdata->lcd_gpio_enable, 1);
 
-	/* Sleep for 300ms since the 4.3" display needs
-	 * power before turning on the clocks */
-	msleep(300);
-
-	/* Bring up backlight */
-
-	pdata->lcd_enabled = 1;
-
+	// Display controller needs 10 vsyncs before white
+	// LCD screen is gone.  Due to flip-flops in the path, we need
+	// an additional vsync.
+	wait_vsyncs(11);
 	omap3logic_enable_backlight();
 
 	return 0;
@@ -389,217 +271,23 @@ static int omap3logic_panel_enable_lcd(struct omap_dss_device *dssdev)
 
 static void omap3logic_panel_disable_lcd(struct omap_dss_device *dssdev)
 {
-	struct omap3logic_dss_board_info *pdata;
-	int ret;
-        struct omap_mux_partition *partition;        
+	struct omap3logic_dss_board_info *pdata = dssdev->dev.platform_data;
 
-	LCDPRINTK("%s: dssdev %p\n", __FUNCTION__, dssdev);
-
-        partition = omap_mux_get("core");
-        if (partition == NULL)
-		BUG();
-
-	pdata = dssdev->dev.platform_data;
-
-	/* disable the display */
-	pdata->lcd_enabled = 0;
-
-	/* prevent backlight updates from adjusting backlight */
 	omap3logic_disable_backlight();
-
-	ret = omap3logic_panel_power_enable(dssdev, 0);
-	if (ret < 0)
-		BUG();
-	
-	/* By now the panel enable code must have been called */
-	if (!pdata->gpio_flag)
-		BUG();
-
 	gpio_set_value(pdata->lcd_gpio_enable, 0);
+	// Display controller needs 5 vsyncs after disable to
+	// properly go down.  Due to flip-flops in the path, we need
+	// an additional vsync.
+	omap3logic_panel_wait_vsyncs(6);
 
-	/* Remux HSYNC/VSYNC to be GPIO's at low level */
-	if (!pdata->syncs_as_gpio) {
-		printk(KERN_INFO "Remux DSS sync pins as gpio and pull low\n");
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_PCLK_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_HSYNC_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_VSYNC_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_ACBIAS_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA0_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA1_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA2_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA3_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA4_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA5_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA6_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA7_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA8_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA9_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA10_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA11_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA12_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA13_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA14_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA15_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA16_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA17_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA18_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA19_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA20_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA21_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA22_OFFSET);
-		omap_mux_write(partition, OMAP_PIN_OUTPUT | OMAP_PIN_OFF_OUTPUT_LOW | OMAP_MUX_MODE4, OMAP3_CONTROL_PADCONF_DSS_DATA23_OFFSET);
-		if (gpio_request(66, "DSS_PCLK") < 0)
-			printk(KERN_ERR "Failed to request GPIO_66 for dss_hsync\n");
-		else
-			gpio_direction_output(66, 0);
-
-		if (gpio_request(67, "DSS_HSYNC") < 0)
-			printk(KERN_ERR "Failed to request GPIO_67 for dss_hsync\n");
-		else
-			gpio_direction_output(67, 0);
-
-		if (gpio_request(68, "DSS_VSYNC") < 0)
-			printk(KERN_ERR "Failed to request GPIO_68 for dss_vsync\n");
-		else
-			gpio_direction_output(68, 0);
-
-		if (gpio_request(69, "DSS_ACBIAS") < 0)
-			printk(KERN_ERR "Failed to request GPIO_69 for dss_hsync\n");
-		else
-			gpio_direction_output(69, 0);
-
-		if (gpio_request(70, "DSS_DATA0") < 0)
-			printk(KERN_ERR "Failed to request GPIO_70 for dss_hsync\n");
-		else
-			gpio_direction_output(70, 0);
-
-		if (gpio_request(71, "DSS_DATA1") < 0)
-			printk(KERN_ERR "Failed to request GPIO_71 for dss_hsync\n");
-		else
-			gpio_direction_output(71, 0);
-
-		if (gpio_request(72, "DSS_DATA2") < 0)
-			printk(KERN_ERR "Failed to request GPIO_72 for dss_hsync\n");
-		else
-			gpio_direction_output(72, 0);
-
-		if (gpio_request(73, "DSS_DATA3") < 0)
-			printk(KERN_ERR "Failed to request GPIO_73 for dss_hsync\n");
-		else
-			gpio_direction_output(73, 0);
-
-		if (gpio_request(74, "DSS_DATA4") < 0)
-			printk(KERN_ERR "Failed to request GPIO_74 for dss_hsync\n");
-		else
-			gpio_direction_output(74, 0);
-
-		if (gpio_request(75, "DSS_DATA5") < 0)
-			printk(KERN_ERR "Failed to request GPIO_75 for dss_hsync\n");
-		else
-			gpio_direction_output(75, 0);
-
-		if (gpio_request(76, "DSS_DATA6") < 0)
-			printk(KERN_ERR "Failed to request GPIO_76 for dss_hsync\n");
-		else
-			gpio_direction_output(76, 0);
-
-		if (gpio_request(77, "DSS_DATA7") < 0)
-			printk(KERN_ERR "Failed to request GPIO_77 for dss_hsync\n");
-		else
-			gpio_direction_output(77, 0);
-
-		if (gpio_request(78, "DSS_DATA8") < 0)
-			printk(KERN_ERR "Failed to request GPIO_78 for dss_hsync\n");
-		else
-			gpio_direction_output(78, 0);
-
-		if (gpio_request(79, "DSS_DATA9") < 0)
-			printk(KERN_ERR "Failed to request GPIO_79 for dss_hsync\n");
-		else
-			gpio_direction_output(79, 0);
-
-		if (gpio_request(80, "DSS_DATA10") < 0)
-			printk(KERN_ERR "Failed to request GPIO_80 for dss_hsync\n");
-		else
-			gpio_direction_output(80, 0);
-
-		if (gpio_request(81, "DSS_DATA11") < 0)
-			printk(KERN_ERR "Failed to request GPIO_81 for dss_hsync\n");
-		else
-			gpio_direction_output(81, 0);
-
-		if (gpio_request(82, "DSS_DATA12") < 0)
-			printk(KERN_ERR "Failed to request GPIO_82 for dss_hsync\n");
-		else
-			gpio_direction_output(82, 0);
-
-		if (gpio_request(83, "DSS_DATA13") < 0)
-			printk(KERN_ERR "Failed to request GPIO_83 for dss_hsync\n");
-		else
-			gpio_direction_output(83, 0);
-
-		if (gpio_request(84, "DSS_DATA14") < 0)
-			printk(KERN_ERR "Failed to request GPIO_84 for dss_hsync\n");
-		else
-			gpio_direction_output(84, 0);
-
-		if (gpio_request(85, "DSS_DATA15") < 0)
-			printk(KERN_ERR "Failed to request GPIO_85 for dss_hsync\n");
-		else
-			gpio_direction_output(85, 0);
-
-		if (gpio_request(86, "DSS_DATA16") < 0)
-			printk(KERN_ERR "Failed to request GPIO_86 for dss_hsync\n");
-		else
-			gpio_direction_output(86, 0);
-
-		if (gpio_request(87, "DSS_DATA17") < 0)
-			printk(KERN_ERR "Failed to request GPIO_87 for dss_hsync\n");
-		else
-			gpio_direction_output(87, 0);
-
-		if (gpio_request(88, "DSS_DATA18") < 0)
-			printk(KERN_ERR "Failed to request GPIO_88 for dss_hsync\n");
-		else
-			gpio_direction_output(88, 0);
-
-		if (gpio_request(89, "DSS_DATA19") < 0)
-			printk(KERN_ERR "Failed to request GPIO_89 for dss_hsync\n");
-		else
-			gpio_direction_output(89, 0);
-
-		if (gpio_request(90, "DSS_DATA20") < 0)
-			printk(KERN_ERR "Failed to request GPIO_90 for dss_hsync\n");
-		else
-			gpio_direction_output(90, 0);
-
-		if (gpio_request(91, "DSS_DATA21") < 0)
-			printk(KERN_ERR "Failed to request GPIO_91 for dss_hsync\n");
-		else
-			gpio_direction_output(91, 0);
-
-		if (gpio_request(92, "DSS_DATA22") < 0)
-			printk(KERN_ERR "Failed to request GPIO_92 for dss_hsync\n");
-		else
-			gpio_direction_output(92, 0);
-
-		if (gpio_request(93, "DSS_DATA23") < 0)
-			printk(KERN_ERR "Failed to request GPIO_93 for dss_hsync\n");
-		else
-			gpio_direction_output(93, 0);
-		pdata->syncs_as_gpio = 1;
-	}
-
-	pdata->dvi_enabled = 0;
+	return;
 }
-
 
 struct omap_dss_device omap3logic_lcd_device = {
 	.name			= "lcd",
 	.driver_name		= "omap3logic_panel",
 	.type			= OMAP_DISPLAY_TYPE_DPI,
 	.phy.dpi.data_lines	= -EINVAL,
-	.platform_pre_enable	= omap3logic_panel_pre_enable_lcd,
 	.platform_enable	= omap3logic_panel_enable_lcd,
 	.platform_disable	= omap3logic_panel_disable_lcd,
 	.dev = {
