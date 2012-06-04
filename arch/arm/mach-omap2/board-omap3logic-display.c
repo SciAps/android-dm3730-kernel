@@ -21,6 +21,7 @@
 #include <linux/i2c/twl.h>
 #include <linux/backlight.h>
 #include <linux/regulator/machine.h>
+#include <linux/workqueue.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -43,6 +44,7 @@ struct omap3logic_dss_board_info {
 	int lcd_enabled;
 	int dvi_enabled;
 	int syncs_as_gpio;   /* !0 if hsync/vsync are gpio pins */
+	struct delayed_work work;
 };
 
 #if 1
@@ -260,11 +262,9 @@ static int omap3logic_panel_enable_lcd(struct omap_dss_device *dssdev)
 	omap3logic_panel_wait_vsyncs(3);
 	gpio_set_value(pdata->lcd_gpio_enable, 1);
 
-	// Display controller needs 10 vsyncs before white
-	// LCD screen is gone.  Due to flip-flops in the path, we need
-	// an additional vsync.
-	wait_vsyncs(11);
-	omap3logic_enable_backlight();
+	// Display controller needs 10 vsyncs (~200ms) before white
+	// LCD screen is gone.
+	queue_delayed_work(system_freezable_wq, &pdata->work, msecs_to_jiffies(200));
 
 	return 0;
 }
@@ -273,6 +273,7 @@ static void omap3logic_panel_disable_lcd(struct omap_dss_device *dssdev)
 {
 	struct omap3logic_dss_board_info *pdata = dssdev->dev.platform_data;
 
+	cancel_delayed_work_sync(&pdata->work);
 	omap3logic_disable_backlight();
 	gpio_set_value(pdata->lcd_gpio_enable, 0);
 	// Display controller needs 5 vsyncs after disable to
@@ -280,6 +281,12 @@ static void omap3logic_panel_disable_lcd(struct omap_dss_device *dssdev)
 	// an additional vsync.
 	omap3logic_panel_wait_vsyncs(6);
 
+	return;
+}
+
+void omap3logic_enable_backlight_delayed(struct work_struct *work)
+{
+	omap3logic_enable_backlight();
 	return;
 }
 
@@ -498,6 +505,8 @@ void omap3logic_lcd_init(void)
 
 	/* If no valid "display=" was specified then no video wanted */
 	if (omap3logic_default_panel.name) {
+		struct omap3logic_dss_board_info *pdata = omap3logic_lcd_device.dev.platform_data;
+
 		omap3logic_lcd_set_panel_mux();
 
 		printk("%s: name %s data_lines %d\n", __FUNCTION__, 
@@ -505,11 +514,10 @@ void omap3logic_lcd_init(void)
 			omap3logic_default_panel.data_lines);
 		omap3logic_lcd_device.name = omap3logic_default_panel.name;
 		omap3logic_lcd_device.phy.dpi.data_lines = omap3logic_default_panel.data_lines;
-#if 1
 		result = omap_display_init(&omap3logic_dss_data);
-#else
-		result = platform_device_register(&omap3logic_dss_device);
-#endif
+
+		INIT_DELAYED_WORK(&pdata->work, omap3logic_enable_backlight_delayed);
+
 		if (result)
 			printk("%s: platform device register of DSS2 device failed: %d\n", __FUNCTION__, result);
 		mutex_init(&omap3logic_bl_data.lock);
