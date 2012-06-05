@@ -240,6 +240,19 @@ static void omap3logic_panel_wait_vsyncs(int count)
 	}
 }
 
+static int omap3logic_panel_pre_enable_lcd(struct omap_dss_device *dssdev)
+{
+	// Pulse the LCD enable line momentarily.  This helps to reset some
+	// of the internal logic of the 4.3" display.  We're doing this
+	// with the VSYNC signals off so we are ensured that this won't
+	// propogate to the LCD as a display enable through the flip-flops.
+	struct omap3logic_dss_board_info *pdata = dssdev->dev.platform_data;
+	gpio_set_value(pdata->lcd_gpio_enable, 1);
+	msleep(5);
+	gpio_set_value(pdata->lcd_gpio_enable, 0);
+	return 0;
+}
+
 static int omap3logic_panel_enable_lcd(struct omap_dss_device *dssdev)
 {
 	static int first_init = 1;
@@ -295,6 +308,7 @@ struct omap_dss_device omap3logic_lcd_device = {
 	.driver_name		= "omap3logic_panel",
 	.type			= OMAP_DISPLAY_TYPE_DPI,
 	.phy.dpi.data_lines	= -EINVAL,
+	.platform_pre_enable    = omap3logic_panel_pre_enable_lcd,
 	.platform_enable	= omap3logic_panel_enable_lcd,
 	.platform_disable	= omap3logic_panel_disable_lcd,
 	.dev = {
