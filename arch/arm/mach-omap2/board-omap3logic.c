@@ -1843,6 +1843,7 @@ static void __init omap3logic_opp_init(void)
 			return;
 		}
 
+#if 0
 		/* Enable MPU 1GHz and lower opps */
 		ret |= opp_enable(mpu_dev, 800000000);
 		/* TODO: MPU 1GHz needs SR and ABB */
@@ -1850,6 +1851,7 @@ static void __init omap3logic_opp_init(void)
 		/* Enable IVA 800Mhz and lower opps */
 		ret |= opp_enable(iva_dev, 660000000);
 		/* TODO: DSP 800Mhz needs SR and ABB */
+#endif
 		if (ret) {
 			pr_err("%s: failed to enable higher opp %d\n",
 				__func__, ret);
