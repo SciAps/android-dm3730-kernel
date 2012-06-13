@@ -30,6 +30,7 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/phy.h>
+#include <linux/pm_runtime.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -344,7 +345,8 @@ int phy_connect_direct(struct net_device *dev, struct phy_device *phydev,
 		return rc;
 
 	phy_prepare_link(phydev, handler);
-	phy_start_machine(phydev, NULL);
+	if(!pm_runtime_enabled(&phydev->dev))
+		phy_start_machine(phydev, NULL);
 	if (phydev->irq > 0)
 		phy_start_interrupts(phydev);
 
@@ -882,6 +884,7 @@ static int genphy_config_init(struct phy_device *phydev)
 
 	return 0;
 }
+
 int genphy_suspend(struct phy_device *phydev)
 {
 	int value;

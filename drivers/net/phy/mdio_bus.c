@@ -31,6 +31,7 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/phy.h>
+#include <linux/pm_runtime.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -302,19 +303,26 @@ static int mdio_bus_suspend(struct device *dev)
 	struct phy_driver *phydrv = to_phy_driver(dev->driver);
 	struct phy_device *phydev = to_phy_device(dev);
 
-	/*
-	 * We must stop the state machine manually, otherwise it stops out of
-	 * control, possibly with the phydev->lock held. Upon resume, netdev
-	 * may call phy routines that try to grab the same lock, and that may
-	 * lead to a deadlock.
-	 */
-	if (phydev->attached_dev && phydev->adjust_link)
-		phy_stop_machine(phydev);
+	if(!pm_runtime_suspended(dev) || !pm_runtime_enabled(dev))
+	{
+		/*
+		 * We must stop the state machine manually, otherwise it stops out of
+		 * control, possibly with the phydev->lock held. Upon resume, netdev
+		 * may call phy routines that try to grab the same lock, and that may
+		 * lead to a deadlock.
+		 */
+		if (phydev->attached_dev && phydev->adjust_link)
+		{
+			printk(KERN_INFO "Phy: Stopping machine\n");
+			phy_stop_machine(phydev);
+		}
 
-	if (!mdio_bus_phy_may_suspend(phydev))
-		return 0;
+		if (!mdio_bus_phy_may_suspend(phydev))
+			return 0;
 
-	return phydrv->suspend(phydev);
+		return phydrv->suspend(phydev);
+	}
+	return 0;
 }
 
 static int mdio_bus_resume(struct device *dev)
@@ -323,16 +331,22 @@ static int mdio_bus_resume(struct device *dev)
 	struct phy_device *phydev = to_phy_device(dev);
 	int ret;
 
-	if (!mdio_bus_phy_may_suspend(phydev))
-		goto no_resume;
+	if(!pm_runtime_suspended(dev) || !pm_runtime_enabled(dev))
+	{
+		if (!mdio_bus_phy_may_suspend(phydev))
+			goto no_resume;
 
-	ret = phydrv->resume(phydev);
-	if (ret < 0)
-		return ret;
+		ret = phydrv->resume(phydev);
+		if (ret < 0)
+			return ret;
 
-no_resume:
-	if (phydev->attached_dev && phydev->adjust_link)
-		phy_start_machine(phydev, NULL);
+	no_resume:
+		if (phydev->attached_dev && phydev->adjust_link)
+		{
+			printk(KERN_INFO "Phy: Starting machine\n");
+			phy_start_machine(phydev, phydev->adjust_link);
+		}
+	}
 
 	return 0;
 }
@@ -359,9 +373,32 @@ static int mdio_bus_restore(struct device *dev)
 	return 0;
 }
 
+static int mdio_bus_runtime_suspend(struct device *dev)
+{
+	struct phy_driver *phydrv = to_phy_driver(dev->driver);
+	struct phy_device *phydev = to_phy_device(dev);
+
+	phydrv->suspend(phydev);
+
+	return 0;
+}
+
+static int mdio_bus_runtime_resume(struct device *dev)
+{
+	struct phy_driver *phydrv = to_phy_driver(dev->driver);
+	struct phy_device *phydev = to_phy_device(dev);
+
+	phydrv->resume(phydev);
+
+	return 0;
+}
+
 static struct dev_pm_ops mdio_bus_pm_ops = {
 	.suspend = mdio_bus_suspend,
 	.resume = mdio_bus_resume,
+	.runtime_suspend = mdio_bus_runtime_suspend,
+	.runtime_resume  = mdio_bus_runtime_resume,
+	.runtime_idle    = pm_runtime_autosuspend,
 	.freeze = mdio_bus_suspend,
 	.thaw = mdio_bus_resume,
 	.restore = mdio_bus_restore,

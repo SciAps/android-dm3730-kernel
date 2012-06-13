@@ -62,22 +62,55 @@ static int smsc_phy_ack_interrupt(struct phy_device *phydev)
 
 static int smsc_phy_config_init(struct phy_device *phydev)
 {
-	int rc = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
-	if (rc < 0)
-		return rc;
-
-	/* Enable energy detect mode for this SMSC Transceivers */
-	rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
-		       rc | MII_LAN83C185_EDPWRDOWN);
-	if (rc < 0)
-		return rc;
-
 	return smsc_phy_ack_interrupt (phydev);
 }
 
 static int lan911x_config_init(struct phy_device *phydev)
 {
 	return smsc_phy_ack_interrupt(phydev);
+}
+
+int smsc_phy_suspend(struct phy_device *phydev)
+{
+	int value;
+
+	mutex_lock(&phydev->lock);
+
+	phy_write(phydev, MII_LAN83C185_IM, 0);
+
+	value = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
+	phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
+			       value & ~MII_LAN83C185_EDPWRDOWN);
+	smsc_phy_ack_interrupt(phydev);
+
+	value = phy_read(phydev, MII_BMCR);
+	value |= BMCR_PDOWN;
+	value &= ~(BMCR_ANENABLE);
+	phy_write(phydev, MII_BMCR, value);
+
+	mutex_unlock(&phydev->lock);
+
+	return 0;
+}
+
+int smsc_phy_resume(struct phy_device *phydev)
+{
+	int value;
+
+	mutex_lock(&phydev->lock);
+
+	value = phy_read(phydev, MII_BMCR);
+	value &= ~BMCR_PDOWN;
+	if(AUTONEG_ENABLE == phydev->autoneg)
+		value |= BMCR_ANENABLE;
+	phy_write(phydev, MII_BMCR, value);
+
+	phy_write(phydev, MII_LAN83C185_IM, 0);
+	smsc_phy_ack_interrupt(phydev);
+
+	mutex_unlock(&phydev->lock);
+
+	return 0;
 }
 
 static struct phy_driver lan83c185_driver = {
@@ -98,8 +131,8 @@ static struct phy_driver lan83c185_driver = {
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
 
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
+	.suspend	= smsc_phy_suspend,
+	.resume		= smsc_phy_resume,
 
 	.driver		= { .owner = THIS_MODULE, }
 };
@@ -146,8 +179,8 @@ static struct phy_driver lan8700_driver = {
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
 
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
+	.suspend	= smsc_phy_suspend,
+	.resume		= smsc_phy_resume,
 
 	.driver		= { .owner = THIS_MODULE, }
 };
