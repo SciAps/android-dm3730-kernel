@@ -32,6 +32,7 @@
 #include <linux/phy.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
+#include <linux/pm_runtime.h>
 
 #include <asm/atomic.h>
 #include <asm/io.h>
@@ -458,6 +459,8 @@ void phy_stop_machine(struct phy_device *phydev)
 	mutex_unlock(&phydev->lock);
 
 	phydev->adjust_state = NULL;
+
+	pm_runtime_suspend(&phydev->dev);
 }
 
 /**
@@ -704,6 +707,8 @@ phy_err:
  */
 void phy_stop(struct phy_device *phydev)
 {
+	if(pm_runtime_enabled(&phydev->dev))
+		cancel_delayed_work_sync(&phydev->state_queue);
 	mutex_lock(&phydev->lock);
 
 	if (PHY_HALTED == phydev->state)
@@ -719,8 +724,16 @@ void phy_stop(struct phy_device *phydev)
 
 	phydev->state = PHY_HALTED;
 
+	if(pm_runtime_enabled(&phydev->dev) && phydev->link) {
+		phydev->link = 0;
+		netif_carrier_off(phydev->attached_dev);
+		phydev->adjust_link(phydev->attached_dev);
+	}
+
 out_unlock:
 	mutex_unlock(&phydev->lock);
+	if(pm_runtime_enabled(&phydev->dev))
+		pm_runtime_suspend(&phydev->dev);
 
 	/*
 	 * Cannot call flush_scheduled_work() here as desired because
@@ -756,6 +769,10 @@ void phy_start(struct phy_device *phydev)
 		default:
 			break;
 	}
+
+	if(pm_runtime_enabled(&phydev->dev))
+		schedule_delayed_work(&phydev->state_queue, HZ);
+
 	mutex_unlock(&phydev->lock);
 }
 EXPORT_SYMBOL(phy_stop);
@@ -773,6 +790,7 @@ void phy_state_machine(struct work_struct *work)
 	int needs_aneg = 0;
 	int err = 0;
 
+	pm_runtime_get_sync(&phydev->dev);
 	mutex_lock(&phydev->lock);
 
 	if (phydev->adjust_state)
@@ -965,6 +983,8 @@ void phy_state_machine(struct work_struct *work)
 
 	if (err < 0)
 		phy_error(phydev);
+
+	pm_runtime_put(&phydev->dev);
 
 	schedule_delayed_work(&phydev->state_queue, PHY_STATE_TIME * HZ);
 }

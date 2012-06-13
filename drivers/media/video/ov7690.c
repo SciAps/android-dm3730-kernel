@@ -804,7 +804,7 @@ static int ov7690_enum_mbus_code(struct v4l2_subdev *sd,
                                   struct v4l2_subdev_mbus_code_enum *code)
 {
   
-  if ((code->pad) || (code->index > N_OV7690_FMTS ))
+  if ((code->pad) || (code->index >= N_OV7690_FMTS ))
       return -EINVAL;
   
   code->code = ov7690_formats[code->index].format.code;

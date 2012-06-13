@@ -135,8 +135,9 @@ static int rpm_check_suspend_allowed(struct device *dev)
 
 	if (dev->power.runtime_error)
 		retval = -EINVAL;
-	else if (atomic_read(&dev->power.usage_count) > 0
-	    || dev->power.disable_depth > 0)
+	else if (dev->power.disable_depth > 0)
+		retval = -EACCES;
+	else if (atomic_read(&dev->power.usage_count) > 0)
 		retval = -EAGAIN;
 	else if (!pm_children_suspended(dev))
 		retval = -EBUSY;
@@ -213,8 +214,8 @@ static int rpm_idle(struct device *dev, int rpmflags)
 
 	dev->power.idle_notification = true;
 
-	if (dev->pwr_domain)
-		callback = dev->pwr_domain->ops.runtime_idle;
+	if (dev->pm_domain)
+		callback = dev->pm_domain->ops.runtime_idle;
 	else if (dev->type && dev->type->pm)
 		callback = dev->type->pm->runtime_idle;
 	else if (dev->class && dev->class->pm)
@@ -262,7 +263,7 @@ static int rpm_callback(int (*cb)(struct device *), struct device *dev)
 		spin_lock_irq(&dev->power.lock);
 	}
 	dev->power.runtime_error = retval;
-	return retval;
+	return retval != -EACCES ? retval : -EIO;
 }
 
 /**
@@ -374,8 +375,8 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 
 	__update_runtime_status(dev, RPM_SUSPENDING);
 
-	if (dev->pwr_domain)
-		callback = dev->pwr_domain->ops.runtime_suspend;
+	if (dev->pm_domain)
+		callback = dev->pm_domain->ops.runtime_suspend;
 	else if (dev->type && dev->type->pm)
 		callback = dev->type->pm->runtime_suspend;
 	else if (dev->class && dev->class->pm)
@@ -458,7 +459,7 @@ static int rpm_resume(struct device *dev, int rpmflags)
 	if (dev->power.runtime_error)
 		retval = -EINVAL;
 	else if (dev->power.disable_depth > 0)
-		retval = -EAGAIN;
+		retval = -EACCES;
 	if (retval)
 		goto out;
 
@@ -573,8 +574,8 @@ static int rpm_resume(struct device *dev, int rpmflags)
 
 	__update_runtime_status(dev, RPM_RESUMING);
 
-	if (dev->pwr_domain)
-		callback = dev->pwr_domain->ops.runtime_resume;
+	if (dev->pm_domain)
+		callback = dev->pm_domain->ops.runtime_resume;
 	else if (dev->type && dev->type->pm)
 		callback = dev->type->pm->runtime_resume;
 	else if (dev->class && dev->class->pm)

@@ -52,6 +52,7 @@
 #include <linux/phy.h>
 #include <linux/smsc911x.h>
 #include <linux/device.h>
+#include <linux/pm_runtime.h>
 #include "smsc911x.h"
 
 #define SMSC_CHIPNAME		"smsc911x"
@@ -96,6 +97,10 @@ struct smsc911x_data {
 	/* This needs to be acquired before calling any of below:
 	 * smsc911x_mac_read(), smsc911x_mac_write()
 	 */
+
+	u32 suspend_int_cfg;
+	u32 suspend_int_en;
+
 	spinlock_t mac_lock;
 
 	/* spinlock to ensure register accesses are serialised */
@@ -927,6 +932,11 @@ static int smsc911x_mii_probe(struct net_device *dev)
 	SMSC_TRACE(pdata, probe, "PHY: addr %d, phy_id 0x%08X",
 		   phydev->addr, phydev->phy_id);
 
+	/* Enable runtime powermanagement on the phy */
+	pm_runtime_use_autosuspend(&phydev->dev);
+	pm_runtime_set_active(&phydev->dev);
+	pm_runtime_enable(&phydev->dev);
+
 	ret = phy_connect_direct(dev, phydev,
 			&smsc911x_phy_adjust_link, 0,
 			pdata->config.phy_interface);
@@ -959,6 +969,7 @@ static int smsc911x_mii_probe(struct net_device *dev)
 #endif				/* USE_PHY_WORK_AROUND */
 
 	SMSC_TRACE(pdata, hw, "phy initialised successfully");
+
 	return 0;
 }
 
@@ -1252,8 +1263,18 @@ static void smsc911x_rx_multicast_update_workaround(struct smsc911x_data *pdata)
 
 static int smsc911x_soft_reset(struct smsc911x_data *pdata)
 {
+	int ret = 0;
 	unsigned int timeout;
 	unsigned int temp;
+
+	if(pdata->phy_dev)
+	{
+		pm_runtime_get_sync(&pdata->phy_dev->dev);
+		// It can take a while for the PHY to be up and running
+		// after sleeping.  Give it a bit so the reset can
+		// be successful.
+		msleep(250);
+	}
 
 	/* Reset the LAN911x */
 	smsc911x_reg_write(pdata, HW_CFG, HW_CFG_SRST_);
@@ -1265,9 +1286,12 @@ static int smsc911x_soft_reset(struct smsc911x_data *pdata)
 
 	if (unlikely(temp & HW_CFG_SRST_)) {
 		SMSC_WARN(pdata, drv, "Failed to complete reset");
-		return -EIO;
+		ret = -EIO;
 	}
-	return 0;
+
+	if(pdata->phy_dev)
+		pm_runtime_put(&pdata->phy_dev->dev);
+	return ret;
 }
 
 /* Sets the device MAC address to dev_addr, called with mac_lock held */
@@ -1302,9 +1326,11 @@ static int smsc911x_open(struct net_device *dev)
 		return -EADDRNOTAVAIL;
 	}
 
+	pm_runtime_get_sync(pdata->phy_dev->dev.parent);
 	/* Reset the LAN911x */
 	if (smsc911x_soft_reset(pdata)) {
 		SMSC_WARN(pdata, hw, "soft reset failed");
+		pm_runtime_put_autosuspend(pdata->phy_dev->dev.parent);
 		return -EIO;
 	}
 
@@ -1376,6 +1402,7 @@ static int smsc911x_open(struct net_device *dev)
 	if (!pdata->software_irq_signal) {
 		netdev_warn(dev, "ISR failed signaling test (IRQ %d)\n",
 			    dev->irq);
+		pm_runtime_put_autosuspend(pdata->phy_dev->dev.parent);
 		return -ENODEV;
 	}
 	SMSC_TRACE(pdata, ifup, "IRQ handler passed test using IRQ %d",
@@ -1389,6 +1416,7 @@ static int smsc911x_open(struct net_device *dev)
 	pdata->last_carrier = -1;
 
 	/* Bring the PHY up */
+	pm_runtime_get(&pdata->phy_dev->dev);
 	phy_start(pdata->phy_dev);
 
 	temp = smsc911x_reg_read(pdata, HW_CFG);
@@ -1445,7 +1473,11 @@ static int smsc911x_stop(struct net_device *dev)
 
 	/* Bring the PHY down */
 	if (pdata->phy_dev)
+	{
 		phy_stop(pdata->phy_dev);
+		pm_runtime_put(&pdata->phy_dev->dev);
+	}
+	pm_runtime_put_autosuspend(pdata->phy_dev->dev.parent);
 
 	SMSC_TRACE(pdata, ifdown, "Interface stopped");
 	return 0;
@@ -2254,6 +2286,14 @@ static int __devinit smsc911x_drv_probe(struct platform_device *pdev)
 
 	spin_unlock_irq(&pdata->mac_lock);
 
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+
+	/* Bring the PHY down */
+	if (pdata->phy_dev)
+		phy_stop(pdata->phy_dev);
+	pm_runtime_suspend(&pdev->dev);
+
 	netdev_info(dev, "MAC Address: %pM\n", dev->dev_addr);
 
 	return 0;
@@ -2279,21 +2319,25 @@ out_0:
 
 /* TODO: implement freeze/thaw callbacks for hibernation.*/
 
-static int smsc911x_suspend(struct device *dev)
+static int smsc911x_runtime_suspend(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct smsc911x_data *pdata = netdev_priv(ndev);
 
+	pdata->suspend_int_en  = smsc911x_reg_read(pdata, INT_EN);
+	pdata->suspend_int_cfg = smsc911x_reg_read(pdata, INT_CFG);
+
+	smsc911x_reg_write(pdata, INT_CFG, pdata->suspend_int_en & ~INT_CFG_IRQ_EN_);
+	smsc911x_reg_write(pdata, INT_EN, 0);
+
 	/* enable wake on LAN, energy detection and the external PME
 	 * signal. */
-	smsc911x_reg_write(pdata, PMT_CTRL,
-		PMT_CTRL_PM_MODE_D1_ | PMT_CTRL_WOL_EN_ |
-		PMT_CTRL_ED_EN_ | PMT_CTRL_PME_EN_);
+	smsc911x_reg_write(pdata, PMT_CTRL, PMT_CTRL_PM_MODE_D2_);
 
 	return 0;
 }
 
-static int smsc911x_resume(struct device *dev)
+static int smsc911x_runtime_resume(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct smsc911x_data *pdata = netdev_priv(ndev);
@@ -2311,12 +2355,32 @@ static int smsc911x_resume(struct device *dev)
 	while (!(smsc911x_reg_read(pdata, PMT_CTRL) & PMT_CTRL_READY_) && --to)
 		udelay(1000);
 
+	smsc911x_reg_write(pdata, INT_EN, pdata->suspend_int_en);
+	smsc911x_reg_write(pdata, INT_CFG, pdata->suspend_int_cfg);
+
 	return (to == 0) ? -EIO : 0;
 }
 
+static int smsc911x_suspend(struct device *dev)
+{
+	if(!pm_runtime_suspended(dev) || !pm_runtime_enabled(dev))
+		return smsc911x_runtime_suspend(dev);
+	return 0;
+}
+
+static int smsc911x_resume(struct device *dev)
+{
+	if(!pm_runtime_suspended(dev) || !pm_runtime_enabled(dev))
+		return smsc911x_runtime_resume(dev);
+	return 0;
+}
+
 static const struct dev_pm_ops smsc911x_pm_ops = {
-	.suspend	= smsc911x_suspend,
-	.resume		= smsc911x_resume,
+	.suspend		= smsc911x_suspend,
+	.resume			= smsc911x_resume,
+	.runtime_suspend	= smsc911x_runtime_suspend,
+	.runtime_resume		= smsc911x_runtime_resume,
+	.runtime_idle		= pm_runtime_autosuspend,
 };
 
 #define SMSC911X_PM_OPS (&smsc911x_pm_ops)

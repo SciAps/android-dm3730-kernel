@@ -90,6 +90,8 @@
 #define OMAP_TLL_CHANNEL_2_EN_MASK			(1 << 1)
 #define OMAP_TLL_CHANNEL_3_EN_MASK			(1 << 2)
 
+#define OMAP_USBTLL_SYSCONFIG_SMARTIDLE                 (2 << 3)
+
 /* UHH Register Set */
 #define	OMAP_UHH_REVISION				(0x00)
 #define	OMAP_UHH_SYSCONFIG				(0x10)
@@ -99,6 +101,25 @@
 #define	OMAP_UHH_SYSCONFIG_ENAWAKEUP			(1 << 2)
 #define	OMAP_UHH_SYSCONFIG_SOFTRESET			(1 << 1)
 #define	OMAP_UHH_SYSCONFIG_AUTOIDLE			(1 << 0)
+
+#define OMAP_UHH_SYSCONFIG_FORCESTDBY                   (0 << 12)
+#define OMAP_UHH_SYSCONFIG_NOSTDBY                      (1 << 12)
+#define OMAP_UHH_SYSCONFIG_SMARTSTDBY                   (2 << 12)
+#define OMAP_UHH_SYSCONFIG_MIDLEMASK                    (3 << 12)
+
+#define OMAP_UHH_SYSCONFIG_CACTIVITY                    (1 << 8)
+#define OMAP_UHH_SYSCONFIG_SIDLEMODE                    (1 << 3)
+
+#define OMAP_UHH_SYSCONFIG_FORCEIDLE                    (0 << 3)
+#define OMAP_UHH_SYSCONFIG_NOIDLE                       (1 << 3)
+#define OMAP_UHH_SYSCONFIG_SMARTIDLE                    (2 << 3)
+#define OMAP_UHH_SYSCONFIG_SIDLEMASK                    (3 << 3)
+
+#define OMAP_UHH_SYSCONFIG_ENAWAKEUP                    (1 << 2)
+#define OMAP_UHH_SYSCONFIG_SOFTRESET                    (1 << 1)
+#define OMAP_UHH_SYSCONFIG_AUTOIDLE                     (1 << 0)
+
+
 
 #define	OMAP_UHH_SYSSTATUS				(0x14)
 #define	OMAP_UHH_HOSTCONFIG				(0x40)
@@ -163,6 +184,7 @@ struct usbhs_hcd_omap {
 
 	void __iomem			*uhh_base;
 	void __iomem			*tll_base;
+	void __iomem			*ehci_base;
 
 	struct usbhs_omap_platform_data	platdata;
 
@@ -479,6 +501,19 @@ static int __devinit usbhs_omap_probe(struct platform_device *pdev)
 		goto err_tll;
 	}
 
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ehci");
+	if (!res) {
+		dev_err(dev, "EHCI get resource failed\n");
+		ret = -ENODEV;
+	}
+
+	omap->ehci_base = ioremap(res->start, resource_size(res));
+	if (!omap->uhh_base) {
+		dev_err(dev, "UHH ioremap failed\n");
+		ret = -ENOMEM;
+		goto err_init_60m_fclk;
+	}
+
 	platform_set_drvdata(pdev, omap);
 
 	ret = omap_usbhs_alloc_children(pdev);
@@ -688,42 +723,21 @@ static void usbhs_omap_tll_init(struct device *dev, u8 tll_channel_count)
 	}
 }
 
-static int usbhs_enable(struct device *dev)
+static int usbhs_do_reset(struct device *dev)
 {
 	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
 	struct usbhs_omap_platform_data	*pdata = &omap->platdata;
-	unsigned long			flags = 0;
 	int				ret = 0;
 	unsigned long			timeout;
 	unsigned			reg;
 
-	dev_dbg(dev, "starting TI HSUSB Controller\n");
-	if (!pdata) {
-		dev_dbg(dev, "missing platform_data\n");
-		return  -ENODEV;
-	}
-
-	spin_lock_irqsave(&omap->lock, flags);
-	if (omap->count > 0)
-		goto end_count;
-
-	clk_enable(omap->usbhost_ick);
-	clk_enable(omap->usbhost_hs_fck);
-	clk_enable(omap->usbhost_fs_fck);
-	clk_enable(omap->usbtll_fck);
-	clk_enable(omap->usbtll_ick);
-
 	if (pdata->ehci_data->phy_reset) {
 		if (gpio_is_valid(pdata->ehci_data->reset_gpio_port[0])) {
-			gpio_request(pdata->ehci_data->reset_gpio_port[0],
-						"USB1 PHY reset");
 			gpio_direction_output
 				(pdata->ehci_data->reset_gpio_port[0], 0);
 		}
 
 		if (gpio_is_valid(pdata->ehci_data->reset_gpio_port[1])) {
-			gpio_request(pdata->ehci_data->reset_gpio_port[1],
-						"USB2 PHY reset");
 			gpio_direction_output
 				(pdata->ehci_data->reset_gpio_port[1], 0);
 		}
@@ -754,22 +768,22 @@ static int usbhs_enable(struct device *dev)
 
 	dev_dbg(dev, "TLL RESET DONE\n");
 
-	/* (1<<3) = no idle mode only for initial debugging */
-	usbhs_write(omap->tll_base, OMAP_USBTLL_SYSCONFIG,
-			OMAP_USBTLL_SYSCONFIG_ENAWAKEUP |
-			OMAP_USBTLL_SYSCONFIG_SIDLEMODE |
-			OMAP_USBTLL_SYSCONFIG_AUTOIDLE);
+	/* Enable smart-idle, wakeup */
+	reg = OMAP_USBTLL_SYSCONFIG_CACTIVITY
+			| OMAP_USBTLL_SYSCONFIG_AUTOIDLE
+			| OMAP_USBTLL_SYSCONFIG_ENAWAKEUP
+			| OMAP_USBTLL_SYSCONFIG_SMARTIDLE;
+	usbhs_write(omap->tll_base, OMAP_USBTLL_SYSCONFIG, reg);
 
 	/* Put UHH in NoIdle/NoStandby mode */
 	reg = usbhs_read(omap->uhh_base, OMAP_UHH_SYSCONFIG);
 	if (is_omap_usbhs_rev1(omap)) {
-		reg |= (OMAP_UHH_SYSCONFIG_ENAWAKEUP
-				| OMAP_UHH_SYSCONFIG_SIDLEMODE
-				| OMAP_UHH_SYSCONFIG_CACTIVITY
-				| OMAP_UHH_SYSCONFIG_MIDLEMODE);
-		reg &= ~OMAP_UHH_SYSCONFIG_AUTOIDLE;
-
-
+		reg |= OMAP_UHH_SYSCONFIG_CACTIVITY
+				| OMAP_UHH_SYSCONFIG_AUTOIDLE
+				| OMAP_UHH_SYSCONFIG_ENAWAKEUP;
+		reg &= ~(OMAP_UHH_SYSCONFIG_SIDLEMASK | OMAP_UHH_SYSCONFIG_MIDLEMASK);
+		reg |= OMAP_UHH_SYSCONFIG_NOIDLE
+				| OMAP_UHH_SYSCONFIG_NOSTDBY;
 	} else if (is_omap_usbhs_rev2(omap)) {
 		reg &= ~OMAP4_UHH_SYSCONFIG_IDLEMODE_CLEAR;
 		reg |= OMAP4_UHH_SYSCONFIG_NOIDLE;
@@ -911,6 +925,48 @@ static int usbhs_enable(struct device *dev)
 			gpio_set_value
 				(pdata->ehci_data->reset_gpio_port[1], 1);
 	}
+	return 0;
+err_tll:
+	return 1;
+}
+
+static int usbhs_enable(struct device *dev)
+{
+	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
+	struct usbhs_omap_platform_data	*pdata = &omap->platdata;
+	unsigned long			flags = 0;
+	int				ret = 0;
+
+	dev_dbg(dev, "starting TI HSUSB Controller\n");
+	if (!pdata) {
+		dev_dbg(dev, "missing platform_data\n");
+		return  -ENODEV;
+	}
+
+	spin_lock_irqsave(&omap->lock, flags);
+	if (omap->count > 0)
+		goto end_count;
+
+	clk_enable(omap->usbhost_ick);
+	clk_enable(omap->usbhost_hs_fck);
+	clk_enable(omap->usbhost_fs_fck);
+	clk_enable(omap->usbtll_fck);
+	clk_enable(omap->usbtll_ick);
+
+	if (pdata->ehci_data->phy_reset) {
+		if (gpio_is_valid(pdata->ehci_data->reset_gpio_port[0])) {
+			gpio_request(pdata->ehci_data->reset_gpio_port[0],
+						"USB1 PHY reset");
+		}
+
+		if (gpio_is_valid(pdata->ehci_data->reset_gpio_port[1])) {
+			gpio_request(pdata->ehci_data->reset_gpio_port[1],
+						"USB2 PHY reset");
+		}
+	}
+
+	if(usbhs_do_reset(dev))
+		goto err_tll;
 
 end_count:
 	omap->count++;
@@ -941,6 +997,7 @@ static void usbhs_disable(struct device *dev)
 	struct usbhs_omap_platform_data	*pdata = &omap->platdata;
 	unsigned long			flags = 0;
 	unsigned long			timeout;
+	u32 reg;
 
 	dev_dbg(dev, "stopping TI HSUSB Controller\n");
 
@@ -995,13 +1052,14 @@ static void usbhs_disable(struct device *dev)
 			dev_dbg(dev, "operation timed out\n");
 	}
 
-	if (is_omap_usbhs_rev2(omap)) {
-		if (is_ehci_tll_mode(pdata->port_mode[0]))
-			clk_enable(omap->usbtll_p1_fck);
-		if (is_ehci_tll_mode(pdata->port_mode[1]))
-			clk_enable(omap->usbtll_p2_fck);
-		clk_disable(omap->utmi_p2_fck);
-		clk_disable(omap->utmi_p1_fck);
+	/* Enable ForceIdle/ForceStandby mode */
+	if (is_omap_usbhs_rev1(omap)) {
+		reg = usbhs_read(omap->uhh_base, OMAP_UHH_SYSCONFIG);
+		reg &= ~(OMAP_UHH_SYSCONFIG_SIDLEMASK
+				| OMAP_UHH_SYSCONFIG_MIDLEMASK);
+		reg |= OMAP_UHH_SYSCONFIG_FORCEIDLE
+				| OMAP_UHH_SYSCONFIG_FORCESTDBY;
+		usbhs_write(omap->uhh_base, OMAP_UHH_SYSCONFIG, reg);
 	}
 
 	clk_disable(omap->usbtll_ick);
@@ -1038,10 +1096,90 @@ void omap_usbhs_disable(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(omap_usbhs_disable);
 
+#define EHCI_INSNREG04					(0xA0)
+#define EHCI_INSNREG04_DISABLE_UNSUSPEND		(1 << 5)
+
+static int usbhs_omap_dev_resume(struct device *dev)
+{
+	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
+	u32 reg;
+	unsigned long			flags = 0;
+
+	spin_lock_irqsave(&omap->lock, flags);
+	if (omap->count == 0)
+		goto out;
+
+	clk_enable(omap->usbhost_ick);
+	clk_enable(omap->usbhost_hs_fck);
+	clk_enable(omap->usbhost_fs_fck);
+	clk_enable(omap->usbtll_fck);
+	clk_enable(omap->usbtll_ick);
+
+	// Check to see if we lost context.  If so, reset the module.
+	// This _will_ cause every device to be disconnected/connected however.
+	if(usbhs_read(omap->uhh_base, OMAP_UHH_SYSCONFIG) != 0x105)
+	{
+		printk(KERN_INFO "Resetting OMAP EHCI (lost context)\n");
+		usbhs_do_reset(dev);
+
+		usbhs_write(omap->ehci_base, EHCI_INSNREG04, EHCI_INSNREG04_DISABLE_UNSUSPEND);
+		usbhs_write(omap->ehci_base, 0x50, 1);
+	} else {
+		reg = usbhs_read(omap->uhh_base, OMAP_UHH_SYSCONFIG);
+		reg |= OMAP_UHH_SYSCONFIG_CACTIVITY
+				| OMAP_UHH_SYSCONFIG_AUTOIDLE
+				| OMAP_UHH_SYSCONFIG_ENAWAKEUP;
+		reg &= ~(OMAP_UHH_SYSCONFIG_SIDLEMASK | OMAP_UHH_SYSCONFIG_MIDLEMASK);
+		reg |= OMAP_UHH_SYSCONFIG_NOIDLE
+				| OMAP_UHH_SYSCONFIG_NOSTDBY;
+
+		usbhs_write(omap->uhh_base, OMAP_UHH_SYSCONFIG, reg);
+	}
+out:
+	spin_unlock_irqrestore(&omap->lock, flags);
+
+	return 0;
+}
+
+static int usbhs_omap_dev_suspend(struct device *dev)
+{
+	struct usbhs_hcd_omap		*omap = dev_get_drvdata(dev);
+	u32 reg;
+	unsigned long			flags = 0;
+
+	spin_lock_irqsave(&omap->lock, flags);
+	if (omap->count == 0)
+		goto out;
+
+	/* Enable ForceIdle/ForceStandby mode */
+	reg = usbhs_read(omap->uhh_base, OMAP_UHH_SYSCONFIG);
+	reg &= ~(OMAP_UHH_SYSCONFIG_SIDLEMASK
+			| OMAP_UHH_SYSCONFIG_MIDLEMASK);
+	reg |= OMAP_UHH_SYSCONFIG_FORCEIDLE
+			| OMAP_UHH_SYSCONFIG_FORCESTDBY | OMAP_UHH_SYSCONFIG_ENAWAKEUP;
+	usbhs_write(omap->uhh_base, OMAP_UHH_SYSCONFIG, reg);
+
+	clk_disable(omap->usbhost_fs_fck);
+	clk_disable(omap->usbhost_hs_fck);
+	clk_disable(omap->usbhost_ick);
+	clk_disable(omap->usbtll_ick);
+	clk_disable(omap->usbtll_fck);
+
+out:
+	spin_unlock_irqrestore(&omap->lock, flags);
+	return 0;
+}
+
+static const struct dev_pm_ops usbhs_omap_pm_ops = {
+	.suspend	= usbhs_omap_dev_suspend,
+	.resume_noirq	= usbhs_omap_dev_resume,
+};
+
 static struct platform_driver usbhs_omap_driver = {
 	.driver = {
 		.name		= (char *)usbhs_driver_name,
 		.owner		= THIS_MODULE,
+		.pm		= &usbhs_omap_pm_ops,
 	},
 	.remove		= __exit_p(usbhs_omap_remove),
 };
