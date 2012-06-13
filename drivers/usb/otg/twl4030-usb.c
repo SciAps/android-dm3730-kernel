@@ -163,6 +163,8 @@ struct twl4030_usb {
 	bool			vbus_supplied;
 	u8			asleep;
 	bool			irq_enabled;
+
+	struct delayed_work	work;
 };
 
 /* internal define on top of container_of */
@@ -249,9 +251,16 @@ twl4030_usb_clear_bits(struct twl4030_usb *twl, u8 reg, u8 bits)
 static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 {
 	int	status;
+	int	otg_ctrl;
 	int	linkstat = USB_EVENT_NONE;
 
 	twl->vbus_supplied = false;
+
+	/* Find out if VBUS is being driven. */
+	if(!twl->asleep)
+		otg_ctrl = twl4030_readb(twl, TWL4030_MODULE_USB, 0x0a);
+	else
+		otg_ctrl = 0;
 
 	/*
 	 * For ID/VBUS sensing, see manual section 15.4.8 ...
@@ -273,13 +282,16 @@ static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 
 		if (status & BIT(2))
 			linkstat = USB_EVENT_ID;
-		else
-			linkstat = USB_EVENT_VBUS;
+		else {
+			if(otg_ctrl & BIT(5))
+			{
+				linkstat = USB_EVENT_NONE;
+			} else {
+				linkstat = USB_EVENT_VBUS;
+			}
+		}
 	} else
 		linkstat = USB_EVENT_NONE;
-
-	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
-			status, status, linkstat);
 
 	twl->otg.last_event = linkstat;
 
@@ -287,14 +299,29 @@ static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 	 * are registered, and that both are active...
 	 */
 
+	/* Schedule another look in a half a second if we're driving
+	 * VBUS, or if ID is low.
+	 */
+	if((otg_ctrl & BIT(5)) || (status & BIT(2)))
+	{
+		schedule_delayed_work(&twl->work, msecs_to_jiffies(500));
+	}
+
 	spin_lock_irq(&twl->lock);
-	twl->linkstat = linkstat;
-	if (linkstat == USB_EVENT_ID) {
-		twl->otg.default_a = true;
-		twl->otg.state = OTG_STATE_A_IDLE;
-	} else {
-		twl->otg.default_a = false;
-		twl->otg.state = OTG_STATE_B_IDLE;
+	if(twl->linkstat != linkstat)
+	{
+		twl->linkstat = linkstat;
+		if (linkstat == USB_EVENT_ID) {
+			twl->otg.default_a = true;
+			twl->otg.state = OTG_STATE_A_IDLE;
+			printk(KERN_INFO "Setting A idle...\n");
+		} else {
+			twl->otg.default_a = false;
+			twl->otg.state = OTG_STATE_B_IDLE;
+		}
+
+		dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
+				status, status, linkstat);
 	}
 	spin_unlock_irq(&twl->lock);
 
@@ -500,10 +527,11 @@ static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
+	u8 old_status = twl->linkstat;
 	int status;
 
 	status = twl4030_usb_linkstat(twl);
-	if (status >= 0) {
+	if (status >= 0 && old_status != status) {
 		/* FIXME add a set_power() method so that B-devices can
 		 * configure the charger appropriately.  It's not always
 		 * correct to consume VBUS power, and how much current to
@@ -515,10 +543,6 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
 		 * starts to handle softconnect right.
 		 */
-		if (status == USB_EVENT_NONE)
-			twl4030_phy_suspend(twl, 0);
-		else
-			twl4030_phy_resume(twl);
 
 		atomic_notifier_call_chain(&twl->otg.notifier, status,
 				twl->otg.gadget);
@@ -591,6 +615,13 @@ static int twl4030_set_host(struct otg_transceiver *x, struct usb_bus *host)
 	return 0;
 }
 
+static void twl4030_poll(struct work_struct *workb)
+{
+	struct twl4030_usb *twl = container_of(workb, struct twl4030_usb, work.work);
+
+	twl4030_usb_irq(-1, twl);
+}
+
 static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 {
 	struct twl4030_usb_data *pdata = pdev->dev.platform_data;
@@ -605,6 +636,8 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	twl = kzalloc(sizeof *twl, GFP_KERNEL);
 	if (!twl)
 		return -ENOMEM;
+
+	INIT_DELAYED_WORK(&twl->work, twl4030_poll);
 
 	twl->dev		= &pdev->dev;
 	twl->irq		= platform_get_irq(pdev, 0);
@@ -666,6 +699,11 @@ static int __exit twl4030_usb_remove(struct platform_device *pdev)
 {
 	struct twl4030_usb *twl = platform_get_drvdata(pdev);
 	int val;
+
+	cancel_delayed_work(&twl->work);
+	cancel_work_sync(&twl->work.work);
+
+	flush_scheduled_work();
 
 	free_irq(twl->irq, twl);
 	device_remove_file(twl->dev, &dev_attr_vbus);
