@@ -39,7 +39,6 @@
 #include <linux/err.h>
 #include <linux/notifier.h>
 #include <linux/slab.h>
-#include <linux/wakelock.h>
 
 /* Register defines */
 
@@ -164,8 +163,6 @@ struct twl4030_usb {
 	bool			vbus_supplied;
 	u8			asleep;
 	bool			irq_enabled;
-
-	struct wake_lock	wake_lock;
 };
 
 /* internal define on top of container_of */
@@ -405,14 +402,10 @@ static void twl4030_phy_suspend(struct twl4030_usb *twl, int controller_off)
 	twl4030_phy_power(twl, 0);
 	twl->asleep = 1;
 	dev_dbg(twl->dev, "%s\n", __func__);
-
-	wake_unlock(&twl->wake_lock);
 }
 
 static void __twl4030_phy_resume(struct twl4030_usb *twl)
 {
-	wake_lock(&twl->wake_lock);
-
 	twl4030_phy_power(twl, 1);
 	twl4030_i2c_access(twl, 1);
 	twl4030_usb_set_mode(twl, twl->usb_mode);
@@ -625,13 +618,11 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	twl->asleep = 1;
 
 	/* init spinlock for workqueue */
-	wake_lock_init(&twl->wake_lock, WAKE_LOCK_SUSPEND, "twl4030-usb");
 	spin_lock_init(&twl->lock);
 
 	err = twl4030_usb_ldo_init(twl);
 	if (err) {
 		dev_err(&pdev->dev, "ldo init failed\n");
-		wake_lock_destroy(&twl->wake_lock);
 		kfree(twl);
 		return err;
 	}
@@ -658,7 +649,6 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	if (status < 0) {
 		dev_dbg(&pdev->dev, "can't get IRQ %d, err %d\n",
 			twl->irq, status);
-		wake_lock_destroy(&twl->wake_lock);
 		kfree(twl);
 		return status;
 	}
@@ -677,8 +667,6 @@ static int __exit twl4030_usb_remove(struct platform_device *pdev)
 	struct twl4030_usb *twl = platform_get_drvdata(pdev);
 	int val;
 
-
-	wake_lock_destroy(&twl->wake_lock);
 	free_irq(twl->irq, twl);
 	device_remove_file(twl->dev, &dev_attr_vbus);
 
