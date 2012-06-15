@@ -383,20 +383,33 @@ static int otg_setup(struct isp1763_dev *dev)
 
 	otg_set_role(dev, role);
 
-	enable_glint(dev);
-	isp1763_writel(0xFFFF0000, &dev->regs->otg_int_enable_fall);
-	isp1763_writel(0xFFFF0000, &dev->regs->otg_int_enable_rise);
-	isp1763_writel(0xFFFFFFFF, &dev->regs->otg_int_latch);
+	if(!(static_role(dev->devflags) && static_role_host(dev->devflags)))
+	{
+		enable_glint(dev);
+		isp1763_writel(0xFFFF0000, &dev->regs->otg_int_enable_fall);
+		isp1763_writel(0xFFFF0000, &dev->regs->otg_int_enable_rise);
+		isp1763_writel(0xFFFFFFFF, &dev->regs->otg_int_latch);
 
-	isp1763_writel(MASK_OTGINTEN_ID | MASK_OTGINTEN_SESS_VALID |
-		       MASK_OTGINTEN_VBUS_VALID |
-		       MASK_OTGINTEN_TMR_TIMEOUT,
-		       &dev->regs->otg_int_enable_fall);
+		isp1763_writel(MASK_OTGINTEN_ID | MASK_OTGINTEN_SESS_VALID |
+			       MASK_OTGINTEN_VBUS_VALID |
+			       MASK_OTGINTEN_TMR_TIMEOUT,
+			       &dev->regs->otg_int_enable_fall);
 
-	isp1763_writel(MASK_OTGINTEN_ID | MASK_OTGINTEN_SESS_VALID |
-		       MASK_OTGINTEN_VBUS_VALID |
-		       MASK_OTGINTEN_TMR_TIMEOUT,
-		       &dev->regs->otg_int_enable_rise);
+		isp1763_writel(MASK_OTGINTEN_ID | MASK_OTGINTEN_SESS_VALID |
+			       MASK_OTGINTEN_VBUS_VALID |
+			       MASK_OTGINTEN_TMR_TIMEOUT,
+			       &dev->regs->otg_int_enable_rise);
+	} else {
+		// Since we're permanently in host mode,
+		// completely suspend the peripheral controller.
+		u16 mode;
+		mode = isp1763_readw(&dev->regs->mode);
+		mode &= ~(MASK_MODE_CLKAON);
+		mode |= MASK_MODE_GOSUSP;
+		isp1763_writew(mode, &dev->regs->mode);
+		mode &= ~MASK_MODE_GOSUSP;
+		isp1763_writew(mode, &dev->regs->mode);
+	}
 
 	ispdev->current_role = role;
 

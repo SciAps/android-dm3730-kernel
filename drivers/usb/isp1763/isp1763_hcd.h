@@ -86,12 +86,24 @@ void deinit_kmem_cache(void);
 
 #define HC_POWER_DOWN_CONTROL_REG  0xD0
 
+#define HC_PWRDWN_REG_HC_CLK_EN (1 << 0)
+#define HC_PWRDWN_P1_OTG_EN	(1 << 1)
+#define HC_PWRDWN_P2_OTG_EN	(1 << 2)
+#define HC_PWRDWN_REG_SUSP_PWR	(1 << 4)
+#define HC_PWRDWN_REG_PWR	(1 << 5)
+#define HC_PWRDWN_ATX2_PWRON	(1 << 7)
+#define HC_PWRDWN_P1_OC_EN	(1 << 8)
+#define HC_PWRDWN_P2_OC_EN	(1 << 9)
+#define HC_PWRDWN_PORT2_PD	(1 << 11)
+#define HC_PWRDWN_P1_FORCE_FS	(1 << 14)
+#define HC_PWRDWN_P2_FORCE_FS	(1 << 15)
+
 /* Interrupt Register */
 #define HC_INTERRUPT_REG	0xD4
 
 #define HC_INTERRUPT_ENABLE	0xD6
 #define INTERRUPT_ENABLE_MASK	(HC_INTL_INT | HC_ATL_INT | HC_EOT_INT \
-					| HC_OPR_REG_INT | HC_OTG_INT)
+					| HC_OPR_REG_INT | HC_OTG_INT | HC_CLK_READY_INT)
 #define HC_OTG_INT		(1 << 10)
 #define HC_ISO_INT		(1 << 9)
 #define HC_ATL_INT		(1 << 8)
@@ -287,6 +299,9 @@ struct isp1763_hcd {
 	unsigned long reset_done;
 	unsigned long next_statechange;
 	unsigned int devflags;
+
+	u32 last_portsc1;
+	unsigned long port_c_suspend;
 };
 
 struct isp1763_qtd {

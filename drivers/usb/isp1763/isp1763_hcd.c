@@ -395,6 +395,43 @@ static void isp1763_enable_interrupts(struct usb_hcd *hcd)
 	isp1763_writew(0xffff, hcd->regs + HC_ISO_IRQ_MASK_OR_REG);
 }
 
+/* Should be called with spinlock held */
+static int isp1763_check_portchange(struct usb_hcd *hcd)
+{
+	struct isp1763_hcd *priv = hcd_to_priv(hcd);
+	u32 portsc1, cmd;
+	int ret = 0;
+
+	portsc1 = isp1763_readl(hcd->regs + HC_PORTSC1);
+	cmd = isp1763_readl(hcd->regs + HC_USBCMD);
+
+	// Change on portsc1?  If so, kick the root hub.
+	if(portsc1 != priv->last_portsc1)
+	{
+		ret = 1;
+
+		priv->last_portsc1 = portsc1;
+
+		if(!(cmd & CMD_RUN))
+			usb_hcd_resume_root_hub(hcd);
+
+		// If we were suspended, and we are no longer suspended...
+		if((priv->last_portsc1 & PORT_SUSPEND) &&
+		   ((portsc1 & PORT_RESUME) || !(portsc1 & PORT_SUSPEND))
+		   && priv->reset_done != 0)
+		{
+			/* resume signaling for 20 msec */
+			priv->reset_done = jiffies +
+			    msecs_to_jiffies(20);
+			mod_timer(&priv_to_hcd(priv)->rh_timer,
+				  priv->reset_done);
+		}
+	}
+
+	return ret;
+}
+
+
 static int isp1763_run(struct usb_hcd *hcd)
 {
 	struct isp1763_hcd *priv = hcd_to_priv(hcd);
@@ -435,6 +472,7 @@ re_run_init:
 								250 * 1000);
 	up_write(&ehci_cf_port_reset_rwsem);
 	if (retval)
+	{
 		if (reRunInitialization > 100)
 			return retval;
 		else
@@ -442,6 +480,7 @@ re_run_init:
 			isp1763_info(priv, "ISP1763 isp1763_run: Re-run initialization.\n");
 			goto re_run_init;
 		}
+	}
 
 	chipid = isp1763_readl(hcd->regs + HC_CHIP_ID_REG);
 	isp1763_info(priv, "USB ISP %04x HW rev. %d started\n",
@@ -469,10 +508,9 @@ static int isp1763_resume(struct usb_hcd *hcd)
 	u32 command;
 	u32 power_down_control_reg;
 
-	if(hcdpowerdown == 0)
-	{
-		return 0;
-	}
+	spin_lock_irq(&priv->lock);
+
+	printk(KERN_INFO "ISP1763 resuming\n");
 
 	for (i = 0; i < 100; i++)
 	{
@@ -482,17 +520,16 @@ static int isp1763_resume(struct usb_hcd *hcd)
 		mdelay(1);
 	}
 	if (i == 100)
-		printk("ISP1763 resuming: resume failed to read CHIP ID register.\n");
+		printk(KERN_INFO "ISP1763 resuming: resume failed to read CHIP ID register.\n");
 
-	isp1763_writew(0xAA37, hcd->regs + HC_UNLOCK_DEVICE);	
+	isp1763_writew(0xAA37, hcd->regs + HC_UNLOCK_DEVICE);
 
 	power_down_control_reg = isp1763_readl(hcd->regs + HC_POWER_DOWN_CONTROL_REG);
-	printk("ISP1763 resuming: power down control reg 0x%x\n",power_down_control_reg);
-	power_down_control_reg &= ~0x10; /* turn off REG_SUSP_PWR bit */
-	power_down_control_reg |= 0x80; /* turn on ATX2_PWRON bit */
+	power_down_control_reg &= ~HC_PWRDWN_REG_SUSP_PWR;
+	power_down_control_reg |= HC_PWRDWN_REG_PWR | HC_PWRDWN_ATX2_PWRON;
 	for (i = 0; i < 100; i++)
 	{
-		isp1763_writel(power_down_control_reg, hcd->regs + HC_POWER_DOWN_CONTROL_REG);	
+		isp1763_writel(power_down_control_reg, hcd->regs + HC_POWER_DOWN_CONTROL_REG);
 		mdelay(1);
 		temp32 = isp1763_readl(hcd->regs + HC_POWER_DOWN_CONTROL_REG);
 		if(temp32 == power_down_control_reg) 
@@ -501,15 +538,12 @@ static int isp1763_resume(struct usb_hcd *hcd)
 	}
 
 	if (i == 100)
-		printk("ISP1763 suspend/resume: resume failed to configure power down control register.\n");
+		printk(KERN_INFO "ISP1763 suspend/resume: resume failed to configure power down control register.\n");
 
 	isp1763_writel(0x0, hcd->regs + HC_USBSTS);
 	isp1763_writel(0x0, hcd->regs + HC_USBINTR);
 	isp1763_writew(0x0, hcd->regs + HC_INTERRUPT_ENABLE); 
 	temp16 = isp1763_readw(hcd->regs + HC_INTERRUPT_ENABLE);
-	printk("ISP1763 resuming :Interrupt Enbable 0x%x\n",temp16);
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	printk("ISP1763 resuming :Root Hub Port Status 0x%x\n",temp32);
 
 	command = isp1763_readl(hcd->regs + HC_USBCMD);
 	command |= CMD_RUN;
@@ -517,29 +551,9 @@ static int isp1763_resume(struct usb_hcd *hcd)
 	retval = handshake(priv, hcd->regs + HC_USBCMD, CMD_RUN, CMD_RUN,
 			   250 * 1000);
 
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	temp32 |= 0x80;
-	isp1763_writel(temp32, hcd->regs + HC_PORTSC1);	
-	mdelay(50); 
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	temp32 |= 0x40;
-	temp32 &= ~0x80;	
-	isp1763_writel(temp32, hcd->regs + HC_PORTSC1);
-	mdelay(10); 
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	temp32 &= ~0x40;
-	isp1763_writel(temp32, hcd->regs + HC_PORTSC1);
-
 	isp1763_writew(INTERRUPT_ENABLE_MASK, hcd->regs + HC_INTERRUPT_ENABLE); 
-	mdelay(10);
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	printk("ISP1763 resumed :Root Hub Port Status 0x%x\n",temp32);
-	if(!(temp32 & 0x4))
-	{ 
-		printk("ISP1763 resuming: Port not enabled.\n");
-	}
 
-	hcdpowerdown = 0;
+	spin_unlock_irq(&priv->lock);
 
 	return 0;
 }
@@ -549,12 +563,22 @@ static int isp1763_suspend(struct usb_hcd *hcd)
 	struct isp1763_hcd *priv = hcd_to_priv(hcd);
 	int retval;
 	u32 command;
-	// u16 temp16;
 	u32 temp32;
 
-	if(hcdpowerdown)
-	{
-		return 0;
+	spin_lock_irq(&priv->lock);
+
+	/* Once the controller is stopped, port resumes that are already
+	 * in progress won't complete.  Hence if remote wakeup is enabled
+	 * for the root hub and any ports are in the middle of a resume or
+	 * remote wakeup, we must fail the suspend.
+	 */
+	if (hcd->self.root_hub->do_remote_wakeup) {
+		if (priv->reset_done != 0)
+		{
+			printk(KERN_INFO "ISP1763: Aborting suspend\n");
+			spin_unlock_irq(&priv->lock);
+			return -EBUSY;
+		}
 	}
 
 	/* stop the controller first */
@@ -563,39 +587,35 @@ static int isp1763_suspend(struct usb_hcd *hcd)
 	isp1763_writel(command, hcd->regs + HC_USBCMD);
 	retval = handshake(priv, hcd->regs + HC_USBCMD, CMD_RUN, 0,
 			   250 * 1000);
-#if 0
-	isp1763_writel(0x4, hcd->regs + HC_USBSTS);
-	isp1763_writel(0x4, hcd->regs + HC_USBINTR);
-	isp1763_writew(INTERRUPT_ENABLE_MASK, hcd->regs + HC_INTERRUPT_REG); 
 
-	temp16 = isp1763_readw(hcd->regs + HC_INTERRUPT_REG);
-	printk("ISP1763 suspending :Interrupt Status 0x%x\n",temp16);
-	isp1763_writew(INTERRUPT_ENABLE_MASK, hcd->regs + HC_INTERRUPT_ENABLE);
-	temp16 = isp1763_readw(hcd->regs + HC_INTERRUPT_ENABLE);
-	printk("ISP1763 suspending :Interrupt Enbable 0x%x\n",temp16);
-#endif
 	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	printk("ISP1763 suspending :Root Hub Port Status 0x%x\n",temp32);
-	temp32 &= ~0x2;
-	temp32 &= ~0x40;		
-	temp32 |= 0x80;		
-	isp1763_writel(temp32, hcd->regs + HC_PORTSC1);	
-	hcdpowerdown = 1;
- 	mdelay(10);
-	temp32 = isp1763_readl(hcd->regs + HC_PORTSC1);
-	printk("ISP1763 suspended :Root Hub Port Status 0x%x\n",temp32);
-	if((temp32 & 0xffff) == 0x1005)
+
+	if((temp32 & (PORT_RESUME | PORT_SUSPEND)) != PORT_SUSPEND)
 	{
-		printk("Failed to suspend ISP1763. Now resume.\n");
-		isp1763_resume(hcd);	
-		return 0;
+		printk(KERN_INFO "ISP1763: Aborting suspend (port resuming!)\n");
+		spin_unlock_irq(&priv->lock);
+		return -EBUSY;
+	} else {
+		priv->last_portsc1 = temp32;
 	}
 
+	if(hcd->self.root_hub->do_remote_wakeup)
+	{
+		isp1763_writew(HC_CLK_READY_INT, hcd->regs + HC_INTERRUPT_ENABLE);
+	} else {
+		isp1763_writew(0, hcd->regs + HC_INTERRUPT_ENABLE);
+	}
+	isp1763_writew(0, hcd->regs + HC_INTERRUPT_REG);
+
+	// Do powerdown.
 	temp32 = isp1763_readl(hcd->regs + HC_POWER_DOWN_CONTROL_REG);
-	printk("ISP1763 suspended :power down control reg 0x%x\n",temp32);
-	temp32 |= 0x10; /* turn on REG_SUSP_PWR bit */
-	temp32 &= ~0x80; /* turn off ATX2_PWRON bit */
-	isp1763_writel(temp32, hcd->regs + HC_POWER_DOWN_CONTROL_REG);	
+	temp32 |= HC_PWRDWN_REG_SUSP_PWR;
+	temp32 &= ~HC_PWRDWN_ATX2_PWRON;
+	isp1763_writel(temp32, hcd->regs + HC_POWER_DOWN_CONTROL_REG);
+
+	printk(KERN_INFO "ISP1763 suspended\n");
+
+	spin_unlock_irq(&priv->lock);
 
 	return 0;
 }
@@ -1893,8 +1913,10 @@ static int isp1763_irq(struct isp1763_controller *ctrl, u32 flags)
 	struct isp1763_hcd *priv = hcd_to_priv(usb_hcd);
 	u16 imask;
 	irqreturn_t irqret = IRQ_NONE;
-
+	unsigned int poll_rh = 0;
 	spin_lock(&priv->lock);
+
+	poll_rh = isp1763_check_portchange(usb_hcd);
 
 	if (!(usb_hcd->state & HC_STATE_RUNNING))
 		goto leave;
@@ -1912,6 +1934,9 @@ static int isp1763_irq(struct isp1763_controller *ctrl, u32 flags)
 	irqret = IRQ_HANDLED;
 leave:
 	spin_unlock(&priv->lock);
+	if(poll_rh)
+		usb_hcd_poll_rh_status(usb_hcd);
+
 	return irqret;
 }
 
@@ -1955,7 +1980,11 @@ static int isp1763_hub_status_data(struct usb_hcd *hcd, char *buf)
 		buf[0] |= 1 << (0 + 1);
 		status = STS_PCD;
 	}
+
 	/* FIXME autosuspend idle root hubs */
+	if(isp1763_check_portchange(hcd))
+		status = STS_PCD;
+
 done:
 	spin_unlock_irqrestore(&priv->lock, flags);
 	return status ? retval : 0;
@@ -2070,6 +2099,7 @@ static int isp1763_hub_control(struct usb_hcd *hcd, u16 typeReq,
 			break;
 		case USB_PORT_FEAT_C_SUSPEND:
 			/* we auto-clear this feature */
+			clear_bit(wIndex, &priv->port_c_suspend);
 			break;
 		case USB_PORT_FEAT_POWER:
 			if (HCS_PPC(priv->hcs_params))
@@ -2112,9 +2142,6 @@ static int isp1763_hub_control(struct usb_hcd *hcd, u16 typeReq,
 
 		/* whoever resumes must GetPortStatus to complete it!! */
 		if (temp & PORT_RESUME) {
-			printk(KERN_ERR
-			       "Port resume should be skipped.\n");
-
 			/* Remote Wakeup received? */
 			if (!priv->reset_done) {
 				/* resume signaling for 20 msec */
@@ -2127,7 +2154,7 @@ static int isp1763_hub_control(struct usb_hcd *hcd, u16 typeReq,
 
 			/* resume completed? */
 			else if (time_after_eq(jiffies, priv->reset_done)) {
-				status |= 1 << USB_PORT_FEAT_C_SUSPEND;
+				set_bit(wIndex, &priv->port_c_suspend);
 				priv->reset_done = 0;
 
 				/* stop resume signaling */
@@ -2173,6 +2200,10 @@ static int isp1763_hub_control(struct usb_hcd *hcd, u16 typeReq,
 			    check_reset_complete(priv, wIndex, status_reg,
 						 isp1763_readl(status_reg));
 		}
+
+		if (!(temp & (PORT_RESUME | PORT_RESET)))
+			priv->reset_done = 0;
+
 		/*
 		 * Even if OWNER is set, there's no harm letting khubd
 		 * see the wPortStatus values (they should all be 0 except
@@ -2188,13 +2219,15 @@ static int isp1763_hub_control(struct usb_hcd *hcd, u16 typeReq,
 			status |= ehci_port_speed(priv, temp);
 		}
 		if (temp & PORT_PE)
-			status |= 1 << USB_PORT_FEAT_ENABLE;
+			status |= USB_PORT_STAT_ENABLE;
 		if (temp & (PORT_SUSPEND | PORT_RESUME))
-			status |= 1 << USB_PORT_FEAT_SUSPEND;
+			status |= USB_PORT_STAT_SUSPEND;
 		if (temp & PORT_RESET)
-			status |= 1 << USB_PORT_FEAT_RESET;
+			status |= USB_PORT_STAT_RESET;
 		if (temp & PORT_POWER)
-			status |= 1 << USB_PORT_FEAT_POWER;
+			status |= USB_PORT_STAT_POWER;
+		if (test_bit(wIndex, &priv->port_c_suspend))
+			status |= USB_PORT_STAT_C_SUSPEND << 16;
 
 		put_unaligned(cpu_to_le32(status), (__le32 *) buf);
 		break;
@@ -2443,7 +2476,7 @@ static int isp1763_hcd_resume(struct isp1763_controller *ctrl)
 {
 	struct usb_hcd *hcd = ctrl->priv;
 
-	usb_add_hcd(hcd, 0, 0);
+ 	usb_add_hcd(hcd, 0, 0);
 
 	ctrl->active = 1;
 	return 1;
