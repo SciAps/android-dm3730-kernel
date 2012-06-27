@@ -103,7 +103,7 @@ void deinit_kmem_cache(void);
 
 #define HC_INTERRUPT_ENABLE	0xD6
 #define INTERRUPT_ENABLE_MASK	(HC_INTL_INT | HC_ATL_INT | HC_EOT_INT \
-					| HC_OPR_REG_INT | HC_OTG_INT | HC_CLK_READY_INT)
+					| HC_OPR_REG_INT | HC_OTG_INT)
 #define HC_OTG_INT		(1 << 10)
 #define HC_ISO_INT		(1 << 9)
 #define HC_ATL_INT		(1 << 8)
@@ -302,6 +302,7 @@ struct isp1763_hcd {
 
 	u32 last_portsc1;
 	unsigned long port_c_suspend;
+	unsigned long suspended_ports;
 };
 
 struct isp1763_qtd {
