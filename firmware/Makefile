@@ -31,12 +31,16 @@ fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)
 fw-shipped-$(CONFIG_ADAPTEC_STARFIRE) += adaptec/starfire_rx.bin \
 					 adaptec/starfire_tx.bin
 fw-shipped-$(CONFIG_ATARI_DSP56K) += dsp56k/bootstrap.bin
-fw-shipped-$(CONFIG_WL127X_FIRMWARE_SOURCE) += ti-connectivity/wl1271-fw-2.bin \
-				ti-connectivity/wl1271-fw-ap.bin \
-				ti-connectivity/wl1271-nvs.bin
-fw-shipped-$(CONFIG_WL128X_FIRMWARE_SOURCE) += 	ti-connectivity/wl128x-fw.bin \
-				ti-connectivity/wl128x-fw-ap.bin \
-				ti-connectivity/wl128x-nvs.bin
+ifneq ($(CONFIG_WL127X_FIRMWARE_SOURCE),)
+fw-shipped-m += ti-connectivity/wl1271-fw-2.bin \
+		ti-connectivity/wl1271-fw-ap.bin \
+		ti-connectivity/wl1271-nvs.bin
+endif
+ifneq ($(CONFIG_WL128X_FIRMWARE_SOURCE),)
+fw-shipped-m += ti-connectivity/wl128x-fw.bin \
+		ti-connectivity/wl128x-fw-ap.bin \
+		ti-connectivity/wl128x-nvs.bin
+endif
 fw-shipped-$(CONFIG_BT_WILINK) += Logic_TIInit_10.6.15.bts
 fw-shipped-$(CONFIG_ATM_AMBASSADOR) += atmsar11.fw
 fw-shipped-$(CONFIG_BNX2X) += bnx2x/bnx2x-e1-6.2.9.0.fw \
