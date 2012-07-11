@@ -75,15 +75,11 @@
 #include <plat/printk-debug.h>
 #endif
 
-#if defined(CONFIG_VIDEO_OMAP3)
-//#include <linux/omap3isp.h>
 // #include <media/omap3isp.h>	// for 3.1 kernel
 #include <../drivers/media/video/omap3isp/isp.h>
 #include "devices.h"
-#endif /* defined(CONFIG_VIDEO_OMAP3) */
-#if defined(CONFIG_VIDEO_OV7690)
 #include <../drivers/media/video/ov7690.h>
-#endif /* defined(CONFIG_VIDEO_OV7690) */
+#include <media/mt9p031.h>
 
 
 #define OMAP3LOGIC_SMSC911X_CS			1
@@ -211,7 +207,7 @@ static struct regulator_init_data omap3logic_vaux3 = {
 	.consumer_supplies		= omap3logic_vaux3_supplies,
 };
 
-#if defined(CONFIG_VIDEO_OV7690)
+#if defined(CONFIG_VIDEO_OMAP3)
 static struct regulator_consumer_supply omap3logic_vaux4_supply = {
 	.supply			= "vaux4",
 };
@@ -231,7 +227,7 @@ static struct regulator_init_data omap3logic_vaux4 = {
 	.num_consumer_supplies	= 1,
 	.consumer_supplies	= &omap3logic_vaux4_supply,
 };
-#endif	// CONFIG_VIDEO_OV7690
+#endif	// CONFIG_VIDEO_OMAP3
 
 static struct regulator_consumer_supply omap3logic_vmmc3_supply = {
 	.supply			= "vmmc",
@@ -759,7 +755,7 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vmmc2		= &omap3logic_vmmc2,
 	.vaux1		= &omap3logic_vaux1,
 	.vaux3		= &omap3logic_vaux3,
-#if defined(CONFIG_VIDEO_OV7690)
+#if defined(CONFIG_VIDEO_OMAP3)
 	.vaux4		= &omap3logic_vaux4,
 #endif
 #if defined(CONFIG_OMAP2_DSS) || defined(CONFIG_OMAP2_DSS_MODULE)
@@ -843,78 +839,111 @@ struct tsc2004_platform_data omap3logic_tsc2004data = {
 };
 
 #endif
-#if defined(CONFIG_VIDEO_OV7690)
-/* OV7690 */
-// pointer to vaux4 regulator for use by camera for D0/D1 lines
-static struct regulator	*ov7690_reg = NULL;
 
-static int omap3logic_ov7690_s_xclk(struct v4l2_subdev *subdev, u32 on)
+#if defined(CONFIG_VIDEO_OMAP3)
+static struct regulator	*vaux4_reg = NULL;
+static int omap3logic_enable_vaux4(struct v4l2_subdev *subdev, u32 on)
 {
-	int isperr = 0;
 	int regerr = 0;
-	struct isp_device *isp = v4l2_dev_to_isp_device(subdev->v4l2_dev);
-
-	if (NULL == isp) {
-	  printk(KERN_ERR "%s: isp@%p sd@%p sd->v4l2_dev@%p xclk@%p on:%d\n",
-		 __FUNCTION__, isp, subdev, subdev->v4l2_dev, (isp) ? isp->platform_cb.set_xclk : NULL, on);
-	  isperr = -EINVAL;
-	} else {
-		if (NULL == isp->platform_cb.set_xclk) {
-			printk(KERN_ERR "%s: isp->platform_cb.set_xclk is NULL isp:%p subdev:%p dev:%p\n", __FUNCTION__,isp,subdev,subdev->v4l2_dev);
-			isperr = -EINVAL;
-		}
-	}
-	if (0 != isperr) {
-		return isperr;
-}
-
-	// get regulator for CAM_D0/CAM_D1
-	if (NULL == ov7690_reg) {
-		ov7690_reg = regulator_get(NULL, "vaux4");
-		if (IS_ERR(ov7690_reg)) {
+	if (NULL == vaux4_reg) {
+		vaux4_reg = regulator_get(NULL, "vaux4");
+		if (IS_ERR(vaux4_reg)) {
 			pr_err("%s: unable to get vaux4 regulator\n", __FUNCTION__);
-			regerr = PTR_ERR(ov7690_reg);
+			return PTR_ERR(vaux4_reg);
 		}
 	}
-	// continue to turn on/off XCLK even if regulator error
+
 	if (on) {
-		if (!regerr) {
-			// enable 1.8V supply for D0/D1
-			regerr = regulator_enable(ov7690_reg);
-			if (regerr) {
-				printk(KERN_INFO "%s: error enabling vaux4 regulator\n", __FUNCTION__);
-			}
+		regerr = regulator_enable(vaux4_reg);
+		if (regerr) {
+			printk(KERN_INFO "%s: error enabling vaux4 regulator\n", __FUNCTION__);
 		}
-		/* Enable EXTCLK */
-		isp->platform_cb.set_xclk(isp, 24000000, ISP_XCLK_A);
-		udelay(5);
 	} else {
-		isp->platform_cb.set_xclk(isp, 0, ISP_XCLK_A);
-		if (!regerr) {
-			if (regulator_is_enabled(ov7690_reg)) {
-				regerr = regulator_disable(ov7690_reg);
-				if (regerr) {
-					printk(KERN_INFO "%s: error disabling vaux4 regulator\n", __FUNCTION__);
-				}
-			}
-			regulator_put(ov7690_reg);
-			ov7690_reg = NULL;
+		regerr = regulator_disable(vaux4_reg);
+		if (regerr) {
+			printk(KERN_INFO "%s: error disabling vaux4 regulator\n", __FUNCTION__);
 		}
+		
 	}
 	return regerr;
 }
 
-static struct ov7690_platform_data  omap3logic_ov7690_platform_data = {
-	.s_xclk			= omap3logic_ov7690_s_xclk,
-	.min_width		= 640,
-	.min_height		= 480,
+static int omap3logic_set_xclk(struct v4l2_subdev *subdev, int hz)
+{
+	int isperr = 0;
+	struct isp_device *isp = v4l2_dev_to_isp_device(subdev->v4l2_dev);
+	if (NULL == isp) {
+		printk(KERN_ERR "%s: could not determine isp_device: v4l2_dev=%p\n",
+			__FUNCTION__, subdev->v4l2_dev);
+		return -EINVAL;
+	}
+	if (NULL == isp->platform_cb.set_xclk) {
+		printk(KERN_ERR "%s: set_xclk function is not set\n",
+			__FUNCTION__);
+		return -EINVAL;
+	}
+
+	isperr = isp->platform_cb.set_xclk(isp, hz, ISP_XCLK_A);
+	udelay(5);
+	return isperr;
+}
+#endif /* defined(CONFIG_VIDEO_OMAP3) */
+
+#if defined(CONFIG_VIDEO_OV7690)
+static int omap3logic_ov7690_s_xclk(struct v4l2_subdev *s, u32 on) {
+	omap3logic_enable_vaux4(s, on);
+	return omap3logic_set_xclk(s, on ? 24000000 : 0);
+}
+
+static struct ov7690_platform_data omap3logic_ov7690_platform_data = {
+	.s_xclk                 = omap3logic_ov7690_s_xclk,
+	.min_width              = 640,
+	.min_height             = 480,
 };
-/* 
-* By default sensored is attached to i2c-2
-* have also been tested on i2c-3
-*/
-#define	OMAP3LOGIC_OV7690_I2C_BUS_NUM 2
-#endif /*  defined(CONFIG_VIDEO_OV7690) */
+
+static struct i2c_board_info omap3logic_ov7690_board_info = {
+	I2C_BOARD_INFO("ov7690", 0x42>>1),
+	.platform_data = &omap3logic_ov7690_platform_data,
+};
+
+static struct isp_subdev_i2c_board_info omap3logic_ov7690_subdevs[] = {
+	{
+		.board_info = &omap3logic_ov7690_board_info,
+		/* ov7690 is on i2c-3 on Catalyst, i2c-2 on DevKit */
+		.i2c_adapter_id = 3,
+	},
+	{ NULL, 0 },
+};
+#endif /* defined(CONFIG_VIDEO_OV7690) */
+
+#if defined(CONFIG_VIDEO_MT9P031)
+static int omap3logic_mt9p031_set_xclk(struct v4l2_subdev *s, int hz) {
+	omap3logic_enable_vaux4(s, 0 != hz ? 1 : 0);
+	return omap3logic_set_xclk(s, hz);
+}
+
+static struct mt9p031_platform_data omap3logic_mt9p031_platform_data = {
+	.set_xclk               = omap3logic_mt9p031_set_xclk,
+	.ext_freq               = 24000000,
+	/* MT9P031 max is 48Mhz for 1.8V IO, 96Mhz for 2.8V IO */
+	/* Camera ISP max is 83Mhz? for RAW data */
+	.target_freq            = 48000000,
+	.version                = MT9P031_COLOR_VERSION,
+};
+
+static struct i2c_board_info omap3logic_mt9p031_board_info = {
+	I2C_BOARD_INFO("mt9p031", 0x48),
+	.platform_data = &omap3logic_mt9p031_platform_data,
+};
+
+static struct isp_subdev_i2c_board_info omap3logic_mt9p031_subdevs[] = {
+	{
+		.board_info = &omap3logic_mt9p031_board_info,
+		.i2c_adapter_id = 2,
+	},
+	{ NULL, 0 },
+};
+#endif /* defined(CONFIG_VIDEO_MT9P031) */
 
 static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -927,31 +956,10 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 #endif
 };
 
-#if defined(CONFIG_VIDEO_OV7690)
-static struct i2c_board_info  omap3logic_camera_i2c_devices[] = {
-	{
-		I2C_BOARD_INFO("ov7690", 0x42>>1),
-		.platform_data = &omap3logic_ov7690_platform_data,
-	}
-};
-
-static struct isp_subdev_i2c_board_info omap3logic_ov7690_subdevs[] = {
-	{
-		.board_info = &omap3logic_camera_i2c_devices[0],
-		.i2c_adapter_id = OMAP3LOGIC_OV7690_I2C_BUS_NUM,
-	},
-	{ NULL, 0 },
-};
-#endif
-
 static int __init omap3logic_i2c_init(void)
 {
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
-#if defined(CONFIG_VIDEO_OV7690) 
-#if (2 ==  OMAP3LOGIC_OV7690_I2C_BUS_NUM)
-	omap_register_i2c_bus( OMAP3LOGIC_OV7690_I2C_BUS_NUM , 400, NULL, 0);
-#endif
-#endif /*  defined(CONFIG_VIDEO_OV7690) */
+	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
 			ARRAY_SIZE(omap3logic_i2c3_boardinfo));
 
@@ -970,12 +978,28 @@ static struct isp_v4l2_subdevs_group omap3logic_camera_subdevs[] = {
 				.clk_pol		= 0,
 				.hs_pol			= 0,	// HSYNC not inverted
 				.vs_pol			= 0,	// VSYNC not inverted
-				.bridge			= ISPCTRL_PAR_BRIDGE_LENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_BIG_ENDIAN,
+				.bridge			= ISPCTRL_PAR_BRIDGE_LENDIAN>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_LITTLE_ENDIAN,
 //3.3+				.bt656			= 0,
 			},
 		},
 	},
 #endif /*  defined(CONFIG_VIDEO_OV7690) */
+#if defined(CONFIG_VIDEO_MT9P031)
+	{
+		.subdevs = omap3logic_mt9p031_subdevs,
+		.interface = ISP_INTERFACE_PARALLEL,
+		.bus = {
+			.parallel = {
+				.data_lane_shift	= ISPCTRL_SHIFT_0 >> ISPCTRL_SHIFT_SHIFT, //3.3+ISP_LANE_SHIFT_0,
+				.clk_pol		= 1,	// PIXCLK inverted
+				.hs_pol			= 0,	// HSYNC not inverted
+				.vs_pol			= 0,	// VSYNC not inverted
+				.bridge			= ISPCTRL_PAR_BRIDGE_DISABLE>> ISPCTRL_PAR_BRIDGE_SHIFT //3.3+ISP_BRIDGE_DISABLE,
+//3.3+				.bt656			= 0,
+			},
+		},
+	},
+#endif /*  defined(CONFIG_VIDEO_MT9P031) */
 	{ NULL, 0 },
 };
 
@@ -1701,6 +1725,10 @@ static void dm3730logic_camera_init(void)
         omap_mux_init_signal("cam_d5.cam_d5", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d6.cam_d6", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d7.cam_d7", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d8.cam_d8", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d9.cam_d9", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d10.cam_d10", OMAP_PIN_INPUT);
+        omap_mux_init_signal("cam_d11.cam_d11", OMAP_PIN_INPUT);
 
 }
 
