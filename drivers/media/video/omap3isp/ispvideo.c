@@ -744,6 +744,38 @@ isp_video_get_format(struct file *file, void *fh, struct v4l2_format *format)
 }
 
 static int
+isp_video_enum_format(struct file *file, void *fh, struct v4l2_fmtdesc *fmtdesc)
+{
+	struct isp_video *video = video_drvdata(file);
+	u32 pad;
+	struct v4l2_subdev *subdev = isp_video_remote_subdev(video, &pad);
+	struct v4l2_subdev_format fmt;
+	struct v4l2_pix_format pix;
+	int ret;
+
+	if (fmtdesc->index)
+		return -EINVAL;
+
+	if (fmtdesc->type != video->type) 
+		return -EINVAL;
+
+	fmtdesc->flags = 0;
+	fmtdesc->description[0] = 0;
+	if (subdev != NULL) {
+		fmt.pad = pad;
+		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+		mutex_lock(&video->mutex);
+		ret = v4l2_subdev_call(subdev, pad, get_fmt, NULL, &fmt);
+		mutex_unlock(&video->mutex);
+		if (!ret) {
+			isp_video_mbus_to_pix(video, &fmt.format, &pix);
+			fmtdesc->pixelformat = pix.pixelformat;
+		}
+	}
+	return 0;
+}
+
+static int
 isp_video_set_format(struct file *file, void *fh, struct v4l2_format *format)
 {
 	struct isp_video_fh *vfh = to_isp_video_fh(fh);
@@ -871,14 +903,20 @@ isp_video_get_param(struct file *file, void *fh, struct v4l2_streamparm *a)
 	struct isp_video_fh *vfh = to_isp_video_fh(fh);
 	struct isp_video *video = video_drvdata(file);
 
-	if (video->type != V4L2_BUF_TYPE_VIDEO_OUTPUT ||
-	    video->type != a->type)
+	if (video->type != a->type)
 		return -EINVAL;
 
 	memset(a, 0, sizeof(*a));
-	a->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	a->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
-	a->parm.output.timeperframe = vfh->timeperframe;
+	if (video->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		a->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		a->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
+		a->parm.output.timeperframe = vfh->timeperframe;
+	} else if (video->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+		memset(a, 0, sizeof(*a));
+		a->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	} else {
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -889,14 +927,18 @@ isp_video_set_param(struct file *file, void *fh, struct v4l2_streamparm *a)
 	struct isp_video_fh *vfh = to_isp_video_fh(fh);
 	struct isp_video *video = video_drvdata(file);
 
-	if (video->type != V4L2_BUF_TYPE_VIDEO_OUTPUT ||
-	    video->type != a->type)
+	if (video->type != a->type)
 		return -EINVAL;
 
-	if (a->parm.output.timeperframe.denominator == 0)
-		a->parm.output.timeperframe.denominator = 1;
-
-	vfh->timeperframe = a->parm.output.timeperframe;
+	if (video->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		if (a->parm.output.timeperframe.denominator == 0)
+			a->parm.output.timeperframe.denominator = 1;
+		vfh->timeperframe = a->parm.output.timeperframe;
+	} else if (video->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+		// No supported capabilities
+	} else {
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1171,6 +1213,7 @@ isp_video_s_input(struct file *file, void *fh, unsigned int input)
 
 static const struct v4l2_ioctl_ops isp_video_ioctl_ops = {
 	.vidioc_querycap		= isp_video_querycap,
+	.vidioc_enum_fmt_vid_cap	= isp_video_enum_format,
 	.vidioc_g_fmt_vid_cap		= isp_video_get_format,
 	.vidioc_s_fmt_vid_cap		= isp_video_set_format,
 	.vidioc_try_fmt_vid_cap		= isp_video_try_format,
