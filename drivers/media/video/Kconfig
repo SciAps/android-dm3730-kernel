@@ -459,6 +459,9 @@ config VIDEO_AK881X
 
 comment "Camera sensor devices"
 
+config VIDEO_APTINA_PLL
+	tristate
+
 config VIDEO_OV7670
 	tristate "OmniVision OV7670 sensor support"
 	depends on I2C && VIDEO_V4L2
@@ -473,6 +476,16 @@ config VIDEO_OV7690
 	---help---
 	This is a Video4Linux2 sensor-level driver for the OmniVision
 	OV7690 VGA camera.
+
+config VIDEO_MT9P031
+	tristate "Aptina MT9P031 support (works for MT9P001, MT9P011)"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	select VIDEO_APTINA_PLL
+	---help---
+	  This is a Video4Linux2 sensor-level driver for the Aptina
+	  (Micron) mt9p031 5 Mpixel camera.  The MT9P001 and MT9P011
+	  use the same register set as the MT9P031, so this driver
+	  should be compatible with these chips as well.
 
 config VIDEO_MT9V011
 	tristate "Micron mt9v011 sensor support"
