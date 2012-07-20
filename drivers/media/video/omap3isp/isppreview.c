@@ -114,6 +114,13 @@ static u32 luma_enhance_table[] = {
 #include "luma_enhance_table.h"
 };
 
+#define IS_8_BIT(x) (\
+	((x) == V4L2_MBUS_FMT_SGRBG8_1X8) ||\
+	((x) == V4L2_MBUS_FMT_SRGGB8_1X8) ||\
+	((x) == V4L2_MBUS_FMT_SBGGR8_1X8) ||\
+	((x) == V4L2_MBUS_FMT_SGBRG8_1X8) ||\
+	0)
+
 /*
  * preview_enable_invalaw - Enable/Disable Inverse A-Law module in Preview.
  * @enable: 1 - Reverse the A-Law done in CCDC.
@@ -481,7 +488,10 @@ preview_config_whitebalance(struct isp_prev_device *prev, const void *prev_wbal)
 	const struct omap3isp_prev_wbal *wbal = prev_wbal;
 	u32 val;
 
-	isp_reg_writel(isp, wbal->dgain, OMAP3_ISP_IOMEM_PREV, ISPPRV_WB_DGAIN);
+	if ((prev->input == PREVIEW_INPUT_CCDC) && IS_8_BIT(prev->formats[PREV_PAD_SINK].code))
+		dev_dbg(isp->dev, "Previewer DGAIN is converting 8bit to 10bit - use analog gain instead.\n");
+	else
+		isp_reg_writel(isp, wbal->dgain, OMAP3_ISP_IOMEM_PREV, ISPPRV_WB_DGAIN);
 
 	val = wbal->coef0 << ISPPRV_WBGAIN_COEF0_SHIFT;
 	val |= wbal->coef1 << ISPPRV_WBGAIN_COEF1_SHIFT;
@@ -1340,6 +1350,11 @@ static void preview_configure(struct isp_prev_device *prev)
 	format_avg = fls(DIV_ROUND_UP(format->width, max_out_width) - 1);
 	preview_config_averager(prev, format_avg);
 	preview_config_ycpos(prev, format->code);
+
+	if ((prev->input == PREVIEW_INPUT_CCDC) && IS_8_BIT(prev->formats[PREV_PAD_SINK].code)) {
+		dev_dbg(isp->dev, "Using Previewer DGAIN to convert 8bit to 10bit\n");
+		isp_reg_writel(isp, 0x3FF, OMAP3_ISP_IOMEM_PREV, ISPPRV_WB_DGAIN);
+	}
 }
 
 /* -----------------------------------------------------------------------------
@@ -1598,6 +1613,10 @@ static const unsigned int preview_input_fmts[] = {
 	V4L2_MBUS_FMT_SRGGB10_1X10,
 	V4L2_MBUS_FMT_SBGGR10_1X10,
 	V4L2_MBUS_FMT_SGBRG10_1X10,
+	V4L2_MBUS_FMT_SGRBG8_1X8,
+	V4L2_MBUS_FMT_SRGGB8_1X8,
+	V4L2_MBUS_FMT_SBGGR8_1X8,
+	V4L2_MBUS_FMT_SGBRG8_1X8,
 };
 
 static const unsigned int preview_output_fmts[] = {
