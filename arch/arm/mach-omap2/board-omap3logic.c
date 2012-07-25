@@ -926,8 +926,8 @@ static struct mt9p031_platform_data omap3logic_mt9p031_platform_data = {
 	.set_xclk               = omap3logic_mt9p031_set_xclk,
 	.ext_freq               = 24000000,
 	/* MT9P031 max is 48Mhz for 1.8V IO, 96Mhz for 2.8V IO */
-	/* Camera ISP max is 83Mhz? for RAW data */
-	.target_freq            = 48000000,
+	/* Camera ISP max is 83Mhz for RAW data - TRM 6.1.1 */
+	.target_freq            = 72000000,
 	.version                = MT9P031_COLOR_VERSION,
 };
 
