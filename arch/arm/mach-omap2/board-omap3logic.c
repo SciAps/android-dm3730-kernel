@@ -926,7 +926,11 @@ static struct mt9p031_platform_data omap3logic_mt9p031_platform_data = {
 	.set_xclk               = omap3logic_mt9p031_set_xclk,
 	.ext_freq               = 24000000,
 	/* MT9P031 max is 48Mhz for 1.8V IO, 96Mhz for 2.8V IO */
-	/* Camera ISP max is 83Mhz for RAW data - TRM 6.1.1 */
+	/* Camera ISP max is 75Mhz for Normal/RAW and ITU/BT.656 at OPP100
+	   Camera ISP max is 45Mhz for Normal/RAW and ITU/BT.656 at OPP50
+	   Camera ISP max is 130Mhz for Packed/YUV (using bridge) at OPP100
+	   Camera ISP max is 65Mhz for Packed/YUV (using bridge) at OPP50
+	   See DM3730 Datasheet 6.5.1.2 Parallel Camera Interface */
 	.target_freq            = 72000000,
 	.version                = MT9P031_COLOR_VERSION,
 };
