@@ -794,7 +794,7 @@ static int tsc2004_init_irq(void)
 {
 	int ret = 0;
 
-	omap_mux_init_gpio(GPIO_TSC2004_IRQ, OMAP_PIN_INPUT | OMAP_PIN_OFF_WAKEUPENABLE);
+	omap_mux_init_gpio(GPIO_TSC2004_IRQ, OMAP_PIN_INPUT);
 	ret = gpio_request(GPIO_TSC2004_IRQ, "tsc2004-irq");
 	if (ret < 0) {
 		printk(KERN_WARNING "failed to request GPIO#%d: %d\n",
