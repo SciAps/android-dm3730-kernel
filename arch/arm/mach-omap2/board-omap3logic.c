@@ -1729,10 +1729,16 @@ static void dm3730logic_camera_init(void)
         omap_mux_init_signal("cam_d5.cam_d5", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d6.cam_d6", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d7.cam_d7", OMAP_PIN_INPUT);
+
+#if 1
+	printk("%s: muxing 8-bit interface (cam_d0-cam_d7)\n", __FUNCTION__);
+#else
+	printk("%s: muxing 12-bit interface (cam_d0-cam_d11)\n", __FUNCTION__);
         omap_mux_init_signal("cam_d8.cam_d8", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d9.cam_d9", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d10.cam_d10", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d11.cam_d11", OMAP_PIN_INPUT);
+#endif
 
 }
 
@@ -2029,10 +2035,8 @@ static void __init omap3logic_init(void)
 	omap3logic_opp_init();
 #endif
 #if defined(CONFIG_VIDEO_OMAP3)
-	if ( machine_is_dm3730_torpedo()) {
-		dm3730logic_camera_init();
-		omap3_init_camera(&omap3logic_isp_platform_data);
-	} 
+	dm3730logic_camera_init();
+	omap3_init_camera(&omap3logic_isp_platform_data);
 #endif
 }
 
