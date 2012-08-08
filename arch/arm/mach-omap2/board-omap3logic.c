@@ -927,8 +927,12 @@ static struct mt9p031_platform_data omap3logic_mt9p031_platform_data = {
 	.set_xclk               = omap3logic_mt9p031_set_xclk,
 	.ext_freq               = 24000000,
 	/* MT9P031 max is 48Mhz for 1.8V IO, 96Mhz for 2.8V IO */
-	/* Camera ISP max is 83Mhz? for RAW data */
-	.target_freq            = 48000000,
+	/* Camera ISP max is 75Mhz for Normal/RAW and ITU/BT.656 at OPP100
+	   Camera ISP max is 45Mhz for Normal/RAW and ITU/BT.656 at OPP50
+	   Camera ISP max is 130Mhz for Packed/YUV (using bridge) at OPP100
+	   Camera ISP max is 65Mhz for Packed/YUV (using bridge) at OPP50
+	   See DM3730 Datasheet 6.5.1.2 Parallel Camera Interface */
+	.target_freq            = 72000000,
 	.version                = MT9P031_COLOR_VERSION,
 };
 
@@ -1726,10 +1730,16 @@ static void dm3730logic_camera_init(void)
         omap_mux_init_signal("cam_d5.cam_d5", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d6.cam_d6", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d7.cam_d7", OMAP_PIN_INPUT);
+
+#if 1
+	printk("%s: muxing 8-bit interface (cam_d0-cam_d7)\n", __FUNCTION__);
+#else
+	printk("%s: muxing 12-bit interface (cam_d0-cam_d11)\n", __FUNCTION__);
         omap_mux_init_signal("cam_d8.cam_d8", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d9.cam_d9", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d10.cam_d10", OMAP_PIN_INPUT);
         omap_mux_init_signal("cam_d11.cam_d11", OMAP_PIN_INPUT);
+#endif
 
 }
 
@@ -1954,6 +1964,43 @@ static void __init omap3logic_pm_init(void)
 	omap_pm_auto_ret(0);
 }
 
+#define PWR_P1_SW_EVENTS	0x10
+#define PWR_DEVOFF			(1<<0)
+#define REMAP_OFFSET		2
+
+static void omap3logic_poweroff(void)
+{
+	u8 val;
+	int err;
+	printk(KERN_INFO "twl4030_poweroff()\n");
+
+	// We need to power off the Cinterion modem or it uses power
+	// while we're off.
+	gpio_set_value(156, 0);
+	gpio_set_value(158, 1);
+
+	udelay(1000);
+
+	err = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &val,
+						 PWR_P1_SW_EVENTS);
+	if (err) {
+			printk(KERN_WARNING "I2C error %d while reading TWL4030"
+				  "PM_MASTER P1_SW_EVENTS\n", err);
+			return ;
+	}
+
+	val |= PWR_DEVOFF;
+
+	err = twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER, val,
+						  PWR_P1_SW_EVENTS);
+
+	if (err) {
+			printk(KERN_WARNING "I2C error %d while writing TWL4030"
+				  "PM_MASTER P1_SW_EVENTS\n", err);
+			return ;
+	}
+}
+
 static void __init omap3logic_init(void)
 {
 	struct omap_board_data bdata;
@@ -1961,6 +2008,8 @@ static void __init omap3logic_init(void)
 	/* hang on start if "hang" is on command line */
 	while (omap3logic_hang)
 		;
+
+	pm_power_off = omap3logic_poweroff;
 
 	/* Pick the right MUX table based on the machine */
 	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo())
@@ -2049,10 +2098,8 @@ static void __init omap3logic_init(void)
 	omap3logic_opp_init();
 #endif
 #if defined(CONFIG_VIDEO_OMAP3)
-	if ( machine_is_dm3730_torpedo()) {
-		dm3730logic_camera_init();
-		omap3_init_camera(&omap3logic_isp_platform_data);
-	} 
+	dm3730logic_camera_init();
+	omap3_init_camera(&omap3logic_isp_platform_data);
 #endif
 }
 

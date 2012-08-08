@@ -106,6 +106,10 @@
 #define MT9P031_TEST_PATTERN_RED			0xa2
 #define MT9P031_TEST_PATTERN_BLUE			0xa3
 
+#define MT9P031_RB_BALANCE_DEF				100
+#define MT9P031_RB_BALANCE_MIN				(MT9P031_GAIN_MIN * MT9P031_RB_BALANCE_DEF / MT9P031_GAIN_MAX)
+#define MT9P031_RB_BALANCE_MAX				(MT9P031_GAIN_MAX * MT9P031_RB_BALANCE_DEF / MT9P031_GAIN_MIN)
+
 struct mt9p031 {
 	struct v4l2_subdev subdev;
 	struct media_pad pad;
@@ -121,6 +125,11 @@ struct mt9p031 {
 	/* Registers cache */
 	u16 output_control;
 	u16 mode2;
+
+	/* Gain cache */
+	int gain;
+	int rbal;
+	int bbal;
 };
 
 static struct mt9p031 *to_mt9p031(struct v4l2_subdev *sd)
@@ -302,6 +311,57 @@ static int __mt9p031_set_power(struct mt9p031 *mt9p031, bool on)
 	}
 
 	return v4l2_ctrl_handler_setup(&mt9p031->ctrls);
+}
+
+static int mt9p031_set_gain(struct mt9p031 *mt9p031, u8 reg, s32 val)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(&mt9p031->subdev);
+
+	if (val < MT9P031_GAIN_MIN) val = MT9P031_GAIN_MIN;
+	if (val > MT9P031_GAIN_MAX) val = MT9P031_GAIN_MAX;
+
+	/* Gain is controlled by 2 analog stages and a digital stage.
+	 * Valid values for the 3 stages are
+	 *
+	 * Stage                Min     Max     Step
+	 * ------------------------------------------
+	 * First analog stage   x1      x2      1
+	 * Second analog stage  x1      x4      0.125
+	 * Digital stage        x1      x16     0.125
+	 *
+	 * To minimize noise, the gain stages should be used in the
+	 * second analog stage, first analog stage, digital stage order.
+	 * Gain from a previous stage should be pushed to its maximum
+	 * value before the next stage is used.
+	 */
+	if (val <= 32) {
+		val = val;
+	} else if (val <= 64) {
+		val &= ~1;
+		val = (1 << 6) | (val >> 1);
+	} else {
+		val &= ~7;
+		val = ((val - 64) << 5) | (1 << 6) | 32;
+	}
+
+	return mt9p031_write(client, reg, val);
+}
+
+static int mt9p031_set_gains(struct mt9p031 *mt9p031)
+{
+	int ret = 0;
+
+	/* Note: MT9P031_GLOBAL_GAIN overwrites these registers */
+	ret = mt9p031_set_gain(mt9p031, MT9P031_GREEN1_GAIN, mt9p031->gain);
+	if (ret < 0) return ret;
+	ret = mt9p031_set_gain(mt9p031, MT9P031_GREEN2_GAIN, mt9p031->gain);
+	if (ret < 0) return ret;
+	ret = mt9p031_set_gain(mt9p031, MT9P031_RED_GAIN, mt9p031->gain * mt9p031->rbal / MT9P031_RB_BALANCE_DEF);
+	if (ret < 0) return ret;
+	ret = mt9p031_set_gain(mt9p031, MT9P031_BLUE_GAIN, mt9p031->gain * mt9p031->bbal / MT9P031_RB_BALANCE_DEF);
+	if (ret < 0) return ret;
+
+	return 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -573,7 +633,6 @@ static int mt9p031_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct mt9p031 *mt9p031 =
 			container_of(ctrl->handler, struct mt9p031, ctrls);
 	struct i2c_client *client = v4l2_get_subdevdata(&mt9p031->subdev);
-	u16 data;
 	int ret;
 
 	switch (ctrl->id) {
@@ -587,38 +646,16 @@ static int mt9p031_s_ctrl(struct v4l2_ctrl *ctrl)
 				     ctrl->val & 0xffff);
 
 	case V4L2_CID_GAIN:
-	case V4L2_CID_RED_BALANCE:
-	case V4L2_CID_BLUE_BALANCE:
-		/* Gain is controlled by 2 analog stages and a digital stage.
-		 * Valid values for the 3 stages are
-		 *
-		 * Stage                Min     Max     Step
-		 * ------------------------------------------
-		 * First analog stage   x1      x2      1
-		 * Second analog stage  x1      x4      0.125
-		 * Digital stage        x1      x16     0.125
-		 *
-		 * To minimize noise, the gain stages should be used in the
-		 * second analog stage, first analog stage, digital stage order.
-		 * Gain from a previous stage should be pushed to its maximum
-		 * value before the next stage is used.
-		 */
-		if (ctrl->val <= 32) {
-			data = ctrl->val;
-		} else if (ctrl->val <= 64) {
-			ctrl->val &= ~1;
-			data = (1 << 6) | (ctrl->val >> 1);
-		} else {
-			ctrl->val &= ~7;
-			data = ((ctrl->val - 64) << 5) | (1 << 6) | 32;
-		}
+		mt9p031->gain = ctrl->val;
+		return mt9p031_set_gains(mt9p031);
 
-		if (V4L2_CID_RED_BALANCE == ctrl->id)
-			return mt9p031_write(client, MT9P031_RED_GAIN, data);
-		else if (V4L2_CID_BLUE_BALANCE == ctrl->id)
-			return mt9p031_write(client, MT9P031_BLUE_GAIN, data);
-		else
-			return mt9p031_write(client, MT9P031_GLOBAL_GAIN, data);
+	case V4L2_CID_RED_BALANCE:
+		mt9p031->rbal = ctrl->val;
+		return mt9p031_set_gains(mt9p031);
+
+	case V4L2_CID_BLUE_BALANCE:
+		mt9p031->bbal = ctrl->val;
+		return mt9p031_set_gains(mt9p031);
 
 	case V4L2_CID_HFLIP:
 		if (ctrl->val)
@@ -867,6 +904,10 @@ static int mt9p031_probe(struct i2c_client *client,
 	mt9p031->output_control	= MT9P031_OUTPUT_CONTROL_DEF;
 	mt9p031->mode2 = MT9P031_READ_MODE_2_ROW_BLC;
 
+	mt9p031->gain = MT9P031_GAIN_DEF;
+	mt9p031->rbal = MT9P031_RB_BALANCE_DEF;
+	mt9p031->bbal = MT9P031_RB_BALANCE_DEF;
+
 	v4l2_ctrl_handler_init(&mt9p031->ctrls, ARRAY_SIZE(mt9p031_ctrls) + 4);
 
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
@@ -877,11 +918,11 @@ static int mt9p031_probe(struct i2c_client *client,
 			  V4L2_CID_GAIN, MT9P031_GAIN_MIN,
 			  MT9P031_GAIN_MAX, 1, MT9P031_GAIN_DEF);
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
-			  V4L2_CID_RED_BALANCE, MT9P031_GAIN_MIN,
-			  MT9P031_GAIN_MAX, 1, MT9P031_GAIN_DEF);
+			  V4L2_CID_RED_BALANCE, MT9P031_RB_BALANCE_MIN,
+			  MT9P031_RB_BALANCE_MAX, 1, MT9P031_RB_BALANCE_DEF);
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
-			  V4L2_CID_BLUE_BALANCE, MT9P031_GAIN_MIN,
-			  MT9P031_GAIN_MAX, 1, MT9P031_GAIN_DEF);
+			  V4L2_CID_BLUE_BALANCE, MT9P031_RB_BALANCE_MIN,
+			  MT9P031_RB_BALANCE_MAX, 1, MT9P031_RB_BALANCE_DEF);
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
 			  V4L2_CID_HFLIP, 0, 1, 1, 0);
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
