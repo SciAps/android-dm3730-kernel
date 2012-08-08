@@ -142,6 +142,7 @@ long gpsdrv_st_recv(void *arg, struct sk_buff *skb)
 {
 	struct gpsdrv_event_hdr gpsdrv_hdr = { 0x00, 0x0000 };
 	struct gpsdrv_data *hgps = (struct gpsdrv_data *)arg;
+	unsigned long flags;
 
 	/* SKB is NULL */
 	if (NULL == skb) {
@@ -180,23 +181,21 @@ long gpsdrv_st_recv(void *arg, struct sk_buff *skb)
 	 * if the opcode is GPS_CH9_OP_READ and get AI2 packet
 	 */
 	if (GPS_CH9_OP_READ == gpsdrv_hdr.opcode) {
-		spin_lock(&hgps->lock);
+		spin_lock_irqsave(&hgps->lock, flags);
 		skb_queue_tail(&hgps->rx_list, skb);
-		spin_unlock(&hgps->lock);
+		spin_unlock_irqrestore(&hgps->lock, flags);
 		wake_up_interruptible(&hgps->gpsdrv_data_q);
 	} else {
 		/* Copy Ch-9 info to local structure */
 		memcpy(&hgps->tx_count, skb->data, 1);
 		GPSDRV_VER(" Tx count = %x", hgps->tx_count);
 		/* Check if Tx queue and Tx count not empty */
-		spin_lock(&hgps->lock);
 		if ((0 != hgps->tx_count) && \
 			(!skb_queue_empty(&hgps->tx_list))) {
 			/* Schedule the Tx-task let */
 			GPSDRV_VER(" Scheduling tasklet to write");
 			tasklet_schedule(&hgps->gpsdrv_tx_tsklet);
 		}
-		spin_unlock(&hgps->lock);
 		/* Free the received command complete SKB */
 		kfree_skb(skb);
 	}
@@ -247,6 +246,7 @@ void gpsdrv_tsklet_write(unsigned long data)
 {
 	struct sk_buff *skb = NULL;
 	struct gpsdrv_data *hgps = (struct gpsdrv_data *)data;
+	unsigned long flags;
 
 	GPSDRV_DBG(" Inside %s", __func__);
 
@@ -260,9 +260,9 @@ void gpsdrv_tsklet_write(unsigned long data)
 	/* hgps->tx_list not empty skb already present
 	 * dequeue the tx-data and perform a st_write
 	 */
-	spin_lock(&hgps->lock);
+	spin_lock_irqsave(&hgps->lock, flags);
 	skb = skb_dequeue(&hgps->tx_list);
-	spin_unlock(&hgps->lock);
+	spin_unlock_irqrestore(&hgps->lock, flags);
 	hgps->tx_count--;
 	hgps->st_write(skb);
 
@@ -500,6 +500,7 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 	struct sk_buff *skb = NULL;
 	unsigned long timeout = GPSDRV_READ_TIMEOUT;
 	struct gpsdrv_data *hgps;
+	unsigned long flags;
 
 	GPSDRV_DBG(" Inside %s", __func__);
 
@@ -528,9 +529,9 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 	}
 
 	/* hgps->rx_list not empty skb already present */
-	spin_lock(&hgps->lock);
+	spin_lock_irqsave(&hgps->lock, flags);
 	skb = skb_dequeue(&hgps->rx_list);
-	spin_unlock(&hgps->lock);
+	spin_unlock_irqrestore(&hgps->lock, flags);
 
 	if (!skb) {
 		GPSDRV_ERR("Dequed SKB is NULL?");
@@ -546,9 +547,9 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 		skb_pull(skb, size);
 
 		if (skb->len != 0) {
-			spin_lock(&hgps->lock);
+			spin_lock_irqsave(&hgps->lock, flags);
 			skb_queue_head(&hgps->rx_list, skb);
-			spin_unlock(&hgps->lock);
+			spin_unlock_irqrestore(&hgps->lock, flags);
 		}
 
 #ifdef DEBUG
@@ -567,10 +568,9 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 		if (copy_to_user(data, skb->data, skb->len)) {
 			GPSDRV_ERR(" Unable to copy to user space");
 			/* Queue the skb back to head */
-			spin_lock(&hgps->lock);
+			spin_lock_irqsave(&hgps->lock, flags);
 			skb_queue_head(&hgps->rx_list, skb);
-
-			spin_unlock(&hgps->lock);
+			spin_unlock_irqrestore(&hgps->lock, flags);
 			return GPS_ERR_CPY_TO_USR;
 		}
 	}
@@ -602,6 +602,7 @@ ssize_t gpsdrv_write(struct file *file, const char __user *data,
 	struct gpsdrv_event_hdr gpsdrv_hdr = { GPS_CH9_OP_WRITE, 0x0000 };
 	struct sk_buff *skb = NULL;
 	struct gpsdrv_data *hgps;
+	unsigned long flags;
 
 	GPSDRV_DBG(" Inside %s", __func__);
 	/* Validate input parameters */
@@ -665,10 +666,11 @@ ssize_t gpsdrv_write(struct file *file, const char __user *data,
 		if (skb_queue_empty(&hgps->tx_list)) {
 			hgps->st_write(skb);
 		} else {
-			spin_lock(&hgps->lock);
+			spin_lock_irqsave(&hgps->lock, flags);
 			skb_queue_tail(&hgps->tx_list, skb);
-			hgps->st_write(skb_dequeue(&hgps->tx_list));
-			spin_unlock(&hgps->lock);
+			skb = skb_dequeue(&hgps->tx_list);
+			spin_unlock_irqrestore(&hgps->lock, flags);
+			hgps->st_write(skb);
 		}
 		/* Check if Tx queue and Tx count not empty and
 		 * schedule wriet tsklet accordingly
@@ -681,9 +683,9 @@ ssize_t gpsdrv_write(struct file *file, const char __user *data,
 	} else {
 		/* Add it to TX queue */
 		GPSDRV_VER(" SKB added to Tx queue");
-		spin_lock(&hgps->lock);
+		spin_lock_irqsave(&hgps->lock, flags);
 		skb_queue_tail(&hgps->tx_list, skb);
-		spin_unlock(&hgps->lock);
+		spin_unlock_irqrestore(&hgps->lock, flags);
 	}
 
 	return size;
@@ -706,6 +708,7 @@ static long gpsdrv_ioctl(struct file *file,
 	struct sk_buff *skb = NULL;
 	int		retCode = GPS_SUCCESS;
 	struct gpsdrv_data *hgps;
+	unsigned long flags;
 
 	GPSDRV_DBG(" Inside %s", __func__);
 
@@ -726,7 +729,7 @@ static long gpsdrv_ioctl(struct file *file,
 	switch (cmd) {
 	case TCFLSH:
 		GPSDRV_VER(" IOCTL TCFLSH invoked with %ld argument", arg);
-		spin_lock(&hgps->lock);
+		spin_lock_irqsave(&hgps->lock, flags);
 		switch (arg) {
 		/* purge Rx/Tx SKB list queues depending on arg value */
 		case TCIFLUSH:
@@ -744,14 +747,14 @@ static long gpsdrv_ioctl(struct file *file,
 			retCode = 0;
 			break;
 		}
-		spin_unlock(&hgps->lock);
+		spin_unlock_irqrestore(&hgps->lock, flags);
 		break;
 	case FIONREAD:
 	/* Deque the SKB from the head if rx_list is not empty
 	* And update the argument with skb->len to provide amount of data
 	* available in the available SKB
 	*/
-		spin_lock(&hgps->lock);
+		spin_lock_irqsave(&hgps->lock, flags);
 		skb = skb_dequeue(&hgps->rx_list);
 		if (skb != NULL) {
 			*(unsigned int *)arg = skb->len;
@@ -761,7 +764,7 @@ static long gpsdrv_ioctl(struct file *file,
 			*(unsigned int *)arg = 0;
 		}
 		GPSDRV_DBG("returning %d\n", *(unsigned int *)arg);
-		spin_unlock(&hgps->lock);
+		spin_unlock_irqrestore(&hgps->lock, flags);
 		break;
 	default:
 		GPSDRV_DBG("Un-Identified IOCTL %d", cmd);
@@ -812,7 +815,7 @@ const struct file_operations gpsdrv_chrdev_ops = {
 	.open = gpsdrv_open,
 	.read = gpsdrv_read,
 	.write = gpsdrv_write,
-	.compat_ioctl = gpsdrv_ioctl,
+	.unlocked_ioctl = gpsdrv_ioctl,
 	.poll = gpsdrv_poll,
 	.release = gpsdrv_release,
 };
