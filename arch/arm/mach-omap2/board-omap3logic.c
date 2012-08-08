@@ -1942,6 +1942,43 @@ static void __init omap3logic_pm_init(void)
 	omap_pm_auto_ret(0);
 }
 
+#define PWR_P1_SW_EVENTS	0x10
+#define PWR_DEVOFF			(1<<0)
+#define REMAP_OFFSET		2
+
+static void omap3logic_poweroff(void)
+{
+	u8 val;
+	int err;
+	printk(KERN_INFO "twl4030_poweroff()\n");
+
+	// We need to power off the Cinterion modem or it uses power
+	// while we're off.
+	gpio_set_value(156, 0);
+	gpio_set_value(158, 1);
+
+	udelay(1000);
+
+	err = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &val,
+						 PWR_P1_SW_EVENTS);
+	if (err) {
+			printk(KERN_WARNING "I2C error %d while reading TWL4030"
+				  "PM_MASTER P1_SW_EVENTS\n", err);
+			return ;
+	}
+
+	val |= PWR_DEVOFF;
+
+	err = twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER, val,
+						  PWR_P1_SW_EVENTS);
+
+	if (err) {
+			printk(KERN_WARNING "I2C error %d while writing TWL4030"
+				  "PM_MASTER P1_SW_EVENTS\n", err);
+			return ;
+	}
+}
+
 static void __init omap3logic_init(void)
 {
 	struct omap_board_data bdata;
@@ -1949,6 +1986,8 @@ static void __init omap3logic_init(void)
 	/* hang on start if "hang" is on command line */
 	while (omap3logic_hang)
 		;
+
+	pm_power_off = omap3logic_poweroff;
 
 	/* Pick the right MUX table based on the machine */
 	if (machine_is_dm3730_som_lv() || machine_is_dm3730_torpedo())
