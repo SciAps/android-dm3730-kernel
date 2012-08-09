@@ -1176,31 +1176,38 @@ static void omap3torpedo_fix_pbias_voltage(void)
 		/* Set the bias for the pin */
 		reg = omap_ctrl_readl(control_pbias_offset);
 
-		reg &= ~OMAP343X_PBIASLITEPWRDNZ1;
-		omap_ctrl_writel(reg, control_pbias_offset);
+		if(!(reg & OMAP343X_PBIASLITEPWRDNZ1) ||
+		   (!!(reg & OMAP343X_PBIASLITESUPPLY_HIGH1) !=
+		    !!(reg & OMAP343X_PBIASLITEVMODE1)))
+		{
+			reg &= ~OMAP343X_PBIASLITEPWRDNZ1;
+			omap_ctrl_writel(reg, control_pbias_offset);
 
-		/* 100ms delay required for PBIAS configuration */
-		msleep(100);
+			/* 100ms delay required for PBIAS configuration */
+			msleep(100);
 
-		/* Set PBIASLITEVMODE1 appropriately */
-		if (reg & OMAP343X_PBIASLITESUPPLY_HIGH1)
-			reg |= OMAP343X_PBIASLITEVMODE1;
-		else
-			reg &= ~OMAP343X_PBIASLITEVMODE1;
+			/* Set PBIASLITEVMODE1 appropriately */
+			if (reg & OMAP343X_PBIASLITESUPPLY_HIGH1)
+				reg |= OMAP343X_PBIASLITEVMODE1;
+			else
+				reg &= ~OMAP343X_PBIASLITEVMODE1;
 
-		reg |= OMAP343X_PBIASLITEPWRDNZ1;
+			reg |= OMAP343X_PBIASLITEPWRDNZ1;
 
-		omap_ctrl_writel(reg, control_pbias_offset);
+			omap_ctrl_writel(reg, control_pbias_offset);
 
-		/* Wait for pbias to match up */
-		timeout = jiffies + msecs_to_jiffies(5);
-		do {
-			reg = omap_ctrl_readl(control_pbias_offset);
-			if (!(reg & OMAP343X_PBIASLITEVMODEERROR1))
-				break;
-		} while (!time_after(jiffies, timeout));
-		if (reg & OMAP343X_PBIASLITEVMODEERROR1)
-			printk("%s: Error - VMODE1 doesn't matchup to supply!\n", __FUNCTION__);
+			/* Wait for pbias to match up */
+			timeout = jiffies + msecs_to_jiffies(5);
+			do {
+				reg = omap_ctrl_readl(control_pbias_offset);
+				if (!(reg & OMAP343X_PBIASLITEVMODEERROR1))
+					break;
+			} while (!time_after(jiffies, timeout));
+			if (reg & OMAP343X_PBIASLITEVMODEERROR1)
+				printk("%s: Error - VMODE1 doesn't matchup to supply!\n", __FUNCTION__);
+		} else {
+			printk(KERN_INFO "Skipping fix pbias voltage - already set properly\n");
+		}
 
 		/* For DM3730, turn on GPIO_IO_PWRDNZ to connect input pads*/
 		if (cpu_is_omap3630()) {
