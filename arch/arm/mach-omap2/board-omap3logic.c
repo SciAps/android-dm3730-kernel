@@ -1887,7 +1887,7 @@ static void __init omap3logic_opp_init(void)
 			return;
 		}
 
-#if CONFIG_OMAP3LOGIC_OPP_1GHZ
+#ifdef CONFIG_OMAP3LOGIC_OPP_1GHZ
 		/* Enable MPU 1GHz opp */
 		ret |= opp_enable(mpu_dev, 1000000000);
 		/* MPU 1GHz requires:                                   */
@@ -1909,7 +1909,7 @@ static void __init omap3logic_opp_init(void)
 			opp_disable(iva_dev, 800000000);
 		}
 #endif
-#if CONFIG_OMAP3LOGIC_OPP_800MHZ
+#ifdef CONFIG_OMAP3LOGIC_OPP_800MHZ
 		/* Enable MPU 800MHz opp */
 		ret |= opp_enable(mpu_dev, 800000000);
 		/* MPU 800MHz requires:                                   */
