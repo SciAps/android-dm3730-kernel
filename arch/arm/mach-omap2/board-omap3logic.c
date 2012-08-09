@@ -368,17 +368,23 @@ static void omap3logic_led_init(void)
 	int gpio_led2 = -EINVAL;
 
 	if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 		if (!omap3logic_twl_gpio_base) {
 			printk(KERN_ERR "Huh?!? twl4030_gpio_base not set!\n");
 			return;
 		}
+#endif
 		/* baseboard LEDs are MCSPIO2_SOMI, MCSPOI2_SIMO */
 		gpio_led1 = GPIO_LED1_TORPEDO;
 		gpio_led2 = GPIO_LED2_TORPEDO;
 
 		/* twl4030 ledA is the LED on the module */
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 		omap3logic_leds[2].gpio = omap3logic_twl_gpio_base + TWL4030_GPIO_MAX + 0;
 		omap3logic_led_data.num_leds = 3;
+#else
+		omap3logic_led_data.num_leds = 2;
+#endif
 	} else if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		gpio_led1 = GPIO_LED1_SOM_LV;
 		omap3logic_leds[0].active_low = true;
@@ -389,11 +395,15 @@ static void omap3logic_led_init(void)
 		omap3logic_led_data.num_leds = 2;
 	}
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	if (gpio_led1 < omap3logic_twl_gpio_base)
+#endif
 		omap_mux_init_gpio(gpio_led1, OMAP_PIN_OUTPUT);
 	omap3logic_leds[0].gpio = gpio_led1;
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	if (gpio_led2 < omap3logic_twl_gpio_base)
+#endif
 		omap_mux_init_gpio(gpio_led2, OMAP_PIN_OUTPUT);
 	omap3logic_leds[1].gpio = gpio_led2;
 
@@ -487,7 +497,9 @@ static int omap3logic_twl_gpio_setup(struct device *dev,
 {
 	omap3logic_twl_gpio_base = gpio;
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	omap3logic_led_init();
+#endif
 	omap3logic_gpio_key_init(gpio);
 
 	return 0;
@@ -2083,6 +2095,9 @@ static void __init omap3logic_init(void)
 #if defined(CONFIG_VIDEO_OMAP3)
 	dm3730logic_camera_init();
 	omap3_init_camera(&omap3logic_isp_platform_data);
+#endif
+#if !(defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE))
+	omap3logic_led_init();
 #endif
 }
 
