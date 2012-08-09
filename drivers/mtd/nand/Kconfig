@@ -128,6 +128,15 @@ config MTD_NAND_OMAP2
 	help
           Support for NAND flash on Texas Instruments OMAP2 and OMAP3 platforms.
 
+config MTD_NAND_OMAP2_BBT
+	bool "Enable BBT support on OMAP2"
+	depends on MTD_NAND_OMAP2
+	help
+	  Enables scanning for the bad block table on the OMAP2 NAND flash.
+	  This does require that you leave extra room at the end of flash
+	  for your partitions.  Additionally, this saves time during the
+	  second and subsequent boots.
+
 config MTD_NAND_IDS
 	tristate
 

@@ -105,7 +105,11 @@ static struct nand_ecclayout omap_oobinfo;
  */
 static uint8_t scan_ff_pattern[] = { 0xff };
 static struct nand_bbt_descr bb_descrip_x8_flashbased = {
+#ifdef CONFIG_MTD_NAND_OMAP2_BBT
+	.options = NAND_BBT_SCANEMPTY,
+#else
 	.options = NAND_BBT_SCANEMPTY | NAND_BBT_SCANALLPAGES,
+#endif
 	.offs = 0,
 	.len = 1,
 	.pattern = scan_ff_pattern,
@@ -113,7 +117,11 @@ static struct nand_bbt_descr bb_descrip_x8_flashbased = {
 
 static uint8_t scan_ffff_pattern[] = { 0xff, 0xff };
 static struct nand_bbt_descr bb_descrip_x16_flashbased = {
+#ifdef CONFIG_MTD_NAND_OMAP2_BBT
+	.options = NAND_BBT_SCANEMPTY,
+#else
 	.options = NAND_BBT_SCANEMPTY | NAND_BBT_SCANALLPAGES,
+#endif
 	.offs = 0,
 	.len = 2,
 	.pattern = scan_ffff_pattern,
@@ -1107,7 +1115,11 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	info->mtd.owner		= THIS_MODULE;
 
 	info->nand.options	= pdata->devsize;
+#ifdef CONFIG_MTD_NAND_OMAP2_BBT
+	info->nand.options	|= NAND_USE_FLASH_BBT | NAND_USE_FLASH_BBT_NO_OOB;
+#else
 	info->nand.options	|= NAND_SKIP_BBTSCAN;
+#endif
 
 	/* NAND write protect off */
 	gpmc_cs_configure(info->gpmc_cs, GPMC_CONFIG_WP, 0);
