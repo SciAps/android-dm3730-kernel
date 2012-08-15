@@ -242,6 +242,60 @@ static struct regulator_init_data omap3logic_vmmc3 = {
 	.consumer_supplies = &omap3logic_vmmc3_supply,
 };
 
+static struct regulator_consumer_supply omap3_vdd1_supply[] = {
+	REGULATOR_SUPPLY("vcc", "mpu.0"),
+};
+
+static struct regulator_consumer_supply omap3_vdd2_supply[] = {
+	REGULATOR_SUPPLY("vcc", "l3_main.0"),
+};
+
+static int twl_set_voltage(void *data, int target_uV)
+{
+        struct voltagedomain *voltdm = (struct voltagedomain *)data;
+        return omap_voltage_scale_vdd(voltdm, target_uV);
+}
+
+static int twl_get_voltage(void *data)
+{
+        struct voltagedomain *voltdm = (struct voltagedomain *)data;
+        return omap_vp_get_curr_volt(voltdm);
+}
+
+static struct twl_regulator_driver_data omap3_vdd1_drvdata = {
+        .get_voltage = twl_get_voltage,
+        .set_voltage = twl_set_voltage,
+};
+
+static struct twl_regulator_driver_data omap3_vdd2_drvdata = {
+        .get_voltage = twl_get_voltage,
+        .set_voltage = twl_set_voltage,
+};
+
+static struct regulator_init_data omap3_vdd1 = {
+	.constraints = {
+		.name                   = "vdd_mpu_iva",
+		.min_uV                 = 600000,
+		.max_uV                 = 1450000,
+		.valid_modes_mask       = REGULATOR_MODE_NORMAL,
+		.valid_ops_mask         = REGULATOR_CHANGE_VOLTAGE,
+	},
+	.num_consumer_supplies          = ARRAY_SIZE(omap3_vdd1_supply),
+	.consumer_supplies              = omap3_vdd1_supply,
+};
+
+static struct regulator_init_data omap3_vdd2 = {
+	.constraints = {
+		.name                   = "vdd_core",
+		.min_uV                 = 600000,
+		.max_uV                 = 1450000,
+		.valid_modes_mask       = REGULATOR_MODE_NORMAL,
+		.valid_ops_mask         = REGULATOR_CHANGE_VOLTAGE,
+	},
+	.num_consumer_supplies          = ARRAY_SIZE(omap3_vdd2_supply),
+	.consumer_supplies              = omap3_vdd2_supply,
+};
+
 #define OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO 3
 #define OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO 2
 #define OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO 157
@@ -774,6 +828,8 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vdac           = &omap3logic_vdac,
 	.vpll2          = &omap3logic_vpll2,
 #endif
+	.vdd1		= &omap3_vdd1,
+	.vdd2		= &omap3_vdd2,
 };
 
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -974,7 +1030,14 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 
 static int __init omap3logic_i2c_init(void)
 {
+	omap3_vdd1.driver_data = &omap3_vdd1_drvdata;
+	omap3_vdd1_drvdata.data = omap_voltage_domain_lookup("mpu");
+
+	omap3_vdd2.driver_data = &omap3_vdd2_drvdata;
+	omap3_vdd2_drvdata.data = omap_voltage_domain_lookup("core");
+
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
+
 	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
 			ARRAY_SIZE(omap3logic_i2c3_boardinfo));

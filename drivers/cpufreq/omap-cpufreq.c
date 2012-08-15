@@ -39,7 +39,7 @@
 #include <mach/hardware.h>
 
 /* OPP tolerance in percentage */
-#define	OPP_TOLERANCE	4
+#define	OPP_TOLERANCE	0
 
 #ifdef CONFIG_SMP
 struct lpj_info {
