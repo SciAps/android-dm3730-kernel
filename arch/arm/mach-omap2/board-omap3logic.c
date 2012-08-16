@@ -253,13 +253,13 @@ static struct regulator_consumer_supply omap3_vdd2_supply[] = {
 static int twl_set_voltage(void *data, int target_uV)
 {
         struct voltagedomain *voltdm = (struct voltagedomain *)data;
-        return omap_voltage_scale_vdd(voltdm, target_uV);
+	return voltdm_scale(voltdm, target_uV);
 }
 
 static int twl_get_voltage(void *data)
 {
         struct voltagedomain *voltdm = (struct voltagedomain *)data;
-        return omap_vp_get_curr_volt(voltdm);
+	return voltdm_get_voltage(voltdm);
 }
 
 static struct twl_regulator_driver_data omap3_vdd1_drvdata = {
@@ -1031,10 +1031,10 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 static int __init omap3logic_i2c_init(void)
 {
 	omap3_vdd1.driver_data = &omap3_vdd1_drvdata;
-	omap3_vdd1_drvdata.data = omap_voltage_domain_lookup("mpu");
+	omap3_vdd1_drvdata.data = voltdm_lookup("mpu_iva");
 
 	omap3_vdd2.driver_data = &omap3_vdd2_drvdata;
-	omap3_vdd2_drvdata.data = omap_voltage_domain_lookup("core");
+	omap3_vdd2_drvdata.data = voltdm_lookup("core");
 
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
 
