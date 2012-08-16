@@ -243,6 +243,60 @@ static struct regulator_init_data omap3logic_vmmc3 = {
 	.consumer_supplies = &omap3logic_vmmc3_supply,
 };
 
+static struct regulator_consumer_supply omap3_vdd1_supply[] = {
+	REGULATOR_SUPPLY("vcc", "mpu.0"),
+};
+
+static struct regulator_consumer_supply omap3_vdd2_supply[] = {
+	REGULATOR_SUPPLY("vcc", "l3_main.0"),
+};
+
+static int twl_set_voltage(void *data, int target_uV)
+{
+        struct voltagedomain *voltdm = (struct voltagedomain *)data;
+	return voltdm_scale(voltdm, target_uV);
+}
+
+static int twl_get_voltage(void *data)
+{
+        struct voltagedomain *voltdm = (struct voltagedomain *)data;
+	return voltdm_get_voltage(voltdm);
+}
+
+static struct twl_regulator_driver_data omap3_vdd1_drvdata = {
+        .get_voltage = twl_get_voltage,
+        .set_voltage = twl_set_voltage,
+};
+
+static struct twl_regulator_driver_data omap3_vdd2_drvdata = {
+        .get_voltage = twl_get_voltage,
+        .set_voltage = twl_set_voltage,
+};
+
+static struct regulator_init_data omap3_vdd1 = {
+	.constraints = {
+		.name                   = "vdd_mpu_iva",
+		.min_uV                 = 600000,
+		.max_uV                 = 1450000,
+		.valid_modes_mask       = REGULATOR_MODE_NORMAL,
+		.valid_ops_mask         = REGULATOR_CHANGE_VOLTAGE,
+	},
+	.num_consumer_supplies          = ARRAY_SIZE(omap3_vdd1_supply),
+	.consumer_supplies              = omap3_vdd1_supply,
+};
+
+static struct regulator_init_data omap3_vdd2 = {
+	.constraints = {
+		.name                   = "vdd_core",
+		.min_uV                 = 600000,
+		.max_uV                 = 1450000,
+		.valid_modes_mask       = REGULATOR_MODE_NORMAL,
+		.valid_ops_mask         = REGULATOR_CHANGE_VOLTAGE,
+	},
+	.num_consumer_supplies          = ARRAY_SIZE(omap3_vdd2_supply),
+	.consumer_supplies              = omap3_vdd2_supply,
+};
+
 #define OMAP3LOGIC_WLAN_SOM_LV_PMENA_GPIO 3
 #define OMAP3LOGIC_WLAN_SOM_LV_IRQ_GPIO 2
 #define OMAP3LOGIC_WLAN_TORPEDO_PMENA_GPIO 157
@@ -369,17 +423,23 @@ static void omap3logic_led_init(void)
 	int gpio_led2 = -EINVAL;
 
 	if (machine_is_omap3_torpedo() || machine_is_dm3730_torpedo()) {
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 		if (!omap3logic_twl_gpio_base) {
 			printk(KERN_ERR "Huh?!? twl4030_gpio_base not set!\n");
 			return;
 		}
+#endif
 		/* baseboard LEDs are MCSPIO2_SOMI, MCSPOI2_SIMO */
 		gpio_led1 = GPIO_LED1_TORPEDO;
 		gpio_led2 = GPIO_LED2_TORPEDO;
 
 		/* twl4030 ledA is the LED on the module */
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 		omap3logic_leds[2].gpio = omap3logic_twl_gpio_base + TWL4030_GPIO_MAX + 0;
 		omap3logic_led_data.num_leds = 3;
+#else
+		omap3logic_led_data.num_leds = 2;
+#endif
 	} else if (machine_is_omap3530_lv_som() || machine_is_dm3730_som_lv()) {
 		gpio_led1 = GPIO_LED1_SOM_LV;
 		omap3logic_leds[0].active_low = true;
@@ -390,11 +450,15 @@ static void omap3logic_led_init(void)
 		omap3logic_led_data.num_leds = 2;
 	}
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	if (gpio_led1 < omap3logic_twl_gpio_base)
+#endif
 		omap_mux_init_gpio(gpio_led1, OMAP_PIN_OUTPUT);
 	omap3logic_leds[0].gpio = gpio_led1;
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	if (gpio_led2 < omap3logic_twl_gpio_base)
+#endif
 		omap_mux_init_gpio(gpio_led2, OMAP_PIN_OUTPUT);
 	omap3logic_leds[1].gpio = gpio_led2;
 
@@ -488,7 +552,9 @@ static int omap3logic_twl_gpio_setup(struct device *dev,
 {
 	omap3logic_twl_gpio_base = gpio;
 
+#if defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE)
 	omap3logic_led_init();
+#endif
 	omap3logic_gpio_key_init(gpio);
 
 	return 0;
@@ -763,6 +829,8 @@ static struct twl4030_platform_data omap3logic_twldata = {
 	.vdac           = &omap3logic_vdac,
 	.vpll2          = &omap3logic_vpll2,
 #endif
+	.vdd1		= &omap3_vdd1,
+	.vdd2		= &omap3_vdd2,
 };
 
 #ifdef CONFIG_TOUCHSCREEN_TSC2004
@@ -963,7 +1031,14 @@ static struct i2c_board_info __initdata omap3logic_i2c3_boardinfo[] = {
 
 static int __init omap3logic_i2c_init(void)
 {
+	omap3_vdd1.driver_data = &omap3_vdd1_drvdata;
+	omap3_vdd1_drvdata.data = voltdm_lookup("mpu_iva");
+
+	omap3_vdd2.driver_data = &omap3_vdd2_drvdata;
+	omap3_vdd2_drvdata.data = voltdm_lookup("core");
+
 	omap3_pmic_init("twl4030", &omap3logic_twldata);
+
 	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, omap3logic_i2c3_boardinfo,
 			ARRAY_SIZE(omap3logic_i2c3_boardinfo));
@@ -1177,31 +1252,38 @@ static void omap3torpedo_fix_pbias_voltage(void)
 		/* Set the bias for the pin */
 		reg = omap_ctrl_readl(control_pbias_offset);
 
-		reg &= ~OMAP343X_PBIASLITEPWRDNZ1;
-		omap_ctrl_writel(reg, control_pbias_offset);
+		if(!(reg & OMAP343X_PBIASLITEPWRDNZ1) ||
+		   (!!(reg & OMAP343X_PBIASLITESUPPLY_HIGH1) !=
+		    !!(reg & OMAP343X_PBIASLITEVMODE1)))
+		{
+			reg &= ~OMAP343X_PBIASLITEPWRDNZ1;
+			omap_ctrl_writel(reg, control_pbias_offset);
 
-		/* 100ms delay required for PBIAS configuration */
-		msleep(100);
+			/* 100ms delay required for PBIAS configuration */
+			msleep(100);
 
-		/* Set PBIASLITEVMODE1 appropriately */
-		if (reg & OMAP343X_PBIASLITESUPPLY_HIGH1)
-			reg |= OMAP343X_PBIASLITEVMODE1;
-		else
-			reg &= ~OMAP343X_PBIASLITEVMODE1;
+			/* Set PBIASLITEVMODE1 appropriately */
+			if (reg & OMAP343X_PBIASLITESUPPLY_HIGH1)
+				reg |= OMAP343X_PBIASLITEVMODE1;
+			else
+				reg &= ~OMAP343X_PBIASLITEVMODE1;
 
-		reg |= OMAP343X_PBIASLITEPWRDNZ1;
+			reg |= OMAP343X_PBIASLITEPWRDNZ1;
 
-		omap_ctrl_writel(reg, control_pbias_offset);
+			omap_ctrl_writel(reg, control_pbias_offset);
 
-		/* Wait for pbias to match up */
-		timeout = jiffies + msecs_to_jiffies(5);
-		do {
-			reg = omap_ctrl_readl(control_pbias_offset);
-			if (!(reg & OMAP343X_PBIASLITEVMODEERROR1))
-				break;
-		} while (!time_after(jiffies, timeout));
-		if (reg & OMAP343X_PBIASLITEVMODEERROR1)
-			printk("%s: Error - VMODE1 doesn't matchup to supply!\n", __FUNCTION__);
+			/* Wait for pbias to match up */
+			timeout = jiffies + msecs_to_jiffies(5);
+			do {
+				reg = omap_ctrl_readl(control_pbias_offset);
+				if (!(reg & OMAP343X_PBIASLITEVMODEERROR1))
+					break;
+			} while (!time_after(jiffies, timeout));
+			if (reg & OMAP343X_PBIASLITEVMODEERROR1)
+				printk("%s: Error - VMODE1 doesn't matchup to supply!\n", __FUNCTION__);
+		} else {
+			printk(KERN_INFO "Skipping fix pbias voltage - already set properly\n");
+		}
 
 		/* For DM3730, turn on GPIO_IO_PWRDNZ to connect input pads*/
 		if (cpu_is_omap3630()) {
@@ -1902,7 +1984,7 @@ static void __init omap3logic_opp_init(void)
 			return;
 		}
 
-#if CONFIG_OMAP3LOGIC_OPP_1GHZ
+#ifdef CONFIG_OMAP3LOGIC_OPP_1GHZ
 		/* Enable MPU 1GHz opp */
 		ret |= opp_enable(mpu_dev, 1000000000);
 		/* MPU 1GHz requires:                                   */
@@ -1924,7 +2006,7 @@ static void __init omap3logic_opp_init(void)
 			opp_disable(iva_dev, 800000000);
 		}
 #endif
-#if CONFIG_OMAP3LOGIC_OPP_800MHZ
+#ifdef CONFIG_OMAP3LOGIC_OPP_800MHZ
 		/* Enable MPU 800MHz opp */
 		ret |= opp_enable(mpu_dev, 800000000);
 		/* MPU 800MHz requires:                                   */
@@ -2100,6 +2182,9 @@ static void __init omap3logic_init(void)
 #if defined(CONFIG_VIDEO_OMAP3)
 	dm3730logic_camera_init();
 	omap3_init_camera(&omap3logic_isp_platform_data);
+#endif
+#if !(defined(CONFIG_GPIO_TWL4030) || defined(CONFIG_GPIO_TWL4030_MODULE))
+	omap3logic_led_init();
 #endif
 }
 

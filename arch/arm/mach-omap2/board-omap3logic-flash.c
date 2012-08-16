@@ -145,7 +145,7 @@ static struct mtd_partition omap3logic_nand_partitions[] = {
 
 };
 
-#ifdef CONFIG_MTD_NAND_OMAP2
+#if defined(CONFIG_MTD_NAND_OMAP2) || defined(CONFIG_MTD_NAND_OMAP2_MODULE)
 static int omap3logic_use_soft_bch;
 static int __init omap3logic_soft_bch_option(char *str)
 {

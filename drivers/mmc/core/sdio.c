@@ -884,6 +884,13 @@ int mmc_attach_sdio(struct mmc_host *host)
 	}
 
 	/*
+	 * Keep card powered throughout adding the functions below
+	 * This saves time during initialization
+         */
+	if (host->caps & MMC_CAP_POWER_OFF_CARD)
+		pm_runtime_get_sync(&card->dev);
+
+	/*
 	 * First add the card to the driver model...
 	 */
 	mmc_release_host(host);
@@ -899,6 +906,9 @@ int mmc_attach_sdio(struct mmc_host *host)
 		if (err)
 			goto remove_added;
 	}
+
+	if (host->caps & MMC_CAP_POWER_OFF_CARD)
+		pm_runtime_put(&card->dev);
 
 	mmc_claim_host(host);
 	return 0;

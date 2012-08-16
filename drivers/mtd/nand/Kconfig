@@ -152,6 +152,16 @@ config MTD_NAND_OMAP_PREFETCH_DMA
 	 or in DMA interrupt mode.
 	 Say y for DMA mode or MPU mode will be used
 
+config MTD_NAND_OMAP2_BBT
+	bool "Enable BBT support on OMAP2"
+	depends on MTD_NAND_OMAP2
+	default n
+	help
+	  Enables scanning for the bad block table on the OMAP2 NAND flash.
+	  This does require that you leave extra room at the end of flash
+	  for your partitions.  Additionally, this saves time during the
+	  second and subsequent boots.
+
 config MTD_NAND_IDS
 	tristate
 
