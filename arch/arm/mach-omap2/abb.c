@@ -25,7 +25,7 @@
  * then clear appropriate PRM_IRQSTATUS bit, transition ldo and then clear
  * PRM_IRQSTATUS bit again.  Returns 0 on success, -EERROR otherwise.
  */
-int omap_abb_set_opp(struct voltagedomain *voltdm)
+int omap_abb_set_opp(struct voltagedomain *voltdm, unsigned long target_volt)
 {
 	struct omap_abb_instance *abb = voltdm->abb;
 	struct omap_volt_data *volt_data;
@@ -33,7 +33,7 @@ int omap_abb_set_opp(struct voltagedomain *voltdm)
 	u8 opp_sel;
 
 	/* fetch the ABB ldo OPP_SEL value for the new voltage */
-	volt_data = omap_voltage_get_voltdata(voltdm, voltdm->curr_volt);
+	volt_data = omap_voltage_get_voltdata(voltdm, target_volt);
 
 	if (IS_ERR_OR_NULL(volt_data))
 		return -EINVAL;

@@ -181,7 +181,7 @@ int omap_vp_forceupdate_scale(struct voltagedomain *voltdm,
 
 	/* transition Adaptive Body-Bias LDO */
 	if (voltdm->abb)
-		ret = omap_abb_set_opp(voltdm);
+		ret = omap_abb_set_opp(voltdm, target_volt);
 
 	return ret;
 }
