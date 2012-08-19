@@ -13,7 +13,7 @@
 
 #define ONCHIP_MTD_DEBUG_LEVEL	MTD_DEBUG_LEVEL4
 
-static void micron_set_features(struct mtd_info *mtd, uint8_t faddr,
+/* static */ void micron_set_features(struct mtd_info *mtd, uint8_t faddr,
 				uint8_t *features)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -51,7 +51,7 @@ static void micron_set_features(struct mtd_info *mtd, uint8_t faddr,
 		features[0], features[1], features[2], features[3]);
 }
 
-static void micron_get_features(struct mtd_info *mtd, uint8_t faddr,
+/* static */ void micron_get_features(struct mtd_info *mtd, uint8_t faddr,
 				uint8_t *features)
 {
 	struct nand_chip *chip = mtd->priv;

@@ -3395,6 +3395,11 @@ int nand_scan_tail(struct mtd_info *mtd)
 	if (!chip->write_page)
 		chip->write_page = nand_write_page;
 
+#if 1
+	/* Forcibly disable in-chip ECC */
+	nand_onchip_enable_ecc(mtd, 0);
+#endif
+
 	/*
 	 * check ECC mode, default to software if 3byte/512byte hardware ECC is
 	 * selected and we have 256 byte pagesize fallback to software ECC
@@ -3531,7 +3536,6 @@ int nand_scan_tail(struct mtd_info *mtd)
 
 		chip->chip_delay = 100;
 
-		nand_onchip_enable_ecc(mtd, 1);
 		break;
 
 	case NAND_ECC_NONE:
