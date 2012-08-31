@@ -253,7 +253,20 @@ static struct regulator_consumer_supply omap3_vdd2_supply[] = {
 static int twl_set_voltage(void *data, int target_uV)
 {
         struct voltagedomain *voltdm = (struct voltagedomain *)data;
-	return voltdm_scale(voltdm, target_uV);
+	int retval = 0;
+
+	/* Disable voltage processor Module */	
+	/* Disable SmartReflex Module */
+	omap_sr_disable(voltdm);
+	
+	/* Force SMSPS voltage update using FORCEUPDATE bit of the voltage processor */	
+	retval = voltdm_scale(voltdm, target_uV);
+	
+	/* Enable voltage processor Module */	
+	/* Enable SmartReflex Module */
+	omap_sr_enable(voltdm);
+	
+	return retval;
 }
 
 static int twl_get_voltage(void *data)
@@ -1970,7 +1983,6 @@ static void __init omap3logic_opp_init(void)
 		/*       - Adaptive Body Bias (ABB)                     */
 		/*       - Operation restricted below 90C junction temp */
 		/* !! TODO: add 90C junction temp throttle service   */
-		/* !! TODO: add ABB   */
 		
 		/* Enable IVA 800Mhz opp */
 		ret |= opp_enable(iva_dev, 800000000);

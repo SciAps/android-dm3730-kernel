@@ -334,7 +334,14 @@ void __init omap_vc_init_channel(struct voltagedomain *voltdm)
 	voltdm->rmw(vc->smps_volra_mask,
 		    vc->volt_reg_addr << __ffs(vc->smps_volra_mask),
 		    vc->smps_volra_reg);
-	vc->cfg_channel |= vc_cfg_bits->rav;
+	
+#if defined(CONFIG_ARCH_OMAP3)
+	/* Identify if we are working with the first or second channel */
+	if (vc->cfg_channel_sa_shift == OMAP3430_PRM_VC_SMPS_SA_SA0_SHIFT)
+		vc->cfg_channel &= ~vc_cfg_bits->rav;  // Set pointer to first channel VOLRA0
+	else
+#endif		
+		vc->cfg_channel |= vc_cfg_bits->rav; // Set pointer to second channel VOLRA1
 
 	if (vc->cmd_reg_addr) {
 		voltdm->rmw(vc->smps_cmdra_mask,
