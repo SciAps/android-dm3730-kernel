@@ -270,7 +270,8 @@ void omap_vp_disable(struct voltagedomain *voltdm)
 	/*
 	 * Wait for VP idle Typical latency is <2us. Maximum latency is ~100us
 	 */
-	omap_test_timeout((voltdm->read(vp->vstatus)),
+	/* Reserved bits of prm_vpx_status are undefined, so we need to mask */
+	omap_test_timeout((voltdm->read(vp->vstatus) & 0x00000001),
 			  VP_IDLE_TIMEOUT, timeout);
 
 	if (timeout >= VP_IDLE_TIMEOUT)

@@ -149,10 +149,15 @@ struct omap_nand_info {
 		OMAP_NAND_IO_READ = 0,	/* read */
 		OMAP_NAND_IO_WRITE,	/* write */
 	} iomode;
-	u_char				*buf;
-	int					buf_len;
 	/* Buffer to hold page on read when correctable ECC error found;
 	 * read is done w/o ECC to count ECC corrected bits */
+	u_char				*buf;
+	int					buf_len;
+
+	/* Mutex and usecount to know when need to enable/disable
+	   in-chip ECC */
+//	struct mutex			usecount_lock;
+	int				usecount;
 };
 
 /**
@@ -168,8 +173,9 @@ struct omap_nand_info {
  */
 static void omap_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
 {
-	struct omap_nand_info *info = container_of(mtd,
-					struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 
 	if (cmd != NAND_CMD_NONE) {
 		if (ctrl & NAND_CLE)
@@ -204,8 +210,9 @@ static void omap_read_buf8(struct mtd_info *mtd, u_char *buf, int len)
  */
 static void omap_write_buf8(struct mtd_info *mtd, const u_char *buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	u_char *p = (u_char *)buf;
 	u32	status = 0;
 
@@ -239,8 +246,9 @@ static void omap_read_buf16(struct mtd_info *mtd, u_char *buf, int len)
  */
 static void omap_write_buf16(struct mtd_info *mtd, const u_char * buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	u16 *p = (u16 *) buf;
 	u32	status = 0;
 	/* FIXME try bursts of writesw() or DMA ... */
@@ -263,8 +271,9 @@ static void omap_write_buf16(struct mtd_info *mtd, const u_char * buf, int len)
  */
 static void omap_read_buf_pref(struct mtd_info *mtd, u_char *buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	uint32_t r_count = 0;
 	int ret = 0;
 	u32 *p = (u32 *)buf;
@@ -310,8 +319,9 @@ static void omap_read_buf_pref(struct mtd_info *mtd, u_char *buf, int len)
 static void omap_write_buf_pref(struct mtd_info *mtd,
 					const u_char *buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	uint32_t w_count = 0;
 	int i = 0, ret = 0;
 	u16 *p = (u16 *)buf;
@@ -373,8 +383,9 @@ static void omap_nand_dma_cb(int lch, u16 ch_status, void *data)
 static inline int omap_nand_dma_transfer(struct mtd_info *mtd, void *addr,
 					unsigned int len, int is_write)
 {
-	struct omap_nand_info *info = container_of(mtd,
-					struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	enum dma_data_direction dir = is_write ? DMA_TO_DEVICE :
 							DMA_FROM_DEVICE;
 	dma_addr_t dma_addr;
@@ -546,8 +557,9 @@ done:
  */
 static void omap_read_buf_irq_pref(struct mtd_info *mtd, u_char *buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	int ret = 0;
 
 	if (len <= mtd->oobsize) {
@@ -594,8 +606,9 @@ out_copy:
 static void omap_write_buf_irq_pref(struct mtd_info *mtd,
 					const u_char *buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd,
-						struct omap_nand_info, mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	int ret = 0;
 	unsigned long tim, limit;
 
@@ -647,8 +660,9 @@ out_copy:
  */
 static int omap_verify_buf(struct mtd_info *mtd, const u_char * buf, int len)
 {
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	u16 *p = (u16 *) buf;
 
 	len >>= 1;
@@ -825,8 +839,9 @@ static int omap_compare_ecc(u8 *ecc_data1,	/* read from NAND memory */
 static int omap_correct_data(struct mtd_info *mtd, u_char *dat,
 				u_char *read_ecc, u_char *calc_ecc)
 {
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	int blockCnt = 0, i = 0, ret = 0;
 	int stat = 0;
 
@@ -867,8 +882,9 @@ static int omap_correct_data(struct mtd_info *mtd, u_char *dat,
 static int omap_calculate_ecc(struct mtd_info *mtd, const u_char *dat,
 				u_char *ecc_code)
 {
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	return gpmc_calculate_ecc(info->gpmc_cs, dat, ecc_code);
 }
 
@@ -879,9 +895,9 @@ static int omap_calculate_ecc(struct mtd_info *mtd, const u_char *dat,
  */
 static void omap_enable_hwecc(struct mtd_info *mtd, int mode)
 {
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
 	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 	unsigned int dev_width = (chip->options & NAND_BUSWIDTH_16) ? 1 : 0;
 
 	gpmc_enable_hwecc(info->gpmc_cs, mode, dev_width, info->nand.ecc.size);
@@ -902,10 +918,10 @@ static void omap_enable_hwecc(struct mtd_info *mtd, int mode)
 static int omap_wait(struct mtd_info *mtd, struct nand_chip *chip)
 {
 	struct nand_chip *this = mtd->priv;
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct omap_nand_info *info = container_of(this, struct omap_nand_info,
+							nand);
 	unsigned long timeo = jiffies;
-	int status = NAND_STATUS_FAIL, state = this->state;
+	int status = NAND_STATUS_FAIL, state = chip->state;
 
 	if (state == FL_ERASING)
 		timeo += (HZ * 400) / 1000;
@@ -930,8 +946,9 @@ static int omap_wait(struct mtd_info *mtd, struct nand_chip *chip)
 static int omap_dev_ready(struct mtd_info *mtd)
 {
 	unsigned int val = 0;
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 
 	val = gpmc_read_status(GPMC_GET_IRQ_STATUS);
 	if ((val & 0x100) == 0x100) {
@@ -1085,6 +1102,45 @@ int micron_nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 }
 #endif
 
+static int omap_nand_get_device(struct mtd_info *mtd)
+{
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
+	spin_lock(&info->nand.controller->lock);
+	if (info->usecount++ == 0) {
+		/* First use */
+		if (chip->ecc.mode == NAND_ECC_HW_CHIP) {
+//			printk("%s: Enable in-chip ECC!\n", __FUNCTION__);
+			nand_onchip_enable_ecc(mtd, 1);
+		}
+	}
+
+	spin_unlock(&info->nand.controller->lock);
+	return 0;
+}
+
+static void omap_nand_put_device(struct mtd_info *mtd)
+{
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
+	spin_lock(&info->nand.controller->lock);
+	if (--info->usecount == 0) {
+		/* Last use */
+		if (chip->ecc.mode == NAND_ECC_HW_CHIP) {
+//			printk("%s: Disable in-chip ECC!\n", __FUNCTION__);
+			nand_onchip_enable_ecc(mtd, 0);
+		}
+	}
+
+	module_put(THIS_MODULE);
+	spin_unlock(&info->nand.controller->lock);
+}
+
 static int __devinit omap_nand_probe(struct platform_device *pdev)
 {
 	struct omap_nand_info		*info;
@@ -1113,6 +1169,13 @@ static int __devinit omap_nand_probe(struct platform_device *pdev)
 	info->mtd.priv		= &info->nand;
 	info->mtd.name		= dev_name(&pdev->dev);
 	info->mtd.owner		= THIS_MODULE;
+
+	/* Track state of usage, to determine if device in use.
+	 * On first/last use enable/disable in-chip ECC (if needed) */
+	info->usecount = 0;
+//	mutex_init(&info->usecount_lock);
+	info->mtd.get_device	= omap_nand_get_device;
+	info->mtd.put_device	= omap_nand_put_device;
 
 	info->nand.options	= pdata->devsize;
 #ifdef CONFIG_MTD_NAND_OMAP2_BBT
@@ -1296,8 +1359,9 @@ out_free_info:
 static int omap_nand_remove(struct platform_device *pdev)
 {
 	struct mtd_info *mtd = platform_get_drvdata(pdev);
-	struct omap_nand_info *info = container_of(mtd, struct omap_nand_info,
-							mtd);
+	struct nand_chip *chip = mtd->priv;
+	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
+							nand);
 
 	platform_set_drvdata(pdev, NULL);
 	if (info->dma_ch != -1)
