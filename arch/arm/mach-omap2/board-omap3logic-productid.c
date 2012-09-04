@@ -37,6 +37,16 @@ int omap3logic_extract_wifi_ethaddr(u8 *macaddr)
 	return -ENOENT;
 }
 
+/* Return zero if product ID data is good. */
+int omap3logic_extract_speed_mhz(u32 *speed_mhz)
+{
+	if (omap3logic_new_product_id_valid)
+		return omap3logic_extract_new_speed_mhz(speed_mhz);
+	if (omap3logic_old_product_id_valid)
+		return omap3logic_extract_old_speed_mhz(speed_mhz);
+	return -ENOENT;
+}
+
 /* DM37x Torpedo boards mute is gpio_17 since DSS uses 24 pins */
 #define TWL4030_DM37X_TORPEDO_EXTERNAL_AUDIO_MUTE_GPIO		17
 

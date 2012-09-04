@@ -826,6 +826,16 @@ static ssize_t product_id_show_lan_macaddr(struct class *class, struct class_att
 		       product_id_data.d.zone2.pz_2r0.mac0[2]);
 }
 
+static ssize_t product_id_show_speed_mhz(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 speed_mhz;
+
+	if (!omap3logic_extract_old_speed_mhz(&speed_mhz)) {
+		return sprintf(buf, "%u", speed_mhz);
+	}
+	return 0;
+}
+
 static ssize_t product_id_show_wifi_macaddr(struct class *class, struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "00:08:0e:%02x:%02x:%02x\n",
@@ -952,6 +962,10 @@ static struct {
 	},
 	{
 		__ATTR(part_number, S_IRUGO, product_id_show_part_number, NULL),
+		NULL,
+	},
+	{
+		__ATTR(speed_mhz, S_IRUGO, product_id_show_speed_mhz, NULL),
 		NULL,
 	},
 	{
@@ -1104,6 +1118,31 @@ int omap3logic_NOR0_size(void)
 		return 0;
 
 	return nor0_size;
+}
+
+int omap3logic_extract_old_speed_mhz(u32 *speed_mhz)
+{
+	int speed_rating;
+
+	if (!omap3logic_is_product_data_valid())
+		return -EINVAL;
+
+	if (header_version < LOGIC_HEADER_VERSION_3)
+		return -EINVAL;
+
+	speed_rating = product_id_data.d.zone2.pz_2r3.processor_type;
+	speed_rating &= 0x1f;
+
+	if (speed_rating == 0x01)
+		*speed_mhz = 800;
+	else if (speed_rating == 0x02)
+		*speed_mhz = 1000;
+	else if (speed_rating == 0x03)
+		*speed_mhz = 1200;
+	else
+		return -EINVAL;
+	
+	return 0;
 }
 
 /* Return positive non-zero if productID indicates there's

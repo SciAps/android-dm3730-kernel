@@ -270,25 +270,6 @@ config OMAP3LOGIC_UART_C
        
 endmenu
 
-menu "OMAP3LOGIC processor features"
-
-comment "CPU OPP Modes"
-
-config OMAP3LOGIC_OPP_800MHZ
-     bool "OMAP3 Logic 800MHz OPP"
-     default y
-     help
-       Enable/Disable 800MHz OPP mode on omap3logic platform
-
-config OMAP3LOGIC_OPP_1GHZ
-     bool "OMAP3 Logic 1GHz OPP (not available on all DM37x CPU's)"
-     default n
-     help
-       Enable/Disable 1GHz OPP mode on omap3logic platform
-
-
-endmenu
-
 endmenu
 
 config MACH_OVERO
