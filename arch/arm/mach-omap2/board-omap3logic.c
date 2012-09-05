@@ -1976,50 +1976,53 @@ static void __init omap3logic_opp_init(void)
 			return;
 		}
 
-		if (!omap3logic_extract_speed_mhz(&speed_mhz)) {
-			if (speed_mhz >= 1000) {
-				/* Enable MPU 1GHz opp */
-				ret |= opp_enable(mpu_dev, 1000000000);
-				/* MPU 1GHz requires:
-				 * - Smart Reflex (SR)
-				 * - Adaptive Body Bias (ABB)
-				 * - Operation restricted below 90C
-				 *   junction temp
-				 * !! TODO: add 90C junction temp
-				 *          throttle service   */
-				/* Enable IVA 800Mhz opp */
-				ret |= opp_enable(iva_dev, 800000000);
-				if (ret) {
-					pr_err("%s: failed to enable opp %d\n",
-						__func__, ret);
+		/* Try to get the product ID max speed.  If not found
+		 * default to 800Mhz max */
+		if (omap3logic_extract_speed_mhz(&speed_mhz))
+			speed_mhz=800;
 
-					/* Cleanup - disable the higher freqs
-					 * - we don't care about the results */
-					opp_disable(mpu_dev, 1000000000);
-					opp_disable(iva_dev, 800000000);
-				}
+		if (speed_mhz >= 1000) {
+			/* Enable MPU 1GHz opp */
+			ret |= opp_enable(mpu_dev, 1000000000);
+			/* MPU 1GHz requires:
+			 * - Smart Reflex (SR)
+			 * - Adaptive Body Bias (ABB)
+			 * - Operation restricted below 90C
+			 *   junction temp
+			 * !! TODO: add 90C junction temp
+			 *          throttle service   */
+			/* Enable IVA 800Mhz opp */
+			ret |= opp_enable(iva_dev, 800000000);
+			if (ret) {
+				pr_err("%s: failed to enable opp %d\n",
+					__func__, ret);
+
+				/* Cleanup - disable the higher freqs
+				 * - we don't care about the results */
+				opp_disable(mpu_dev, 1000000000);
+				opp_disable(iva_dev, 800000000);
 			}
+		}
 
-			if (speed_mhz >= 800) {
-				/* Enable MPU 800MHz opp */
-				ret |= opp_enable(mpu_dev, 800000000);
-				/* MPU 800MHz requires:
-				 * - Operation restricted below 90C
-				 *   junction temp
-				 * !! TODO: add 90C junction temp
-				 *          throttle service   */
+		if (speed_mhz >= 800) {
+			/* Enable MPU 800MHz opp */
+			ret |= opp_enable(mpu_dev, 800000000);
+			/* MPU 800MHz requires:
+			 * - Operation restricted below 90C
+			 *   junction temp
+			 * !! TODO: add 90C junction temp
+			 *          throttle service   */
 		
-				/* Enable IVA 660Mhz opp */
-				ret |= opp_enable(iva_dev, 660000000);
-				if (ret) {
-					pr_err("%s: failed to enable opp %d\n",
-						__func__, ret);
+			/* Enable IVA 660Mhz opp */
+			ret |= opp_enable(iva_dev, 660000000);
+			if (ret) {
+				pr_err("%s: failed to enable opp %d\n",
+					__func__, ret);
 
-					/* Cleanup - disable the higher freqs 
-					 * - we don't care about the results */
-					opp_disable(mpu_dev, 800000000);
-					opp_disable(iva_dev, 660000000);
-				}
+				/* Cleanup - disable the higher freqs 
+				 * - we don't care about the results */
+				opp_disable(mpu_dev, 800000000);
+				opp_disable(iva_dev, 660000000);
 			}
 		}
 	}
