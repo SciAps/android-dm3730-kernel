@@ -154,16 +154,16 @@ static ssize_t show_temp(struct device *dev,
 			struct device_attribute *devattr, char *buf)
 {
 	struct omap34xx_data *data = dev_get_drvdata(dev);
-	s32 temp_val;
-     
+	s32 degc;
+	
 	omap34xx_update(data);
 
 	/* Average the temp value in table (table has 1 extra entry) */
-	temp_val = data->adc_table[data->temp];
-	temp_val += data->adc_table[data->temp+1];
-	temp_val /= 2;
+	degc = data->adc_table[data->temp];
+	degc += data->adc_table[data->temp+1];
+	degc /= 2;
 
-	return sprintf(buf, "%d.%1d\n", temp_val/10, temp_val%10);
+	return sprintf(buf, "%d.%1d\n", degc/10, degc<0 ? -degc%10 : degc%10);
 }
 
 static SENSOR_DEVICE_ATTR_2(celsius, S_IRUGO, show_temp, NULL, 0, 0);
