@@ -2031,7 +2031,7 @@ static void __init omap3logic_opp_init(void)
 static void __init omap3logic_pm_init(void)
 {
 	/* Don't use sys_offmode signal */
-	omap_pm_sys_offmode_select(1);
+	omap_pm_sys_offmode_select(0);
 
 	/* sys_clkreq - active high */
 	omap_pm_sys_clkreq_pol(1);
