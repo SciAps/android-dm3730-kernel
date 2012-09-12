@@ -326,7 +326,13 @@ void __init omap_vc_init_channel(struct voltagedomain *voltdm)
 	voltdm->rmw(vc->smps_sa_mask,
 		    vc->i2c_slave_addr << __ffs(vc->smps_sa_mask),
 		    vc->smps_sa_reg);
-	vc->cfg_channel |= vc_cfg_bits->sa;
+#if defined(CONFIG_ARCH_OMAP3)
+	/* Identify if we are working with the first or second channel */
+	if (vc->cfg_channel_sa_shift == OMAP3430_PRM_VC_SMPS_SA_SA0_SHIFT)
+		vc->cfg_channel &= ~vc_cfg_bits->rav;  // Set pointer to first channel VOLRA0
+	else
+#endif		
+		vc->cfg_channel |= vc_cfg_bits->sa;
 
 	/*
 	 * Configure the PMIC register addresses.
@@ -360,7 +366,13 @@ void __init omap_vc_init_channel(struct voltagedomain *voltdm)
 	       (ret_vsel << vc->common->cmd_ret_shift) |
 	       (off_vsel << vc->common->cmd_off_shift));
 	voltdm->write(val, vc->cmdval_reg);
-	vc->cfg_channel |= vc_cfg_bits->cmd;
+#if defined(CONFIG_ARCH_OMAP3)
+	/* Identify if we are working with the first or second channel */
+	if (vc->cfg_channel_sa_shift == OMAP3430_PRM_VC_SMPS_SA_SA0_SHIFT)
+		vc->cfg_channel &= ~vc_cfg_bits->rav;  // Set pointer to first channel VOLRA0
+	else
+#endif		
+		vc->cfg_channel |= vc_cfg_bits->cmd;
 
 	/* Channel configuration */
 	omap_vc_config_channel(voltdm);
