@@ -141,6 +141,7 @@ static void omap2430_musb_try_idle(struct musb *musb, unsigned long timeout)
 static void omap2430_musb_set_vbus(struct musb *musb, int is_on)
 {
 	u8		devctl;
+	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
 	int ret = 1;
 	/* HDRC controls CPEN, but beware current surges during device
 	 * connect.  They can trigger transient overcurrent conditions
@@ -161,10 +162,11 @@ static void omap2430_musb_set_vbus(struct musb *musb, int is_on)
 			 */
 			while (musb_readb(musb->mregs, MUSB_DEVCTL) & 0x80) {
 
-				udelay(50);
+				mdelay(5);
 				cpu_relax();
 
-				if (loops-- <= 0) {
+				if (time_after(jiffies, timeout)
+				    || loops-- <= 0) {
 					dev_err(musb->controller,
 					"configured as A device timeout");
 					ret = -EINVAL;
