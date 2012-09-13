@@ -1970,9 +1970,8 @@ static void __init omap3logic_opp_init(void)
 		mpu_dev = omap_device_get_by_hwmod_name("mpu");
 		iva_dev = omap_device_get_by_hwmod_name("iva");
 
-		if (!mpu_dev || !iva_dev) {
-			pr_err("%s: Aiee.. no mpu/dsp devices? %p %p\n",
-				__func__, mpu_dev, iva_dev);
+		if (!mpu_dev) {
+			pr_err("%s: Aiee.. no mpu device?\n", __func__);
 			return;
 		}
 
@@ -1992,7 +1991,8 @@ static void __init omap3logic_opp_init(void)
 			 * !! TODO: add 90C junction temp
 			 *          throttle service   */
 			/* Enable IVA 800Mhz opp */
-			ret |= opp_enable(iva_dev, 800000000);
+			if (iva_dev)
+				ret |= opp_enable(iva_dev, 800000000);
 			if (ret) {
 				pr_err("%s: failed to enable opp %d\n",
 					__func__, ret);
@@ -2000,7 +2000,8 @@ static void __init omap3logic_opp_init(void)
 				/* Cleanup - disable the higher freqs
 				 * - we don't care about the results */
 				opp_disable(mpu_dev, 1000000000);
-				opp_disable(iva_dev, 800000000);
+				if (iva_dev)
+					opp_disable(iva_dev, 800000000);
 			}
 		}
 
@@ -2014,7 +2015,8 @@ static void __init omap3logic_opp_init(void)
 			 *          throttle service   */
 		
 			/* Enable IVA 660Mhz opp */
-			ret |= opp_enable(iva_dev, 660000000);
+			if (iva_dev)
+				ret |= opp_enable(iva_dev, 660000000);
 			if (ret) {
 				pr_err("%s: failed to enable opp %d\n",
 					__func__, ret);
@@ -2022,7 +2024,8 @@ static void __init omap3logic_opp_init(void)
 				/* Cleanup - disable the higher freqs 
 				 * - we don't care about the results */
 				opp_disable(mpu_dev, 800000000);
-				opp_disable(iva_dev, 660000000);
+				if (iva_dev)
+					opp_disable(iva_dev, 660000000);
 			}
 		}
 	}
