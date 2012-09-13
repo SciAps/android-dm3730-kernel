@@ -2033,8 +2033,10 @@ static void __init omap3logic_opp_init(void)
 
 static void __init omap3logic_pm_init(void)
 {
-	/* Don't use sys_offmode signal */
-	omap_pm_sys_offmode_select(0);
+	/* Use sys_offmode signal                                       */
+	/* We use the off mode signal instead of I2C to trigger scripts */
+	/* loaded in the PMIC to achieve very low standby power.        */
+	omap_pm_sys_offmode_select(1);
 
 	/* sys_clkreq - active high */
 	omap_pm_sys_clkreq_pol(1);
