@@ -452,9 +452,11 @@ static void venc_power_off(struct omap_dss_device *dssdev)
 	venc_enable_clocks(0);
 }
 
-
-
-
+unsigned long venc_get_pixel_clock(void)
+{
+        /* VENC Pixel Clock in Mhz */
+        return 13500000;
+}
 
 /* driver */
 static int venc_panel_probe(struct omap_dss_device *dssdev)

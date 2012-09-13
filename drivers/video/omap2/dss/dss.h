@@ -475,6 +475,7 @@ int venc_init_platform_driver(void);
 void venc_uninit_platform_driver(void);
 void venc_dump_regs(struct seq_file *s);
 int venc_init_display(struct omap_dss_device *display);
+unsigned long venc_get_pixel_clock(void);
 #else
 static inline int venc_init_platform_driver(void)
 {
@@ -482,6 +483,11 @@ static inline int venc_init_platform_driver(void)
 }
 static inline void venc_uninit_platform_driver(void)
 {
+}
+static inline unsigned long venc_get_pixel_clock(void)
+{
+        WARN("%s: VENC not compiled in, returning pclk as 0\n", __func__);
+        return 0;
 }
 #endif
 

@@ -2506,17 +2506,22 @@ unsigned long dispc_lclk_rate(enum omap_channel channel)
 
 unsigned long dispc_pclk_rate(enum omap_channel channel)
 {
-	int pcd;
-	unsigned long r;
-	u32 l;
+	if(channel == OMAP_DSS_CHANNEL_LCD)
+	{
+		int pcd;
+		unsigned long r;
+		u32 l;
 
-	l = dispc_read_reg(DISPC_DIVISORo(channel));
+		l = dispc_read_reg(DISPC_DIVISORo(channel));
 
-	pcd = FLD_GET(l, 7, 0);
+		pcd = FLD_GET(l, 7, 0);
 
-	r = dispc_lclk_rate(channel);
+		r = dispc_lclk_rate(channel);
 
-	return r / pcd;
+		return r / pcd;
+	} else {
+		return venc_get_pixel_clock();
+	}
 }
 
 void dispc_dump_clocks(struct seq_file *s)
