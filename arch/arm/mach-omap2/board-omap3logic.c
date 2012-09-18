@@ -1978,6 +1978,7 @@ __setup("printk-debug", printk_debug_setup);
 static void __init omap3logic_opp_init(void)
 {
 	int ret = 0;
+	int speed_mhz;
 
 	if (omap3_opp_init()) {
 		pr_err("%s: opp default init failed\n", __func__);
@@ -1991,58 +1992,72 @@ static void __init omap3logic_opp_init(void)
 		mpu_dev = omap_device_get_by_hwmod_name("mpu");
 		iva_dev = omap_device_get_by_hwmod_name("iva");
 
-		if (!mpu_dev || !iva_dev) {
-			pr_err("%s: Aiee.. no mpu/dsp devices? %p %p\n",
-				__func__, mpu_dev, iva_dev);
+		if (!mpu_dev) {
+			pr_err("%s: Aiee.. no mpu device?\n", __func__);
 			return;
 		}
 
-#ifdef CONFIG_OMAP3LOGIC_OPP_1GHZ
-		/* Enable MPU 1GHz opp */
-		ret |= opp_enable(mpu_dev, 1000000000);
-		/* MPU 1GHz requires:                                   */
-		/*       - Smart Reflex (SR)                            */
-		/*       - Adaptive Body Bias (ABB)                     */
-		/*       - Operation restricted below 90C junction temp */
-		/* !! TODO: add 90C junction temp throttle service   */
-		
-		/* Enable IVA 800Mhz opp */
-		ret |= opp_enable(iva_dev, 800000000);
-		if (ret) {
-			pr_err("%s: failed to enable opp %d\n",
-				__func__, ret);
+		/* Try to get the product ID max speed.  If not found
+		 * default to 800Mhz max */
+		if (omap3logic_extract_speed_mhz(&speed_mhz))
+			speed_mhz=800;
 
-			/* Cleanup - disable the higher freqs - we don't care
-			   about the results */
-			opp_disable(mpu_dev, 1000000000);
-			opp_disable(iva_dev, 800000000);
-		}
-#endif
-#ifdef CONFIG_OMAP3LOGIC_OPP_800MHZ
-		/* Enable MPU 800MHz opp */
-		ret |= opp_enable(mpu_dev, 800000000);
-		/* MPU 800MHz requires:                                   */
-		/*       - Operation restricted below 90C junction temp */
-		/* !! TODO: add 90C junction temp throttle service   */
-		
-		/* Enable IVA 660Mhz opp */
-		ret |= opp_enable(iva_dev, 660000000);
-		if (ret) {
-			pr_err("%s: failed to enable opp %d\n",
-				__func__, ret);
+		if (speed_mhz >= 1000) {
+			/* Enable MPU 1GHz opp */
+			ret |= opp_enable(mpu_dev, 1000000000);
+			/* MPU 1GHz requires:
+			 * - Smart Reflex (SR)
+			 * - Adaptive Body Bias (ABB)
+			 * - Operation restricted below 90C
+			 *   junction temp
+			 * !! TODO: add 90C junction temp
+			 *          throttle service   */
+			/* Enable IVA 800Mhz opp */
+			if (iva_dev)
+				ret |= opp_enable(iva_dev, 800000000);
+			if (ret) {
+				pr_err("%s: failed to enable opp %d\n",
+					__func__, ret);
 
-			/* Cleanup - disable the higher freqs - we don't care
-			   about the results */
-			opp_disable(mpu_dev, 800000000);
-			opp_disable(iva_dev, 660000000);
+				/* Cleanup - disable the higher freqs
+				 * - we don't care about the results */
+				opp_disable(mpu_dev, 1000000000);
+				if (iva_dev)
+					opp_disable(iva_dev, 800000000);
+			}
 		}
-#endif
+
+		if (speed_mhz >= 800) {
+			/* Enable MPU 800MHz opp */
+			ret |= opp_enable(mpu_dev, 800000000);
+			/* MPU 800MHz requires:
+			 * - Operation restricted below 90C
+			 *   junction temp
+			 * !! TODO: add 90C junction temp
+			 *          throttle service   */
+		
+			/* Enable IVA 660Mhz opp */
+			if (iva_dev)
+				ret |= opp_enable(iva_dev, 660000000);
+			if (ret) {
+				pr_err("%s: failed to enable opp %d\n",
+					__func__, ret);
+
+				/* Cleanup - disable the higher freqs 
+				 * - we don't care about the results */
+				opp_disable(mpu_dev, 800000000);
+				if (iva_dev)
+					opp_disable(iva_dev, 660000000);
+			}
+		}
 	}
 }
 
 static void __init omap3logic_pm_init(void)
 {
-	/* Don't use sys_offmode signal */
+	/* Use sys_offmode signal                                       */
+	/* We use the off mode signal instead of I2C to trigger scripts */
+	/* loaded in the PMIC to achieve very low standby power.        */
 	omap_pm_sys_offmode_select(1);
 
 	/* sys_clkreq - active high */

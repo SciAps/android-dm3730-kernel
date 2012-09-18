@@ -226,7 +226,7 @@ static ssize_t store_overlays(struct device *dev, struct device_attribute *attr,
 			}
 
 			ovlnum = simple_strtoul(p, &p, 0);
-			if (ovlnum > fbdev->num_overlays) {
+			if (ovlnum >= fbdev->num_overlays) {
 				r = -EINVAL;
 				goto out;
 			}

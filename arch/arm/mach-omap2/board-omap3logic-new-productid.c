@@ -827,6 +827,7 @@ static int id_find_numbers(struct id_cookie *cookie, id_keys_t *keys, int key_si
 
 struct id_data id_data;
 static int found_id_data;
+static struct id_cookie cpu0_group_cookie;
 static struct id_cookie serialization_group_cookie;
 static struct id_cookie model_group_cookie;
 
@@ -895,6 +896,38 @@ static int omap3logic_find_serialization_cookie(struct id_cookie *s_cookie)
 	return ID_EOK;
 }
 
+static int omap3logic_find_cpu0_group_cookie(struct id_cookie *s_cookie)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	if (!found_id_data) {
+		return -1;
+	}
+
+	if (cpu0_group_cookie.offset) {
+		*s_cookie = cpu0_group_cookie;
+		return ID_EOK;
+	}
+
+	ret = id_init_cookie(&id_data, &cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	/* find /cpu0_group from root */
+	ret = id_find_dict(&cookie, ID_KEY_cpu0_group, IDENUM_DICT);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	cpu0_group_cookie = cookie;
+	*s_cookie = cookie;
+	return ID_EOK;
+}
+
 int omap3logic_extract_new_part_number(u32 *part_number)
 {
 	int ret;
@@ -908,6 +941,26 @@ int omap3logic_extract_new_part_number(u32 *part_number)
 
 	/* Find part number */
 	ret = id_find_number(&cookie, ID_KEY_part_number, part_number);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+int omap3logic_extract_new_speed_mhz(u32 *speed_mhz)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_cpu0_group_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
+	/* Find part number */
+	ret = id_find_number(&cookie, ID_KEY_speed_mhz, speed_mhz);
 	if (ret != ID_EOK) {
 		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
 		return ret;
@@ -1074,7 +1127,7 @@ int logic_dump_serialization_info(void)
 	u8 ethaddr[6];
 	int ret;
 	struct id_cookie cookie;
-	int part_number;
+	int part_number, speed_mhz;
 	u8 model_name[32];
 	u32 model_name_size;
 	u8 serial_number[10];
@@ -1099,6 +1152,12 @@ int logic_dump_serialization_info(void)
 		return ret;
 	}
 
+	ret = omap3logic_extract_new_speed_mhz(&speed_mhz);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
 
 	/* Find model name */
 	model_name_size = sizeof(model_name);
@@ -1115,6 +1174,7 @@ int logic_dump_serialization_info(void)
 	printk(KERN_INFO "Part Number  : %u\n", part_number);
 	printk(KERN_INFO "Model Name   : %.*s\n", model_name_size, model_name);
 	printk(KERN_INFO "Serial Number: %.*s\n", serial_number_size, serial_number);
+	printk(KERN_INFO "Max Mhz      : %u\n", speed_mhz);
 	ret = omap3logic_extract_new_lan_ethaddr(ethaddr);
 	if (ret == ID_EOK) {
 		printk(KERN_INFO "LAN ethaddr  : %02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -1347,8 +1407,8 @@ static ssize_t product_id_show_part_number(struct class *class, struct class_att
 {
 	u32 part_number;
 	int len;
-	omap3logic_extract_new_part_number(&part_number);
 
+	omap3logic_extract_new_part_number(&part_number);
 	len = sprintf(buf, "%d\n", part_number);
 	return len;
 }
@@ -1371,6 +1431,16 @@ static ssize_t product_id_show_serial_number(struct class *class, struct class_a
 	omap3logic_extract_new_serial_number((u8 *)buf, &serial_number_size);
 	buf[serial_number_size] = '\n';
 	return serial_number_size + 1;
+}
+
+static ssize_t product_id_show_speed_mhz(struct class *clase, struct class_attribute *attr, char *buf)
+{
+	u32 speed_mhz;
+	int len;
+
+	omap3logic_extract_new_speed_mhz(&speed_mhz);
+	len = sprintf(buf, "%u\n", speed_mhz);
+	return len;
 }
 
 static ssize_t product_id_show_wifi_config_data(struct class *class, struct class_attribute *attr, char *buf)
@@ -1435,6 +1505,10 @@ static struct {
 	},
 	{
 		__ATTR(serial_number, S_IRUGO, product_id_show_serial_number, NULL),
+		NULL,
+	},
+	{
+		__ATTR(speed_mhz, S_IRUGO, product_id_show_speed_mhz, NULL),
 		NULL,
 	},
 	{
