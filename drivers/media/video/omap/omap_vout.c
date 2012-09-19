@@ -40,6 +40,8 @@
 #include <linux/videodev2.h>
 #include <linux/slab.h>
 
+#include <asm/cacheflush.h>
+
 #include <media/videobuf-dma-contig.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
@@ -1919,6 +1921,8 @@ static int vidioc_qbuf(struct file *file, void *fh,
 				"DMA Channel not allocated for Rotation\n");
 		return -EINVAL;
 	}
+
+	flush_cache_all();
 
 	return videobuf_qbuf(q, buffer);
 }
