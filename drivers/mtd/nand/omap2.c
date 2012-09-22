@@ -177,6 +177,7 @@ static void omap_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
 	struct omap_nand_info *info = container_of(chip, struct omap_nand_info,
 							nand);
 
+	ndelay(100);
 	if (cmd != NAND_CMD_NONE) {
 		if (ctrl & NAND_CLE)
 			gpmc_nand_write(info->gpmc_cs, GPMC_NAND_COMMAND, cmd);
