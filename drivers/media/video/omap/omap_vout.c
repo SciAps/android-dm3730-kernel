@@ -40,6 +40,8 @@
 #include <linux/videodev2.h>
 #include <linux/slab.h>
 
+#include <asm/cacheflush.h>
+
 #include <media/videobuf-dma-contig.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
@@ -1511,6 +1513,19 @@ static int vidioc_try_fmt_vid_overlay(struct file *file, void *fh,
 	int ret = 0;
 	struct omap_vout_device *vout = fh;
 	struct v4l2_window *win = &f->fmt.win;
+	struct omap_video_timings *timing;
+	struct omapvideo_info *ovid;
+	struct omap_overlay *ovl;
+
+	mutex_lock(&vout->lock);
+
+	ovid = &vout->vid_info;
+	ovl = ovid->overlays[0];
+
+	// Update the width/height of the output.
+	timing = &ovl->manager->device->panel.timings;
+	vout->fbuf.fmt.height = timing->y_res;
+	vout->fbuf.fmt.width = timing->x_res;
 
 	ret = omap_vout_try_window(&vout->fbuf, win);
 
@@ -1520,6 +1535,7 @@ static int vidioc_try_fmt_vid_overlay(struct file *file, void *fh,
 		else
 			win->global_alpha = f->fmt.win.global_alpha;
 	}
+	mutex_unlock(&vout->lock);
 
 	return ret;
 }
@@ -1532,10 +1548,16 @@ static int vidioc_s_fmt_vid_overlay(struct file *file, void *fh,
 	struct omapvideo_info *ovid;
 	struct omap_vout_device *vout = fh;
 	struct v4l2_window *win = &f->fmt.win;
+	struct omap_video_timings *timing;
 
 	mutex_lock(&vout->lock);
 	ovid = &vout->vid_info;
 	ovl = ovid->overlays[0];
+
+	// Update the width/height of the output.
+	timing = &ovl->manager->device->panel.timings;
+	vout->fbuf.fmt.height = timing->y_res;
+	vout->fbuf.fmt.width = timing->x_res;
 
 	ret = omap_vout_new_window(&vout->crop, &vout->win, &vout->fbuf, win);
 	if (!ret) {
@@ -1899,6 +1921,8 @@ static int vidioc_qbuf(struct file *file, void *fh,
 				"DMA Channel not allocated for Rotation\n");
 		return -EINVAL;
 	}
+
+	flush_cache_all();
 
 	return videobuf_qbuf(q, buffer);
 }

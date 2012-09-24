@@ -43,6 +43,7 @@
 
 #include <asm/tlbflush.h>
 
+#include "smartreflex.h"
 #include "cm2xxx_3xxx.h"
 #include "cm-regbits-34xx.h"
 #include "prm-regbits-34xx.h"
@@ -591,6 +592,11 @@ static int omap3_pm_enter(suspend_state_t unused)
 /* Hooks to enable / disable UART interrupts during suspend */
 static int omap3_pm_begin(suspend_state_t state)
 {
+	/* To get to the lowest suspend power, we will loose the SmartReflex */
+	/* controller.  So here, we shut down gracefully.                    */
+	omap_sr_disable(voltdm_lookup("mpu_iva"));
+	omap_sr_disable(voltdm_lookup("core"));
+
 	disable_hlt();
 	suspend_state = state;
 	omap_uart_enable_irqs(0);
@@ -602,6 +608,10 @@ static void omap3_pm_end(void)
 	suspend_state = PM_SUSPEND_ON;
 	omap_uart_enable_irqs(1);
 	enable_hlt();
+	
+	/* Bring the SmartReflex controller back online */
+	omap_sr_enable(voltdm_lookup("core"));
+	omap_sr_enable(voltdm_lookup("mpu_iva"));
 	return;
 }
 
