@@ -210,14 +210,6 @@ config MACH_DM3730_TORPEDO
 	 for full description please see the products webpage at
 	 http://www.logicpd.com/products/development-kits/dm3730-torpedo-devkit
 
-config DISABLE_300MHZ_CPU_SPEED
-	bool
-	depends on MACH_DM3730_TORPEDO || MACH_DM3730_SOM_LV
-	default y
-        help
-	 Disable the support of 300MHZ CPU speed. System Power suspend/resume is not fully
-	 functional under this CPU speed mode.
-
 menu "OMAP3LOGIC setup"
      depends on OMAP3LOGIC
 

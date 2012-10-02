@@ -131,11 +131,7 @@ static struct omap_opp_def __initdata omap34xx_opp_def_list[] = {
 
 static struct omap_opp_def __initdata omap36xx_opp_def_list[] = {
 	/* MPU OPP1 - OPP50 */
-#if defined(CONFIG_DISABLE_300MHZ_CPU_SPEED)
-        /* Do not support 300MHZ CPU speed. */
-#else
 	OPP_INITIALIZER("mpu", true,  300000000, OMAP3630_VDD_MPU_OPP50_UV),
-#endif
 	/* MPU OPP2 - OPP100 */
 	OPP_INITIALIZER("mpu", true,  600000000, OMAP3630_VDD_MPU_OPP100_UV),
 	/* MPU OPP3 - OPP-Turbo */
