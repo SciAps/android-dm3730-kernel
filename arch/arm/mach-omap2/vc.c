@@ -227,6 +227,9 @@ static void __init omap3_vc_init_channel(struct voltagedomain *voltdm)
 	if (is_initialized)
 		return;
 
+	voltdm->write(OMAP3430_MCODE_SHIFT | OMAP3430_HSEN_MASK,
+			OMAP3_PRM_VC_I2C_CFG_OFFSET);
+
 	omap3_vfsm_init(voltdm);
 
 	is_initialized = true;
@@ -382,7 +385,7 @@ void __init omap_vc_init_channel(struct voltagedomain *voltdm)
 		    vc->setup_time << __ffs(voltdm->vfsm->voltsetup_mask),
 		    voltdm->vfsm->voltsetup_reg);
 
-	omap_vc_i2c_init(voltdm);
+	// omap_vc_i2c_init(voltdm);
 
 	if (cpu_is_omap34xx())
 		omap3_vc_init_channel(voltdm);
