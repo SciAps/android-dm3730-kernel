@@ -64,6 +64,7 @@ static struct omap3logic_dss_board_info omap3logic_dss_lcd_data = {
 	.gpio_flag = 0,
 };
 
+#define MIN_BRIGHTNESS 45
 #define MAX_BRIGHTNESS 255
 
 #define MAX_SOM_LV_BRIGHTNESS 127
@@ -141,6 +142,15 @@ static void dm3730_som_lv_bl_set_intensity(int level)
 		/* Turn on the backlight! */
 	}
 
+	/*
+	 * Limit the minimum brightness. Otherwide, the unlock slide bar
+	 * might not be easily clear to see under dimmer state, when
+	 * brightness is the lowest.
+	 */
+	if(level < MIN_BRIGHTNESS) {
+		level = MIN_BRIGHTNESS;
+	}
+
 	/* 255 -> 1, 1 -> 126 */
 	c = (255 * 126 + (1 - 126) * level) / (255 - 1);
 
@@ -162,6 +172,9 @@ static void dm3730_torpedo_bl_set_intensity(int level)
 {
 	LCDPRINTK("%s: level %d (%d%% on)\n", __FUNCTION__, level, (level * 100)/ MAX_BRIGHTNESS);
 
+	if (level > MAX_BRIGHTNESS)
+		return;
+
 	if (level == 0) {
 		LCDPRINTK("%s: turn off GPIO_%d as backlight!\n", __FUNCTION__, omap3logic_dss_lcd_data.lcd_gpio_backlight);
 		/* Turn off the backlight! */
@@ -177,6 +190,16 @@ static void dm3730_torpedo_bl_set_intensity(int level)
 		omap_dm_timer_set_load(intensity_timer, 1, 0xFFFF0000);
 		omap_dm_timer_set_pwm(intensity_timer, 0, 1,
 				      OMAP_TIMER_TRIGGER_OVERFLOW_AND_COMPARE);
+
+		/*
+		 * Limit the minimum brightness. Otherwide, the unlock slide bar
+		 * might not be easily clear to see under dimmer state, when
+		 * brightness is the lowest.
+		 */
+		if(level < MIN_BRIGHTNESS) {
+			level = MIN_BRIGHTNESS;
+		}
+
 		omap_dm_timer_set_match(intensity_timer, 1,
 					(0xffff0000) | (level<<8));
 		omap_dm_timer_start(intensity_timer);
