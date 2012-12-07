@@ -1994,7 +1994,10 @@ static void __init omap3logic_opp_init(void)
 		struct device *mpu_dev, *iva_dev;
 
 		mpu_dev = omap_device_get_by_hwmod_name("mpu");
-		iva_dev = omap_device_get_by_hwmod_name("iva");
+		if (omap3_has_iva())
+			iva_dev = omap_device_get_by_hwmod_name("iva");
+		else
+			iva_dev = NULL;
 
 		if (!mpu_dev) {
 			pr_err("%s: Aiee.. no mpu device?\n", __func__);
