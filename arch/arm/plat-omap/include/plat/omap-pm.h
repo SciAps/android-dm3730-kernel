@@ -357,4 +357,11 @@ u32 omap_pm_get_dev_context_loss_count(struct device *dev);
 void omap_pm_enable_off_mode(void);
 void omap_pm_disable_off_mode(void);
 
+/** 
+ * omap_cpufreq.c needs to know when to lay off the clock & voltage domains 
+ * when going in, or coming out of sleep.
+ */
+int omap_suspend_in_progress(void);
+
+
 #endif

@@ -83,6 +83,8 @@ struct power_state {
 	struct list_head node;
 };
 
+int suspend_in_progress;
+
 static LIST_HEAD(pwrst_list);
 
 static void (*_omap_sram_idle)(u32 *addr, int save_state);
@@ -92,6 +94,11 @@ static int (*_omap_save_secure_sram)(u32 *addr);
 static struct powerdomain *mpu_pwrdm, *neon_pwrdm;
 static struct powerdomain *core_pwrdm, *per_pwrdm;
 static struct powerdomain *cam_pwrdm;
+
+int omap_suspend_in_progress(void)
+{
+	return suspend_in_progress;
+}
 
 static inline void omap3_per_save_context(void)
 {
@@ -592,6 +599,12 @@ static int omap3_pm_enter(suspend_state_t unused)
 /* Hooks to enable / disable UART interrupts during suspend */
 static int omap3_pm_begin(suspend_state_t state)
 {
+	/* Set flag here to prevent omap-cpufreq.c from trying to change clocks */
+	suspend_in_progress = 1;
+	
+	/* Be sure we save our current context */
+	omap3_save_scratchpad_contents();
+
 	/* To get to the lowest suspend power, we will loose the SmartReflex */
 	/* controller.  So here, we shut down gracefully.                    */
 	omap_sr_disable(voltdm_lookup("mpu_iva"));
@@ -612,6 +625,10 @@ static void omap3_pm_end(void)
 	/* Bring the SmartReflex controller back online */
 	omap_sr_enable(voltdm_lookup("core"));
 	omap_sr_enable(voltdm_lookup("mpu_iva"));
+	
+	/* Clear flag here to permit omap-cpufreq.c to change clocks */
+	suspend_in_progress = 0;
+
 	return;
 }
 
@@ -1005,6 +1022,8 @@ static int __init omap3_pm_init(void)
 		printk(KERN_ERR "Failed to get mpu_pwrdm\n");
 		goto err2;
 	}
+
+	suspend_in_progress = 0;
 
 	neon_pwrdm = pwrdm_lookup("neon_pwrdm");
 	per_pwrdm = pwrdm_lookup("per_pwrdm");

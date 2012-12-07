@@ -26,6 +26,8 @@
 #include <linux/cpu.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pm_runtime.h>
+
 
 #include <asm/system.h>
 #include <asm/smp_plat.h>
@@ -58,6 +60,8 @@ static char *mpu_clk_name;
 static struct device *mpu_dev;
 static struct regulator *mpu_reg;
 
+int in_suspend;
+
 static int omap_verify_speed(struct cpufreq_policy *policy)
 {
 	if (!freq_table)
@@ -76,6 +80,18 @@ static unsigned int omap_getspeed(unsigned int cpu)
 	return rate;
 }
 
+int omap_cpufreq_late_suspend(struct cpufreq_policy *cpu_policy)
+{
+	in_suspend = 1;
+	return 0;
+}
+
+int omap_cpufreq_early_resume(struct cpufreq_policy *cpu_policy)
+{
+	in_suspend = 0;
+	return 0;
+}
+
 static int omap_target(struct cpufreq_policy *policy,
 		       unsigned int target_freq,
 		       unsigned int relation)
@@ -85,6 +101,14 @@ static int omap_target(struct cpufreq_policy *policy,
 	struct cpufreq_freqs freqs;
 	struct opp *opp;
 	unsigned long freq, volt = 0, volt_old = 0, tol = 0;
+
+	int is_suspending = omap_suspend_in_progress();
+	
+	if (in_suspend || is_suspending) {
+		dev_warn(mpu_dev, "%s: unable to scale voltage, suspend in progress\n",
+			__func__);
+		return -EINVAL;
+	}
 
 	if (!freq_table) {
 		dev_err(mpu_dev, "%s: cpu%d: no freq table!\n", __func__,
@@ -284,6 +308,8 @@ static struct cpufreq_driver omap_driver = {
 	.exit		= omap_cpu_exit,
 	.name		= "omap",
 	.attr		= omap_cpufreq_attr,
+	.suspend        = omap_cpufreq_late_suspend,
+	.resume         = omap_cpufreq_early_resume,
 };
 
 static int __init omap_cpufreq_init(void)
@@ -305,12 +331,14 @@ static int __init omap_cpufreq_init(void)
 		pr_warning("%s: unable to get the mpu device\n", __func__);
 		return -EINVAL;
 	}
+	
+	in_suspend = 0;
 
-       mpu_reg = regulator_get(mpu_dev, "vcc");
-       if (IS_ERR(mpu_reg)) {
+        mpu_reg = regulator_get(mpu_dev, "vcc");
+        if (IS_ERR(mpu_reg)) {
                pr_warning("%s: unable to get MPU regulator\n", __func__);
                mpu_reg = NULL;
-       } else {
+        } else {
                /* 
                 * Ensure physical regulator is present.
                 * (e.g. could be dummy regulator.)
@@ -321,8 +349,7 @@ static int __init omap_cpufreq_init(void)
                        regulator_put(mpu_reg);
                        mpu_reg = NULL;
                }
-       }
-
+        }
 
 	return cpufreq_register_driver(&omap_driver);
 }
