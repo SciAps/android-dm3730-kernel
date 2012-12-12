@@ -401,12 +401,10 @@ static void omap3logic_gpio_key_init(unsigned int gpio)
 
 	if (machine_is_dm3730_torpedo()) {
 		omap3logic_key_home = 181;
-		omap3logic_key_menu = 7;
+		omap3logic_key_menu = 178;
 		omap3logic_key_back = 2;
-		omap3logic_key_search = 178;
 
 		omap_mux_init_signal("sys_boot0.gpio_2", OMAP_PIN_INPUT_PULLUP);
-		omap_mux_init_signal("sys_boot5.gpio_7", OMAP_PIN_INPUT_PULLUP);
 		omap_mux_init_signal("mcspi2_cs0.gpio_181", OMAP_PIN_INPUT_PULLUP);
 		omap_mux_init_signal("mcspi2_clk.gpio_178", OMAP_PIN_INPUT_PULLUP);
 
