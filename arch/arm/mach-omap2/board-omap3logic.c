@@ -430,11 +430,11 @@ static void omap3logic_gpio_key_init(unsigned int gpio)
 	/* Adjust deboucing configuration of GPIO buttons, depending on baseboard type. */
 	for (i = 0; i < ARRAY_SIZE(gpio_buttons); i++) {
 		if (machine_is_dm3730_torpedo()) {
-			/* On Torpedo, HOME (S6) and SEARCH (S7) buttons are connected to capacitors.
+			/* On Torpedo, HOME (S6) and MENU (S7) buttons are connected to capacitors.
                            Thus there is no need of debouncing for those two buttons. */
 			if( KEY_HOME == gpio_buttons[i].code )
 				gpio_buttons[i].debounce_interval = 0;
-			if( KEY_SEARCH == gpio_buttons[i].code )
+			if( KEY_MENU == gpio_buttons[i].code )
 				gpio_buttons[i].debounce_interval = 0;
 		} else if (machine_is_dm3730_som_lv()) {
 			/* On SOM-LV, BACK button (S4) is connected to a capacitor.
