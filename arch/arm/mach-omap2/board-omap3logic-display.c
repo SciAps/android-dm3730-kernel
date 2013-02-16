@@ -311,11 +311,27 @@ static void omap3logic_panel_disable_lcd(struct omap_dss_device *dssdev)
 
 	cancel_delayed_work_sync(&pdata->work);
 	omap3logic_disable_backlight();
-	gpio_set_value(pdata->lcd_gpio_enable, 0);
-	// Display controller needs 5 vsyncs after disable to
-	// properly go down.  Due to flip-flops in the path, we need
-	// an additional vsync.
-	omap3logic_panel_wait_vsyncs(6);
+        if(strcmp(dssdev->name, "28") == 0)
+        {
+		// For Logic LCD type 28 (SHARP LQ043T1DG28, 480 x 272 pixels)
+
+		// Display controller needs 10 vsyncs after disable to
+		// properly go down.  Due to flip-flops in the path, we need
+		// an additional vsync.
+		omap3logic_panel_wait_vsyncs(11);
+		msleep(5);
+		gpio_set_value(pdata->lcd_gpio_enable, 0);
+	}
+	else
+	{
+		// For other LCD types.
+
+		gpio_set_value(pdata->lcd_gpio_enable, 0);
+		// Display controller needs 5 vsyncs after disable to
+		// properly go down.  Due to flip-flops in the path, we need
+		// an additional vsync.
+		omap3logic_panel_wait_vsyncs(6);
+	}
 
 	return;
 }
