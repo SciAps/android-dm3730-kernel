@@ -66,8 +66,8 @@ void validate_firmware_response(struct kim_data_s *kim_gdata)
 {
 	struct sk_buff *skb = kim_gdata->rx_skb;
 	if (unlikely(skb->data[5] != 0)) {
-		pr_err("no proper response during fw download");
-		pr_err("data6 %x", skb->data[5]);
+		pr_err("no proper response during fw download\n");
+		pr_err("data6 %x\n", skb->data[5]);
 		return;		/* keep waiting for the proper response */
 	}
 	/* becos of all the script being downloaded */
@@ -82,7 +82,7 @@ static inline int kim_check_data_len(struct kim_data_s *kim_gdata, int len)
 {
 	register int room = skb_tailroom(kim_gdata->rx_skb);
 
-	pr_debug("len %d room %d", len, room);
+	pr_debug("len %d room %d\n", len, room);
 
 	if (!len) {
 		validate_firmware_response(kim_gdata);
@@ -90,7 +90,7 @@ static inline int kim_check_data_len(struct kim_data_s *kim_gdata, int len)
 		/* Received packet's payload length is larger.
 		 * We can't accommodate it in created skb.
 		 */
-		pr_err("Data length is too large len %d room %d", len,
+		pr_err("Data length is too large len %d room %d\n", len,
 			   room);
 		kfree_skb(kim_gdata->rx_skb);
 	} else {
@@ -124,11 +124,11 @@ void kim_int_recv(struct kim_data_s *kim_gdata,
 	int len = 0, type = 0;
 	unsigned char *plen;
 
-	pr_debug("%s", __func__);
+	pr_debug("%s\n", __func__);
 	/* Decode received bytes here */
 	ptr = data;
 	if (unlikely(ptr == NULL)) {
-		pr_err(" received null from TTY ");
+		pr_err(" received null from TTY \n");
 		return;
 	}
 
@@ -147,7 +147,7 @@ void kim_int_recv(struct kim_data_s *kim_gdata,
 			switch (kim_gdata->rx_state) {
 				/* Waiting for complete packet ? */
 			case ST_W4_DATA:
-				pr_debug("Complete pkt received");
+				pr_debug("Complete pkt received\n");
 				validate_firmware_response(kim_gdata);
 				kim_gdata->rx_state = ST_W4_PACKET_TYPE;
 				kim_gdata->rx_skb = NULL;
@@ -169,7 +169,7 @@ void kim_int_recv(struct kim_data_s *kim_gdata,
 			type = *ptr;
 			break;
 		default:
-			pr_info("unknown packet");
+			pr_info("unknown packet\n");
 			ptr++;
 			count--;
 			continue;
@@ -179,7 +179,7 @@ void kim_int_recv(struct kim_data_s *kim_gdata,
 		kim_gdata->rx_skb =
 			alloc_skb(1024+8, GFP_ATOMIC);
 		if (!kim_gdata->rx_skb) {
-			pr_err("can't allocate mem for new packet");
+			pr_err("can't allocate mem for new packet\n");
 			kim_gdata->rx_state = ST_W4_PACKET_TYPE;
 			kim_gdata->rx_count = 0;
 			return;
@@ -197,17 +197,17 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 	unsigned short version = 0, chip = 0, min_ver = 0, maj_ver = 0;
 	const char read_ver_cmd[] = { 0x01, 0x01, 0x10, 0x00 };
 
-	pr_debug("%s", __func__);
+	pr_debug("%s\n", __func__);
 
 	INIT_COMPLETION(kim_gdata->kim_rcvd);
 	if (4 != st_int_write(kim_gdata->core_data, read_ver_cmd, 4)) {
-		pr_err("kim: couldn't write 4 bytes");
+		pr_err("kim: couldn't write 4 bytes\n");
 		return -EIO;
 	}
 
 	if (!wait_for_completion_timeout
 	    (&kim_gdata->kim_rcvd, msecs_to_jiffies(CMD_RESP_TIME))) {
-		pr_err(" waiting for ver info- timed out ");
+		pr_err(" waiting for ver info- timed out \n");
 		return -ETIMEDOUT;
 	}
 
@@ -229,7 +229,7 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 	kim_gdata->version.maj_ver = maj_ver;
 	kim_gdata->version.min_ver = min_ver;
 
-	pr_info("%s", bts_scr_name);
+	pr_info("%s\n", bts_scr_name);
 	return 0;
 }
 
@@ -242,14 +242,14 @@ void skip_change_remote_baud(unsigned char **ptr, long *len)
 		((struct bts_action *) cur_action)->size;
 
 	if (((struct bts_action *) nxt_action)->type != ACTION_WAIT_EVENT) {
-		pr_err("invalid action after change remote baud command");
+		pr_err("invalid action after change remote baud command\n");
 	} else {
 		*ptr = *ptr + sizeof(struct bts_action) +
 			((struct bts_action *)cur_action)->size;
 		*len = *len - (sizeof(struct bts_action) +
 				((struct bts_action *)cur_action)->size);
 		/* warn user on not commenting these in firmware */
-		pr_warn("skipping the wait event of change remote baud");
+		pr_warn("skipping the wait event of change remote baud\n");
 	}
 }
 
@@ -271,7 +271,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 
 	err = read_local_version(kim_gdata, bts_scr_name);
 	if (err != 0) {
-		pr_err("kim: failed to read local ver");
+		pr_err("kim: failed to read local ver\n");
 		return err;
 	}
 	err =
@@ -279,7 +279,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			     &kim_gdata->kim_pdev->dev);
 	if (unlikely((err != 0) || (kim_gdata->fw_entry->data == NULL) ||
 		     (kim_gdata->fw_entry->size == 0))) {
-		pr_err(" request_firmware failed(errno %ld) for %s", err,
+		pr_err(" request_firmware failed(errno %ld) for %s\n", err,
 			   bts_scr_name);
 		return -EINVAL;
 	}
@@ -292,7 +292,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	len -= sizeof(struct bts_header);
 
 	while (len > 0 && ptr) {
-		pr_debug(" action size %d, type %d ",
+		pr_debug(" action size %d, type %d \n",
 			   ((struct bts_action *)ptr)->size,
 			   ((struct bts_action *)ptr)->type);
 
@@ -305,7 +305,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				/* ignore remote change
 				 * baud rate HCI VS command */
 				pr_warn("change remote baud"
-				    " rate command in firmware");
+				    " rate command in firmware\n");
 				skip_change_remote_baud(&ptr, &len);
 				break;
 			}
@@ -320,7 +320,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 					st_get_uart_wr_room(kim_gdata->core_data);
 				if (wr_room_space < 0) {
 					pr_err("Unable to get free "
-							"space info from uart tx buffer");
+							"space info from uart tx buffer\n");
 					release_firmware(kim_gdata->fw_entry);
 					return wr_room_space;
 				}
@@ -331,7 +331,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			/* Timeout happened ? */
 			if (time_after_eq(jiffies, timeout)) {
 				pr_err("Timeout while waiting for free "
-						"free space in uart tx buffer");
+						"free space in uart tx buffer\n");
 				release_firmware(kim_gdata->fw_entry);
 				return -ETIMEDOUT;
 			}
@@ -355,7 +355,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (err != cmd_size) {
 				pr_err("Number of bytes written to uart "
 						"tx buffer are not matching with "
-						"requested cmd write size");
+						"requested cmd write size\n");
 				release_firmware(kim_gdata->fw_entry);
 				return -EIO;
 			}
@@ -364,7 +364,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (!wait_for_completion_timeout
 					(&kim_gdata->kim_rcvd,
 					 msecs_to_jiffies(CMD_RESP_TIME))) {
-				pr_err("response timeout during fw download ");
+				pr_err("response timeout during fw download \n");
 				/* timed out */
 				release_firmware(kim_gdata->fw_entry);
 				return -ETIMEDOUT;
@@ -372,7 +372,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			INIT_COMPLETION(kim_gdata->kim_rcvd);
 			break;
 		case ACTION_DELAY:	/* sleep */
-			pr_info("sleep command in scr");
+			pr_info("sleep command in scr\n");
 			action_ptr = &(((struct bts_action *)ptr)->data[0]);
 			mdelay(((struct bts_action_delay *)action_ptr)->msec);
 			break;
@@ -448,30 +448,30 @@ long st_kim_start(void *kim_data)
 		INIT_COMPLETION(kim_gdata->ldisc_installed);
 		/* send notification to UIM */
 		kim_gdata->ldisc_install = 1;
-		pr_info("ldisc_install = 1");
+		pr_info("ldisc_install = 1\n");
 		sysfs_notify(&kim_gdata->kim_pdev->dev.kobj,
 				NULL, "install");
 		/* wait for ldisc to be installed */
 		err = wait_for_completion_timeout(&kim_gdata->ldisc_installed,
 				msecs_to_jiffies(LDISC_TIME));
 		if (!err) {	/* timeout */
-			pr_err("line disc installation timed out ");
+			pr_err("line disc installation timed out \n");
 			kim_gdata->ldisc_install = 0;
-			pr_info("ldisc_install = 0");
+			pr_info("ldisc_install = 0\n");
 			sysfs_notify(&kim_gdata->kim_pdev->dev.kobj,
 					NULL, "install");
 			err = -ETIMEDOUT;
 			continue;
 		} else {
 			/* ldisc installed now */
-			pr_info(" line discipline installed ");
+			pr_info(" line discipline installed \n");
 			err = download_firmware(kim_gdata);
 			if (err != 0) {
-				pr_err("download firmware failed");
+				pr_err("download firmware failed\n");
 				kim_gdata->ldisc_install = 0;
-				pr_info("ldisc_install = 0");
+				pr_info("ldisc_install = 0\n");
 				sysfs_notify(&kim_gdata->kim_pdev->dev.kobj,
-						NULL, "install");
+						NULL, "install\n");
 				continue;
 			} else {	/* on success don't retry */
 				break;
@@ -505,7 +505,7 @@ long st_kim_stop(void *kim_data)
 	err = wait_for_completion_timeout(&kim_gdata->ldisc_installed,
 			msecs_to_jiffies(LDISC_TIME));
 	if (!err) {		/* timeout */
-		pr_err(" timed out waiting for ldisc to be un-installed");
+		pr_err(" timed out waiting for ldisc to be un-installed\n");
 		return -ETIMEDOUT;
 	}
 
@@ -660,14 +660,14 @@ static int kim_probe(struct platform_device *pdev)
 
 	kim_gdata = kzalloc(sizeof(struct kim_data_s), GFP_ATOMIC);
 	if (!kim_gdata) {
-		pr_err("no mem to allocate");
+		pr_err("no mem to allocate\n");
 		return -ENOMEM;
 	}
 	dev_set_drvdata(&pdev->dev, kim_gdata);
 
 	status = st_core_init(&kim_gdata->core_data);
 	if (status != 0) {
-		pr_err(" ST core init failed");
+		pr_err(" ST core init failed\n");
 		return -EIO;
 	}
 	/* refer to itself */
@@ -677,14 +677,14 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
 	status = gpio_request(kim_gdata->nshutdown, "kim");
 	if (unlikely(status)) {
-		pr_err(" gpio %ld request failed ", kim_gdata->nshutdown);
+		pr_err(" gpio %ld request failed \n", kim_gdata->nshutdown);
 		return status;
 	}
 
 	/* Configure nShutdown GPIO as output=0 */
 	status = gpio_direction_output(kim_gdata->nshutdown, 0);
 	if (unlikely(status)) {
-		pr_err(" unable to configure gpio %ld", kim_gdata->nshutdown);
+		pr_err(" unable to configure gpio %ld\n", kim_gdata->nshutdown);
 		return status;
 	}
 	/* get reference of pdev for request_firmware
@@ -695,7 +695,7 @@ static int kim_probe(struct platform_device *pdev)
 
 	status = sysfs_create_group(&pdev->dev.kobj, &uim_attr_grp);
 	if (status) {
-		pr_err("failed to create sysfs entries");
+		pr_err("failed to create sysfs entries\n");
 		return status;
 	}
 
@@ -707,7 +707,7 @@ static int kim_probe(struct platform_device *pdev)
 
 	kim_debugfs_dir = debugfs_create_dir("ti-st", NULL);
 	if (IS_ERR(kim_debugfs_dir)) {
-		pr_err(" debugfs entries creation failed ");
+		pr_err(" debugfs entries creation failed \n");
 		kim_debugfs_dir = NULL;
 		return -EIO;
 	}
@@ -732,11 +732,11 @@ static int kim_remove(struct platform_device *pdev)
 	 * nShutdown gpio from the system
 	 */
 	gpio_free(pdata->nshutdown_gpio);
-	pr_info("nshutdown GPIO Freed");
+	pr_info("nshutdown GPIO Freed\n");
 
 	debugfs_remove_recursive(kim_debugfs_dir);
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
-	pr_info("sysfs entries removed");
+	pr_info("sysfs entries removed\n");
 
 	kim_gdata->kim_pdev = NULL;
 	st_core_exit(kim_gdata->core_data);
