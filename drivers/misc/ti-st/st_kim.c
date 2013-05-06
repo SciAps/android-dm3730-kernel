@@ -260,6 +260,15 @@ void skip_change_remote_baud(unsigned char **ptr, long *len)
  */
 static long download_firmware(struct kim_data_s *kim_gdata)
 {
+	// Command to enable HCILL mode.
+	static char sleepModeConfiguration[] = {
+		0x01, // HCI Command
+		0x0c, 0xfd,  // Vendor CMD 0xFD0C
+		0x09 , 0x01,
+		1, // 1 = Enable or 0 = disable HCILL
+		0,  0xff, 0xff, 0xff, 0xff, 100, 0
+	};
+
 	long err = 0;
 	long len = 0;
 	unsigned char *ptr = NULL;
@@ -386,6 +395,21 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	}
 	/* fw download complete */
 	release_firmware(kim_gdata->fw_entry);
+
+	/* Enable HCILL support */
+	do
+	{
+		wr_room_space = st_get_uart_wr_room(kim_gdata->core_data);
+		if (wr_room_space < 0) {
+			pr_err("Unable to get free "
+					"space info from uart tx buffer\n");
+			release_firmware(kim_gdata->fw_entry);
+			return wr_room_space;
+		}
+		mdelay(1);
+	} while (wr_room_space < sizeof(sleepModeConfiguration));
+
+	st_int_write(kim_gdata->core_data, sleepModeConfiguration, sizeof(sleepModeConfiguration));
 	return 0;
 }
 
