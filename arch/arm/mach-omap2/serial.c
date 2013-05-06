@@ -613,6 +613,28 @@ static ssize_t sleep_timeout_store(struct device *dev,
 	return n;
 }
 
+void omap_uart_sleep_timer(int num, int count)
+{
+	struct omap_uart_state *uart;
+
+	list_for_each_entry(uart, &uart_list, node) {
+		if (num == uart->num) {
+			uart->timeout = count;
+
+			if (uart->timeout)
+				mod_timer(&uart->timer, jiffies + uart->timeout);
+			else
+				/* A zero value means disable timeout feature */
+				omap_uart_block_sleep(uart);
+			
+			omap_uart_allow_sleep(uart);
+			return;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(omap_uart_sleep_timer);
+
+
 static DEVICE_ATTR(sleep_timeout, 0644, sleep_timeout_show,
 		sleep_timeout_store);
 #define DEV_CREATE_FILE(dev, attr) WARN_ON(device_create_file(dev, attr))
