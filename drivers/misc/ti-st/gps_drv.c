@@ -121,6 +121,7 @@ struct gpsdrv_data {
 	wait_queue_head_t gpsdrv_data_q;
 	spinlock_t lock;
 	struct tasklet_struct gpsdrv_tx_tsklet;
+	int regulatorFlags;
 };
 
 #define DEVICE_NAME     "tigps"
@@ -341,6 +342,8 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 			return ret;
 		}
 	}
+
+#if 0
 	if (1 || !voltage) {
 		ret = regulator_enable(wl1283_reg);
 		if (ret < 0) {
@@ -349,6 +352,7 @@ int gpsdrv_open(struct inode *inod, struct file *file)
 			return ret;
 		}
 	}
+#endif
 
 	/* Allocate local resource memory */
 	hgps = kzalloc(sizeof(struct gpsdrv_data), GFP_KERNEL);
@@ -479,6 +483,44 @@ int gpsdrv_release(struct inode *inod, struct file *file)
 	return GPS_SUCCESS;
 }
 
+typedef struct __attribute__((packed))
+{
+	uint8_t event;
+	uint8_t data;
+	uint32_t timestamp;
+	uint8_t  res[5];
+} async_event_t;
+
+static void setRegulatorState(struct gpsdrv_data *hgps, int state)
+{
+	unsigned long flags;
+	int ret;
+	int newState = -1;
+
+	if (!wl1283_reg)
+		return;
+
+	// Determine action, if any.
+	spin_lock_irqsave(&hgps->lock, flags);
+	if(!!state != !!hgps->regulatorFlags)
+	{
+		newState = hgps->regulatorFlags = !!state;
+	}
+	spin_unlock_irqrestore(&hgps->lock, flags);
+
+	if(newState != -1)
+	{
+		if(newState)
+		{
+			ret = regulator_enable(wl1283_reg);
+			printk(KERN_INFO "Turning on regulator (%i)\n", ret);
+		} else {
+			ret = regulator_disable(wl1283_reg);
+			printk(KERN_INFO "Turning off regulator (%i)\n", ret);
+		}
+	}
+}
+
 /** gpsdrv_read Function
  *  This function will wait till the data received from the ST driver
  *  and then strips the GPS-Channel-9 header from the
@@ -562,6 +604,53 @@ ssize_t gpsdrv_read(struct file *file, char __user *data, size_t size,
 	print_hex_dump(KERN_INFO, ">in>", DUMP_PREFIX_NONE,
 			16, 1, skb->data, skb->len, 0);
 #endif
+
+	// Check to see if we have an asynchronous event packet...
+	if(skb->len == 19 && 
+	   skb->data[0] == 0x10 &&
+	   skb->data[1] == 0x00 &&
+	   skb->data[2] == 0x80 &&
+	   skb->data[3] == 0x0a &&
+	   skb->data[4] == 0x00)
+	{
+		// We have an event packet - yay!  Decode if we should
+		// turn on or off the antenna based on the GPS state.
+		switch(skb->data[5])
+		{
+			case 1:
+				setRegulatorState(hgps, 0);
+				break;
+			default:
+				setRegulatorState(hgps, 1);
+				break;
+#if 0
+			case 7:
+				printk(KERN_INFO "GPS Engine is IDLE; we should power off the Antenna.\n");
+				setRegulatorState(hgps, 1);
+				break;
+			case 2: // New Almanac
+				printk(KERN_INFO "GPS Engine reported new almanac data\n");
+				setRegulatorState(hgps, 1);
+				break;
+			case 0:
+				printk(KERN_INFO "GPS Engine is AWAKE. Turn on Antenna Power!\n");
+				setRegulatorState(hgps, 1);
+				break;
+			case 1:
+				printk(KERN_INFO "GPS Engine is OFF; we can release the Antenna power.\n");
+				setRegulatorState(hgps, 0);
+				// And we can allow the system to suspend at this point.
+				break;
+			case 3: // New Ephermis data
+			case 5: // New Health
+			case 8: // No new pos
+			default:
+				setRegulatorState(hgps, 1);
+				printk(KERN_INFO "Unknown GPS engine event %i\n", skb->data[5]);
+				break;
+#endif
+		}
+	}
 
 	/* Forward the data to the user */
 	if (skb->len <= size) {
