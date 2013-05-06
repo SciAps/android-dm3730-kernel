@@ -35,6 +35,19 @@ static void send_ll_cmd(struct st_data_s *st_data,
 	return;
 }
 
+void omap_uart_sleep_timer(int num, int count);
+
+static void ll_set_state(struct st_data_s *st_data, int state)
+{
+	st_data->ll_state = state;
+	if(!(state == ST_LL_ASLEEP || state == ST_LL_INVALID))
+	{
+		omap_uart_sleep_timer(1, 0);
+	} else {
+		omap_uart_sleep_timer(1, HZ * 1);
+	}
+}
+
 static void ll_device_want_to_sleep(struct st_data_s *st_data)
 {
 	pr_debug("%s\n", __func__);
@@ -45,7 +58,7 @@ static void ll_device_want_to_sleep(struct st_data_s *st_data)
 
 	send_ll_cmd(st_data, LL_SLEEP_ACK);
 	/* update state */
-	st_data->ll_state = ST_LL_ASLEEP;
+	ll_set_state(st_data, ST_LL_ASLEEP);
 }
 
 static void ll_device_want_to_wakeup(struct st_data_s *st_data)
@@ -69,7 +82,7 @@ static void ll_device_want_to_wakeup(struct st_data_s *st_data)
 		break;
 	}
 	/* update state */
-	st_data->ll_state = ST_LL_AWAKE;
+	ll_set_state(st_data, ST_LL_AWAKE);
 }
 
 /**********************************************************************/
@@ -79,14 +92,14 @@ static void ll_device_want_to_wakeup(struct st_data_s *st_data)
  * enable ST LL */
 void st_ll_enable(struct st_data_s *ll)
 {
-	ll->ll_state = ST_LL_AWAKE;
+	ll_set_state(ll, ST_LL_AWAKE);
 }
 
 /* called when ST Core /local module wants to
  * disable ST LL */
 void st_ll_disable(struct st_data_s *ll)
 {
-	ll->ll_state = ST_LL_INVALID;
+	ll_set_state(ll, ST_LL_INVALID);
 }
 
 /* called when ST Core wants to update the state */
@@ -94,7 +107,7 @@ void st_ll_wakeup(struct st_data_s *ll)
 {
 	if (likely(ll->ll_state != ST_LL_AWAKE)) {
 		send_ll_cmd(ll, LL_WAKE_UP_IND);	/* WAKE_IND */
-		ll->ll_state = ST_LL_ASLEEP_TO_AWAKE;
+		ll_set_state(ll, ST_LL_ASLEEP_TO_AWAKE);
 	} else {
 		/* don't send the duplicate wake_indication */
 		pr_err(" Chip already AWAKE \n");
@@ -126,7 +139,7 @@ unsigned long st_ll_sleep_state(struct st_data_s *st_data,
 		break;
 	case LL_WAKE_UP_ACK:	/* wake ack */
 		pr_debug("wake ack rcvd\n");
-		st_data->ll_state = ST_LL_AWAKE;
+		ll_set_state(st_data, ST_LL_AWAKE);
 		break;
 	default:
 		pr_err(" unknown input/state \n");
@@ -139,7 +152,8 @@ unsigned long st_ll_sleep_state(struct st_data_s *st_data,
 long st_ll_init(struct st_data_s *ll)
 {
 	/* set state to invalid */
-	ll->ll_state = ST_LL_INVALID;
+	ll_set_state(ll, ST_LL_INVALID);
+
 	return 0;
 }
 
