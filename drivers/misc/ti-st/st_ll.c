@@ -42,9 +42,19 @@ static void ll_set_state(struct st_data_s *st_data, int state)
 	st_data->ll_state = state;
 	if(!(state == ST_LL_ASLEEP || state == ST_LL_INVALID))
 	{
-		omap_uart_sleep_timer(1, 0);
+		if(!wake_lock_active(&st_data->wakelock))
+		{
+			printk(KERN_INFO "BT: Blocking suspend\n");
+			wake_lock(&st_data->wakelock);
+			omap_uart_sleep_timer(1, 0);
+		}
 	} else {
-		omap_uart_sleep_timer(1, HZ * 1);
+		if(wake_lock_active(&st_data->wakelock))
+		{
+			printk(KERN_INFO "BT: Allowing suspend\n");
+			wake_unlock(&st_data->wakelock);
+			omap_uart_sleep_timer(1, HZ * 1);
+		}
 	}
 }
 
@@ -151,6 +161,8 @@ unsigned long st_ll_sleep_state(struct st_data_s *st_data,
 /* Called from ST CORE to initialize ST LL */
 long st_ll_init(struct st_data_s *ll)
 {
+	wake_lock_init(&ll->wakelock, WAKE_LOCK_SUSPEND, "ti_st");
+
 	/* set state to invalid */
 	ll_set_state(ll, ST_LL_INVALID);
 
@@ -160,5 +172,6 @@ long st_ll_init(struct st_data_s *ll)
 /* Called from ST CORE to de-initialize ST LL */
 long st_ll_deinit(struct st_data_s *ll)
 {
+	wake_lock_destroy(&ll->wakelock);
 	return 0;
 }
