@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include <linux/wl12xx.h>
 #include <linux/etherdevice.h>
+#include <plat/omap3logic-productid.h>
 
 #include "wl12xx.h"
 #include "wl12xx_80211.h"
@@ -955,13 +956,27 @@ static int wl1271_fetch_nvs(struct wl1271 *wl)
 {
 	const struct firmware *fw;
 	int ret;
+	int version_code;
 	const char *nvs_fname;
-
 
 	if (wl->chip.id != CHIP_ID_1283_PG20)
 		nvs_fname = WL12XX_NVS_NAME;
 	else
-		nvs_fname = WL128X_NVS_NAME;
+	{
+		version_code = omap3logic_extract_version_code();
+		
+		switch (version_code)
+		{
+			case 30: nvs_fname = WL128X_NVS_NAME; break;
+			case 31: nvs_fname = WL128X_NVS_NAME_TW_31; break;
+			default: 
+				if (version_code < 0)
+					wl1271_error("could not version code from ID chip: %d", version_code);
+					/* Default to using what's the oldest NVS file */
+					nvs_fname = WL128X_NVS_NAME;
+				break;
+		}
+	}
 
 	ret = request_firmware(&fw, nvs_fname, wl1271_wl_to_dev(wl));
 

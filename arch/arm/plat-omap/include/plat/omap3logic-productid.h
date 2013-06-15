@@ -29,4 +29,5 @@ extern int omap3logic_extract_speed_mhz(u32 *speed_mhz);
 extern int omap3logic_external_mute_gpio(void);
 extern int omap3logic_create_product_id_sysfs(void);
 extern int omap3logic_extract_nvs_data(u8 *nvs_data, u32 *nvs_data_size);
+extern int omap3logic_extract_version_code(void);
 #endif

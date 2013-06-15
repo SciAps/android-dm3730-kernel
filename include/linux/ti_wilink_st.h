@@ -260,7 +260,7 @@ struct kim_data_s {
 	long uim_pid;
 	struct platform_device *kim_pdev;
 	struct completion kim_rcvd, ldisc_installed;
-	char resp_buffer[30];
+	char resp_buffer[40];
 	const struct firmware *fw_entry;
 	long nshutdown;
 	unsigned long rx_state;

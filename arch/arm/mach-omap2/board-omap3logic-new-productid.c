@@ -33,6 +33,9 @@
 #include <plat/omap3logic-new-productid.h>
 #include "mux.h"
 
+// This is for debugging purposes only. Set to zero to deactivate.
+#define SPOOF_VERSION_CODE 0
+
 #undef DEBUG
 
 #ifdef DEBUG
@@ -791,6 +794,13 @@ static int id_find_number(struct id_cookie *cookie, id_keys_t key, int *num)
 	if (err != ID_EOK)
 		return err;
 	/* Extract the number size */
+#if SPOOF_VERSION_CODE	
+	if ((cookie->offset == 509) && (key == ID_KEY_version_code))
+	{	
+		*num = SPOOF_VERSION_CODE;
+		return ID_EOK;
+	}
+#endif
 	l_num = extract_unsigned_pnum(&d_cookie, 5, &err);
 	if (err != ID_EOK)
 		return err;
@@ -944,6 +954,26 @@ int omap3logic_extract_new_part_number(u32 *part_number)
 	if (ret != ID_EOK) {
 		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
 		return ret;
+	}
+	return ret;
+}
+
+int omap3logic_extract_new_version_code(u32 *version_code)
+{
+	int ret;
+	struct id_cookie cookie;
+
+	ret = omap3logic_find_model_group_cookie(&cookie);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return -EINVAL;
+	}
+
+	/* Find part number */
+	ret = id_find_number(&cookie, ID_KEY_version_code, version_code);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return -EINVAL;
 	}
 	return ret;
 }
@@ -1127,7 +1157,7 @@ int logic_dump_serialization_info(void)
 	u8 ethaddr[6];
 	int ret;
 	struct id_cookie cookie;
-	int part_number, speed_mhz;
+	int part_number, speed_mhz, version_code;
 	u8 model_name[32];
 	u32 model_name_size;
 	u8 serial_number[10];
@@ -1152,6 +1182,12 @@ int logic_dump_serialization_info(void)
 		return ret;
 	}
 
+	ret = omap3logic_extract_new_version_code(&version_code);
+	if (ret != ID_EOK) {
+		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
+		return ret;
+	}
+
 	ret = omap3logic_extract_new_speed_mhz(&speed_mhz);
 	if (ret != ID_EOK) {
 		printk(KERN_ERR "%s:%d ret %d\n", __FUNCTION__, __LINE__, ret);
@@ -1171,8 +1207,10 @@ int logic_dump_serialization_info(void)
 		valid_product_id_has_wifi_config_data = 1;
 	}
 
+	printk(KERN_INFO "ID data ROM  : Gen 2\n");
 	printk(KERN_INFO "Part Number  : %u\n", part_number);
 	printk(KERN_INFO "Model Name   : %.*s\n", model_name_size, model_name);
+	printk(KERN_INFO "Version Code : -%u\n", version_code);
 	printk(KERN_INFO "Serial Number: %.*s\n", serial_number_size, serial_number);
 	printk(KERN_INFO "Max Mhz      : %u\n", speed_mhz);
 	ret = omap3logic_extract_new_lan_ethaddr(ethaddr);
@@ -1424,6 +1462,16 @@ static ssize_t product_id_show_model_name(struct class *class, struct class_attr
 	return model_name_size + 1;
 }
 
+static ssize_t product_id_show_version_code(struct class *class, struct class_attribute *attr, char *buf)
+{
+	u32 version_code;
+	int len;
+
+	omap3logic_extract_new_version_code(&version_code);
+	len = sprintf(buf, "%u\n", version_code);
+	return len;
+}
+
 static ssize_t product_id_show_serial_number(struct class *class, struct class_attribute *attr, char *buf)
 {
 	u32 serial_number_size = 128;
@@ -1497,6 +1545,10 @@ static struct {
 	},
 	{
 		__ATTR(part_number, S_IRUGO, product_id_show_part_number, NULL),
+		NULL,
+	},
+	{
+		__ATTR(version_code, S_IRUGO, product_id_show_version_code, NULL),
 		NULL,
 	},
 	{

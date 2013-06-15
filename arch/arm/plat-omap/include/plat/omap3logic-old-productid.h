@@ -158,4 +158,6 @@ extern int omap3logic_NAND0_size(void);
 extern int omap3logic_has_isp1760(void);
 
 extern int omap3logic_extract_old_nvs_data(u8 *nvs_data, u32 *nvs_data_size);
+extern int omap3logic_extract_old_version_code(u32 *version_code);
+
 #endif /* __OMAP3LOGIC_OLD_PRODUCTID_H__ */

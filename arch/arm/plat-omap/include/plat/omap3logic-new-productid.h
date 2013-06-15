@@ -27,4 +27,5 @@ extern int omap3logic_extract_new_wifi_ethaddr(u8 *ethaddr);
 extern int omap3logic_extract_new_speed_mhz(u32 *speed_mhz);
 extern int omap3logic_create_new_product_id_sysfs(void);
 extern int omap3logic_extract_new_nvs_data(u8 *nvs_data, u32 *nvs_data_size);
+extern int omap3logic_extract_new_version_code(u32 *version_code);
 #endif /* __OMAP3LOGIC_NEW_PRODUCT_ID_H__ */

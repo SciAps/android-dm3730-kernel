@@ -35,7 +35,7 @@
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
-
+#include <plat/omap3logic-productid.h>
 
 #define MAX_ST_DEVICES	3	/* Imagine 1 on each UART for now */
 static struct platform_device *st_kim_devices[MAX_ST_DEVICES];
@@ -195,6 +195,7 @@ void kim_int_recv(struct kim_data_s *kim_gdata,
 static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 {
 	unsigned short version = 0, chip = 0, min_ver = 0, maj_ver = 0;
+	int version_code;
 	const char read_ver_cmd[] = { 0x01, 0x01, 0x10, 0x00 };
 
 	pr_debug("%s\n", __func__);
@@ -221,7 +222,19 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 	if (version & 0x8000)
 		maj_ver |= 0x0008;
 
-	sprintf(bts_scr_name, "Logic_TIInit_%d.%d.%d.bts", chip, maj_ver, min_ver);
+	version_code = omap3logic_extract_version_code();
+ 	  	 
+	switch (version_code)
+	{
+		case 30: sprintf(bts_scr_name, "Logic_TIInit_%d.%d.%d.bts", chip, maj_ver, min_ver); break;
+		case 31: sprintf(bts_scr_name, "Logic_TIInit_tw31_%d.%d.%d.bts", chip, maj_ver, min_ver); break;
+		default:
+			if (version_code < 0)
+				pr_err("kim: couldn't get the version code from the ID chip");
+				/* Default to using the newest BTS file */
+				sprintf(bts_scr_name, "Logic_TIInit_tw31_%d.%d.%d.bts", chip, maj_ver, min_ver);
+			break;
+	}
 
 	/* to be accessed later via sysfs entry */
 	kim_gdata->version.full = version;
@@ -273,7 +286,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	long len = 0;
 	unsigned char *ptr = NULL;
 	unsigned char *action_ptr = NULL;
-	unsigned char bts_scr_name[30] = { 0 };	/* 30 char long bts scr name? */
+	unsigned char bts_scr_name[40] = { 0 }; /* 40 char long bts scr name? */
 	int wr_room_space;
 	int cmd_size;
 	unsigned long timeout;

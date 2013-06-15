@@ -118,4 +118,26 @@ int omap3logic_extract_nvs_data(u8 *nvs_data, u32 *nvs_data_size)
 
 	return -EINVAL;
 }
+/* Extract the version code for the SOM */
+int omap3logic_extract_version_code(void)
+{
+	int err; 
+	u32 version_code;
+	
+	if (omap3logic_new_product_id_valid) {
+		err = omap3logic_extract_new_version_code(&version_code);
+		if (!err)
+			return version_code;
+	}
+
+	if (omap3logic_old_product_id_valid) {
+		err =  omap3logic_extract_old_version_code(&version_code);
+		if (!err)
+			return version_code;
+	}
+
+	return -EINVAL;
+}
 EXPORT_SYMBOL(omap3logic_extract_nvs_data);
+EXPORT_SYMBOL(omap3logic_extract_version_code);
+

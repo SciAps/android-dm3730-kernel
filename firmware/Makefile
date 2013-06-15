@@ -39,9 +39,11 @@ endif
 ifneq ($(CONFIG_WL128X_FIRMWARE_SOURCE),)
 fw-shipped-m += ti-connectivity/wl128x-fw.bin \
 		ti-connectivity/wl128x-fw-ap.bin \
-		ti-connectivity/wl128x-nvs.bin
+		ti-connectivity/wl128x-nvs.bin \
+		ti-connectivity/wl128x-nvs-tw31.bin
 endif
-fw-shipped-$(CONFIG_BT_WILINK) += Logic_TIInit_10.6.15.bts
+fw-shipped-$(CONFIG_BT_WILINK) += Logic_TIInit_10.6.15.bts \
+                                  Logic_TIInit_tw31_10.6.15.bts
 fw-shipped-$(CONFIG_ATM_AMBASSADOR) += atmsar11.fw
 fw-shipped-$(CONFIG_BNX2X) += bnx2x/bnx2x-e1-6.2.9.0.fw \
 			      bnx2x/bnx2x-e1h-6.2.9.0.fw \

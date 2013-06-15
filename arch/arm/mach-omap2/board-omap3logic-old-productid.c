@@ -657,6 +657,8 @@ void valid_data_extract_dump(struct product_id_data *p)
 
 	/* Code path only gets here if production data is valid */
 	product_id_data_valid = 1;
+	
+	printk(KERN_INFO "ID data ROM  : Gen 1\n");
 
 	ret = omap3logic_extract_product_id_part_number(p, buf, sizeof(buf));
 	if (!ret)
@@ -1037,6 +1039,46 @@ static void remove_sysfs_files(void)
 
 }
 #endif
+
+int omap3logic_extract_old_version_code(u32 *version_code)
+{
+	/* No valid data, then no idea */
+	if (!omap3logic_is_product_data_valid())
+		return -EINVAL;
+
+	if (machine_is_dm3730_torpedo()) {
+		/* Since this is an "old ID" chip, this is a nontorpedo+wireless thus -2x */
+		/* Torpedo+wireless has a "new ID" chip, making it -3x */
+		/* If platform_bits bit 4 is set its a -11 */
+		if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
+			*version_code = 21;
+		else
+			*version_code = 20;
+	} else if (machine_is_dm3730_som_lv()) {
+		if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
+			*version_code = 11;
+		else
+			*version_code = 10;
+	} else if (machine_is_omap3530_lv_som()) {
+		if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
+			*version_code = 11;
+		else
+			*version_code = 10;
+// This BSP does not have a machine_is_xx defined for this in mach-type.h */
+#if 0
+	} else if (machine_is_dm3530_torpedo()) {
+		/* Since this is an "old ID" chip, this is a nontorpedo+wireless thus -2x */
+		/* If platform_bits bit 4 is set its a -11 */
+		if (product_id_data.d.zone2.pz_2r3.platform_bits & 0x10)
+			*version_code = 21;
+		else
+			*version_code = 20;
+#endif
+	} else
+		return -EINVAL;
+	
+	return 0;
+}
 
 /* Is this a -11 LV SOM? */
 static int omap3logic_is_dash_11_module(void)
